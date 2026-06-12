@@ -43,3 +43,29 @@ def test_order_intent_strategy_matches_tradable_symbol_under_notional_limit(tmp_
 
     assert result["intent"]["symbol"] in result["intent"]["strategy_id"]
     assert result["intent"]["estimated_notional_aud"] <= policy.data["risk_limits"]["max_order_value_aud"]
+
+
+def test_paper_loop_persists_portfolio_across_loop_instances(tmp_path):
+    policy = GovernorPolicy.load(Path("configs/trading_governor_policy.yaml"))
+    state_path = tmp_path / "portfolio.json"
+    queue_path = tmp_path / "queue.json"
+
+    first_loop = PaperTradingLoop(
+        policy=policy,
+        price_path=Path("data/sample_prices.csv"),
+        approval_queue=ApprovalQueue(queue_path),
+        paper_state_path=state_path,
+    )
+    first = first_loop.run_once()
+
+    second_loop = PaperTradingLoop(
+        policy=policy,
+        price_path=Path("data/sample_prices.csv"),
+        approval_queue=ApprovalQueue(queue_path),
+        paper_state_path=state_path,
+    )
+    second = second_loop.run_once()
+
+    assert first["paper_portfolio"]["trade_count"] == 1
+    assert second["paper_portfolio"]["trade_count"] == 2
+    assert second["paper_portfolio"]["total_equity"] > 0

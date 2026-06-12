@@ -125,14 +125,19 @@ class PaperTradingLoop:
         )
 
 
-def build_default_loop(queue_path: str | Path | None = None, interval_seconds: int = DEFAULT_REFRESH_INTERVAL_SECONDS) -> PaperTradingLoop:
+def build_default_loop(
+    queue_path: str | Path | None = None,
+    paper_state_path: str | Path | None = None,
+    interval_seconds: int = DEFAULT_REFRESH_INTERVAL_SECONDS,
+) -> PaperTradingLoop:
     root = Path(__file__).resolve().parents[3]
     policy = GovernorPolicy.load(root / "configs" / "trading_governor_policy.yaml")
+    state_path = Path(paper_state_path) if paper_state_path else root / "runtime" / "paper_portfolio.json"
     return PaperTradingLoop(
         policy=policy,
         price_path=root / "data" / "sample_prices.csv",
         approval_queue=ApprovalQueue(queue_path or root / "runtime" / "approval_queue.json"),
-        paper_state_path=root / "runtime" / "paper_portfolio.json",
+        paper_state_path=state_path,
         refresh_interval_seconds=interval_seconds,
     )
 
@@ -148,9 +153,14 @@ def main() -> None:
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--interval-seconds", type=int, default=DEFAULT_REFRESH_INTERVAL_SECONDS)
     parser.add_argument("--queue-path", default=None)
+    parser.add_argument("--paper-state-path", default=None)
     args = parser.parse_args()
 
-    loop = build_default_loop(queue_path=args.queue_path, interval_seconds=args.interval_seconds)
+    loop = build_default_loop(
+        queue_path=args.queue_path,
+        paper_state_path=args.paper_state_path,
+        interval_seconds=args.interval_seconds,
+    )
     if args.once:
         print(json.dumps(loop.run_once(), indent=2, sort_keys=True))
         return

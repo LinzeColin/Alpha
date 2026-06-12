@@ -59,7 +59,7 @@ def backtest_run(payload: dict | None = None) -> dict:
 
 @router.post("/paper/run-once")
 def paper_run_once() -> dict:
-    loop = build_default_loop(queue_path=QUEUE_PATH)
+    loop = build_default_loop(queue_path=QUEUE_PATH, paper_state_path=PAPER_STATE_PATH)
     return loop.run_once()
 
 

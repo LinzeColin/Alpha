@@ -18,6 +18,8 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - Paper portfolio state now persists through `PaperBroker.save/load`.
 - Strategy iteration now runs a fixture momentum tournament and selects the best tradable candidate under risk/notional limits.
 - Dashboard state includes `paper_portfolio` and `strategy_tournament`.
+- Local launcher scripts exist at `scripts/start_alpha_dashboard.sh` and `scripts/stop_alpha_dashboard.sh`.
+- User-facing launcher copied to `/Users/linzezhang/Downloads/applicatioins/Alpha.command`.
 
 ## Key Decisions
 
@@ -36,6 +38,8 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - `backend/app/services/paper_trading_loop.py`
 - `backend/app/services/strategy_iteration.py`
 - `backend/app/services/paper_broker.py`
+- `scripts/start_alpha_dashboard.sh`
+- `scripts/stop_alpha_dashboard.sh`
 
 ## Validation Commands
 
@@ -48,13 +52,15 @@ Latest validation:
 
 ```text
 python -m pip install -e .[dev] -> passed
-python -m pytest tests -q -> 14 passed
+python -m pytest tests -q -> 16 passed
 python -m backend.app.services.paper_trading_loop --once -> generated pending_owner_approval ticket and filled paper order
 two-cycle smoke -> persisted paper portfolio trade_count=2 and cash=9816.10
 curl /health -> ok, refresh_interval_seconds=300
 curl /dashboard/state -> pending ticket, paper_portfolio, and strategy_tournament visible
 curl /dashboard -> contains Paper Portfolio, Strategy Tournament, Run Paper Cycle, and 300000ms refresh
-Browser dashboard check -> previous run rendered and Run Paper Cycle increased pending tickets; latest Browser reconnect unavailable after plugin runtime refresh, so curl/HTML fallback was used
+scripts/start_alpha_dashboard.sh -> starts the local dashboard and writes runtime/alpha_dashboard.pid/log
+Browser dashboard check -> rendered System Snapshot, Paper Portfolio, Strategy Tournament, and Approval Queue; Run Paper Cycle increased Paper Trades from 4 to 5 and Pending Tickets from 3 to 4
+Downloads/applicatioins entry -> /Users/linzezhang/Downloads/applicatioins/Alpha.command exists and is executable
 ```
 
 ## Unresolved Risks
