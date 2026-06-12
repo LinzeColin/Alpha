@@ -13,6 +13,13 @@ python -m backend.app.services.paper_trading_loop --once
 uvicorn backend.app.main:app --reload
 ```
 
+Start/stop dashboard helper:
+
+```bash
+scripts/start_alpha_dashboard.sh
+scripts/stop_alpha_dashboard.sh
+```
+
 Open:
 
 ```text
