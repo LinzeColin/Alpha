@@ -6,10 +6,10 @@ The local dashboard entrypoint is:
 outputs/applications/Alpha.command
 ```
 
-Target requested install location:
+Recommended repo launcher:
 
 ```text
-/Users/linzezhang/Downloads/applications/Alpha.command
+outputs/applications/Alpha.command
 ```
 
 The command starts the FastAPI dashboard at:
@@ -20,7 +20,7 @@ http://127.0.0.1:8000/dashboard
 
 It creates `.venv` when missing, starts `uvicorn`, writes logs to `runtime/alpha_dashboard.log`, and opens the dashboard URL on macOS.
 
-Install status:
+Observed external legacy copy:
 
 ```text
 /Users/linzezhang/Downloads/applicatioins/Alpha.command exists and is executable.

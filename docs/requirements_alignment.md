@@ -9,7 +9,7 @@
 | Agent 自动生成 broker-ready order ticket | MVP implemented | `BrokerReadyOrderTicket` |
 | 每 5 分钟更新一次 | MVP implemented | `refresh_interval_seconds: 300` in service and `configs/agent_loop.yaml` |
 | Web dashboard | Improved MVP implemented | `/dashboard`, `/dashboard/state`, `/paper/portfolio`, `/strategy/tournament/run` |
-| 稳定 webpage 交互平台入口 | Improved MVP implemented | `scripts/start_alpha_dashboard.sh` and `/Users/linzezhang/Downloads/applicatioins/Alpha.command` |
+| 稳定 webpage 交互平台入口 | Improved MVP implemented | `scripts/start_alpha_dashboard.sh` and `outputs/applications/Alpha.command` |
 | 策略迭代 | Improved MVP implemented | `run_strategy_tournament()` ranks momentum candidates and selects tradable paper candidate |
 | `live_trading.enabled:true` | Rejected | Committed defaults must remain disabled |
 | 全自动实盘真实下单 | Rejected | Real-money orders require owner-side broker confirmation |
