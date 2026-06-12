@@ -1,0 +1,30 @@
+[project]
+name = "alpha-agent-workspace"
+version = "0.1.0"
+description = "Local-first Alpha quant agent workspace for research, backtesting, paper trading, order-intent review, and dashboarding"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi",
+  "uvicorn",
+  "pydantic",
+  "pyyaml",
+  "pandas",
+  "numpy"
+]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["backend*"]
+exclude = ["data*", "configs*", "docs*", "tests*"]
+
+[project.optional-dependencies]
+dev = [
+  "pytest"
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
