@@ -1,0 +1,66 @@
+system_mode: "research_only"
+
+live_trading:
+  enabled: false
+  require_manual_enablement: true
+  require_ring_fenced_account: true
+  require_owner_e_safe_ack: true
+  require_pre_trade_risk_check: true
+  require_idempotency_key: true
+  fail_closed_on_policy_error: true
+
+asset_permissions:
+  allow_stocks: true
+  allow_etfs: true
+  allow_options: false
+  allow_short: false
+  allow_leverage: false
+  allow_margin: false
+  allow_crypto_live: false
+  allow_crypto_withdrawal: false
+  allow_cfd: false
+  allow_forex_live: false
+
+order_limits:
+  max_order_value_aud: 0
+  max_orders_per_day: 0
+  max_position_weight_pct: 0
+  max_daily_loss_pct: 0
+  max_weekly_loss_pct: 0
+  max_monthly_loss_pct: 0
+
+paper_trading:
+  enabled: true
+  max_strategies: 10
+  max_orders_per_strategy_per_day: 5
+
+promotion:
+  require_cost_model: true
+  require_slippage_model: true
+  require_out_of_sample_placeholder: true
+  min_backtest_days: 252
+  min_trades: 10
+  max_drawdown_pct: 10
+  max_turnover_monthly: 2.0
+  require_owner_approval_for_live: true
+
+kill_switch:
+  enabled: true
+  force_paused: true
+  trigger_on_duplicate_order: true
+  trigger_on_unexpected_position: true
+  trigger_on_missing_market_data: true
+  trigger_on_broker_error: true
+  trigger_on_daily_loss_limit: true
+  trigger_on_policy_error: true
+  trigger_on_reconciliation_mismatch: true
+
+prohibited_actions:
+  - manage_external_capital
+  - provide_personalized_financial_advice_to_third_parties
+  - auto_publish_trade_signals
+  - bypass_broker_limits
+  - modify_risk_policy_by_agent
+  - commit_credentials
+  - execute_live_crypto
+  - withdraw_crypto

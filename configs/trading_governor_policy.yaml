@@ -1,0 +1,78 @@
+policy_version: "2026-06-12.v0.3"
+system_mode: "research_paper_and_guarded_live_capable"
+
+live_trading:
+  enabled: false
+  require_environment_flag: true
+  environment_flag_name: "LIVE_TRADING_ENABLED"
+  require_policy_hash_match: true
+  fail_closed_on_policy_error: true
+  require_audit_sink: true
+  require_broker_health_check: true
+  require_idempotency_key: true
+  require_kill_switch_clear: true
+
+prohibited:
+  - manage_external_capital
+  - provide_financial_advice_to_third_parties
+  - publish_buy_sell_recommendations
+  - options_trading_mvp
+  - leveraged_products_mvp
+  - short_selling_mvp
+  - crypto_withdrawals_mvp
+  - mev_or_flash_loans_mvp
+  - high_frequency_trading_mvp
+
+allowed_asset_classes_mvp:
+  - stock
+  - etf
+  - cash
+  - crypto_spot_paper
+
+risk_limits:
+  max_order_value_aud: 100
+  max_daily_orders: 5
+  max_position_weight_pct: 10
+  max_total_gross_exposure_pct: 30
+  max_daily_loss_pct: 0.5
+  max_weekly_loss_pct: 1.5
+  max_monthly_loss_pct: 3.0
+  allow_leverage: false
+  allow_short_selling: false
+  allow_options: false
+  allow_crypto_withdrawal: false
+
+strategy_promotion:
+  min_backtest_years_before_paper: 3
+  min_backtest_years_before_live: 5
+  require_out_of_sample_before_live: true
+  require_walk_forward_before_live: true
+  min_paper_days_before_live: 30
+  target_paper_days_before_scaled_live: 60
+  min_trades_before_live: 30
+  max_drawdown_pct_before_live: 10
+  require_cost_model: true
+  require_slippage_model: true
+
+kill_switch:
+  active: false
+  trigger_on_api_error: true
+  trigger_on_duplicate_order: true
+  trigger_on_unexpected_position: true
+  trigger_on_daily_loss_limit: true
+  trigger_on_missing_market_data: true
+  trigger_on_policy_error: true
+  trigger_on_audit_sink_failure: true
+
+crypto:
+  mode: "monitor_and_paper_only"
+  allow_live_spot: false
+  allow_withdrawals: false
+  allow_margin: false
+  allow_perpetuals: false
+  allow_cross_exchange_transfer: false
+
+api_monetization:
+  external_api_can_trigger_live_trading: false
+  require_api_key: true
+  default_rate_limit_per_minute: 30
