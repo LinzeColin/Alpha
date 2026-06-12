@@ -18,6 +18,16 @@ Open:
 ```text
 http://localhost:8000/health
 http://localhost:8000/dashboard
+http://localhost:8000/dashboard/state
+```
+
+Useful API endpoints:
+
+```text
+POST /paper/run-once
+GET  /paper/portfolio
+POST /strategy/tournament/run
+GET  /orders/approval-queue
 ```
 
 ## Safety
