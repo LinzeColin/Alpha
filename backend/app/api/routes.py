@@ -9,6 +9,8 @@ from backend.app.services.approval_queue import ApprovalQueue
 from backend.app.services.policy import GovernorPolicy
 from backend.app.services.live_broker import FailClosedLiveBroker, LiveOrderIntent
 from backend.app.services.paper_trading_loop import DEFAULT_REFRESH_INTERVAL_SECONDS, build_default_loop
+from backend.app.services.paper_broker import PaperBroker
+from backend.app.services.strategy_iteration import run_strategy_tournament
 
 router = APIRouter()
 
@@ -16,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[3]
 POLICY_PATH = ROOT / "configs" / "trading_governor_policy.yaml"
 DATA_PATH = ROOT / "data" / "sample_prices.csv"
 QUEUE_PATH = ROOT / "runtime" / "approval_queue.json"
+PAPER_STATE_PATH = ROOT / "runtime" / "paper_portfolio.json"
 
 
 @router.get("/health")
@@ -73,9 +76,24 @@ def agent_status() -> dict:
         "agent_id": "paper_trading_loop",
         "status": "ready",
         "refresh_interval_seconds": DEFAULT_REFRESH_INTERVAL_SECONDS,
-        "capabilities": ["paper_trading", "risk_check", "approval_queue", "broker_ready_order_ticket"],
+        "capabilities": [
+            "paper_trading",
+            "risk_check",
+            "approval_queue",
+            "broker_ready_order_ticket",
+        ],
         "pending_tickets": len(queue.list_tickets()),
     }
+
+
+@router.get("/paper/portfolio")
+def paper_portfolio() -> dict:
+    return PaperBroker.load(PAPER_STATE_PATH).snapshot()
+
+
+@router.post("/strategy/tournament/run")
+def strategy_tournament_run() -> dict:
+    return run_strategy_tournament(DATA_PATH)
 
 
 @router.get("/dashboard/state")
@@ -84,22 +102,10 @@ def dashboard_state() -> dict:
         "health": health(),
         "owner_summary": owner_summary(),
         "agent_status": agent_status(),
+        "paper_portfolio": paper_portfolio(),
+        "strategy_tournament": strategy_tournament_run(),
         "approval_queue": approval_queue(),
     }
-
-
-@router.post("/live/order-intent")
-def live_order_intent(payload: dict) -> dict:
-    policy = GovernorPolicy.load(POLICY_PATH)
-    broker = FailClosedLiveBroker()
-    intent = LiveOrderIntent(
-        idempotency_key=payload.get("idempotency_key", ""),
-        symbol=payload.get("symbol", "SPY"),
-        side=payload.get("side", "buy"),
-        quantity=float(payload.get("quantity", 1)),
-        notional_aud=float(payload.get("notional_aud", 999999)),
-    )
-    return broker.submit_order_intent(intent, policy, broker_health_ok=False)
 
 
 @router.get("/dashboard", response_class=HTMLResponse)
@@ -139,6 +145,8 @@ def dashboard() -> str:
   <main>
     <section><h2>Agent Status</h2><pre id="agent"></pre></section>
     <section><h2>Owner Summary</h2><pre id="summary"></pre></section>
+    <section><h2>Paper Portfolio</h2><pre id="portfolio"></pre></section>
+    <section><h2>Strategy Tournament</h2><pre id="tournament"></pre></section>
     <section><h2>Approval Queue</h2><pre id="queue"></pre></section>
     <section><h2>System Health</h2><pre id="health"></pre></section>
   </main>
@@ -149,6 +157,8 @@ def dashboard() -> str:
       document.getElementById('health').textContent = JSON.stringify(data.health, null, 2);
       document.getElementById('summary').textContent = JSON.stringify(data.owner_summary, null, 2);
       document.getElementById('agent').textContent = JSON.stringify(data.agent_status, null, 2);
+      document.getElementById('portfolio').textContent = JSON.stringify(data.paper_portfolio, null, 2);
+      document.getElementById('tournament').textContent = JSON.stringify(data.strategy_tournament, null, 2);
       document.getElementById('queue').textContent = JSON.stringify(data.approval_queue, null, 2);
       document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleString();
     }
@@ -162,3 +172,17 @@ def dashboard() -> str:
 </body>
 </html>
 """
+
+
+@router.post("/live/order-intent")
+def live_order_intent(payload: dict) -> dict:
+    policy = GovernorPolicy.load(POLICY_PATH)
+    broker = FailClosedLiveBroker()
+    intent = LiveOrderIntent(
+        idempotency_key=payload.get("idempotency_key", ""),
+        symbol=payload.get("symbol", "SPY"),
+        side=payload.get("side", "buy"),
+        quantity=float(payload.get("quantity", 1)),
+        notional_aud=float(payload.get("notional_aud", 999999)),
+    )
+    return broker.submit_order_intent(intent, policy, broker_health_ok=False)
