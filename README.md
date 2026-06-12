@@ -1,5 +1,30 @@
-# Alpha
+# Alpha - Personal Quant Agent Workspace
 
-Alpha is a local-first personal quant agent workspace.
+Alpha is a local-first personal quant agent workspace for research, backtesting,
+automatic paper trading, order-intent review, broker-ready ticket generation, and
+dashboard visibility.
 
-This repository is being initialized by Codex. See the local commit `aa9e8f3` for the full MVP baseline until git push credentials are configured.
+## Local run
+
+```bash
+python -m pip install -e .
+python -m pytest tests -q
+python -m backend.app.services.paper_trading_loop --once
+uvicorn backend.app.main:app --reload
+```
+
+Open:
+
+```text
+http://localhost:8000/health
+http://localhost:8000/dashboard
+```
+
+## Safety
+
+- Live trading is disabled by default.
+- Live broker adapter fails closed.
+- Policy load failure means reject.
+- External API must never trigger live trading.
+- Alpha can generate broker-ready order tickets for owner review, but must not
+  autonomously submit real-money broker orders.
