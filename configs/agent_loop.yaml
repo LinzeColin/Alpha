@@ -1,0 +1,10 @@
+paper_trading_loop:
+  enabled: true
+  refresh_interval_seconds: 300
+  default_strategy_id: "fixture_momentum_v0"
+  order_ticket_ttl_seconds: 300
+  queue_path: "runtime/approval_queue.json"
+
+dashboard:
+  enabled: true
+  refresh_interval_seconds: 300
