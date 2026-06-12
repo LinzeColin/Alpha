@@ -1,0 +1,130 @@
+from __future__ import annotations
+
+import argparse
+import json
+import time
+from pathlib import Path
+from uuid import uuid4
+
+from backend.app.services.approval_queue import ApprovalQueue
+from backend.app.services.audit import MemoryAuditSink
+from backend.app.services.backtest import load_price_fixture
+from backend.app.services.order_ticket import BrokerReadyOrderTicket, OrderIntent, utc_now_iso
+from backend.app.services.paper_broker import PaperBroker, PaperOrder
+from backend.app.services.policy import GovernorPolicy
+from backend.app.services.risk import pre_trade_risk_check
+
+
+DEFAULT_REFRESH_INTERVAL_SECONDS = 300
+
+
+class PaperTradingLoop:
+    def __init__(
+        self,
+        *,
+        policy: GovernorPolicy,
+        price_path: str | Path,
+        approval_queue: ApprovalQueue | None = None,
+        paper_broker: PaperBroker | None = None,
+        audit_sink: MemoryAuditSink | None = None,
+        refresh_interval_seconds: int = DEFAULT_REFRESH_INTERVAL_SECONDS,
+    ) -> None:
+        self.policy = policy
+        self.price_path = Path(price_path)
+        self.approval_queue = approval_queue or ApprovalQueue()
+        self.paper_broker = paper_broker or PaperBroker()
+        self.audit_sink = audit_sink or MemoryAuditSink()
+        self.refresh_interval_seconds = refresh_interval_seconds
+
+    def run_once(self) -> dict:
+        run_id = f"run_{uuid4().hex[:12]}"
+        intent = self._generate_order_intent(run_id)
+        risk_check = pre_trade_risk_check(intent.as_dict(), self.policy)
+        ticket = BrokerReadyOrderTicket.from_intent(intent, risk_check).as_dict()
+        queue_result = self.approval_queue.enqueue(ticket)
+
+        paper_result = {"status": "skipped", "reason": risk_check["reason"]}
+        if risk_check.get("allowed"):
+            paper_result = self.paper_broker.submit_order(
+                PaperOrder(
+                    idempotency_key=intent.idempotency_key,
+                    symbol=intent.symbol,
+                    side=intent.side,
+                    quantity=intent.quantity,
+                    price=intent.estimated_price,
+                )
+            )
+
+        self.audit_sink.write(
+            trace_id=run_id,
+            actor_type="agent",
+            actor_id="paper_trading_loop",
+            event_type="paper_cycle",
+            decision=queue_result["status"],
+            reason=risk_check["reason"],
+            payload={"intent": intent.as_dict(), "risk_check": risk_check, "paper_result": paper_result},
+        )
+
+        return {
+            "run_id": run_id,
+            "status": "completed",
+            "generated_at": utc_now_iso(),
+            "refresh_interval_seconds": self.refresh_interval_seconds,
+            "next_refresh_in_seconds": self.refresh_interval_seconds,
+            "intent": intent.as_dict(),
+            "risk_check": risk_check,
+            "approval_queue": queue_result,
+            "paper_order": paper_result,
+            "audit_events": self.audit_sink.as_dicts(),
+        }
+
+    def run_forever(self) -> None:
+        while True:
+            result = self.run_once()
+            print(json.dumps(result, indent=2, sort_keys=True))
+            time.sleep(self.refresh_interval_seconds)
+
+    def _generate_order_intent(self, run_id: str) -> OrderIntent:
+        df = load_price_fixture(self.price_path)
+        latest_prices = df.sort_values("date").groupby("symbol").tail(1).copy()
+        max_notional = float(self.policy.data.get("risk_limits", {}).get("max_order_value_aud", 0))
+        candidates = latest_prices[latest_prices["close"] <= max_notional].sort_values("close", ascending=False)
+        latest = (candidates if not candidates.empty else latest_prices.sort_values("close")).iloc[0]
+        return OrderIntent.create(
+            strategy_id="fixture_momentum_v0",
+            symbol=str(latest["symbol"]),
+            side="buy",
+            quantity=1,
+            estimated_price=float(latest["close"]),
+            source_run_id=run_id,
+            ttl_seconds=self.refresh_interval_seconds,
+        )
+
+
+def build_default_loop(queue_path: str | Path | None = None, interval_seconds: int = DEFAULT_REFRESH_INTERVAL_SECONDS) -> PaperTradingLoop:
+    root = Path(__file__).resolve().parents[3]
+    policy = GovernorPolicy.load(root / "configs" / "trading_governor_policy.yaml")
+    return PaperTradingLoop(
+        policy=policy,
+        price_path=root / "data" / "sample_prices.csv",
+        approval_queue=ApprovalQueue(queue_path or root / "runtime" / "approval_queue.json"),
+        refresh_interval_seconds=interval_seconds,
+    )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--once", action="store_true")
+    parser.add_argument("--interval-seconds", type=int, default=DEFAULT_REFRESH_INTERVAL_SECONDS)
+    parser.add_argument("--queue-path", default=None)
+    args = parser.parse_args()
+
+    loop = build_default_loop(queue_path=args.queue_path, interval_seconds=args.interval_seconds)
+    if args.once:
+        print(json.dumps(loop.run_once(), indent=2, sort_keys=True))
+        return
+    loop.run_forever()
+
+
+if __name__ == "__main__":
+    main()
