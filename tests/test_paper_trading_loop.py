@@ -41,9 +41,16 @@ def test_paper_loop_generates_ticket_and_fills_paper_order(tmp_path):
     assert result["broker_paper_order"]["slippage_bps"] == 5.0
     assert result["approval_queue"]["status"] == "queued"
     assert result["approval_queue"]["ticket"]["status"] == "pending_owner_approval"
+    assert result["approval_queue"]["ticket"]["status_zh"] == "待人工确认"
+    assert result["approval_queue"]["ticket"]["actionability_zh"] == "有效，待人工确认"
+    assert result["approval_queue"]["ticket"]["freshness"]["status_zh"] == "有效"
     assert result["approval_queue"]["ticket"]["human_action_required"] is True
+    assert result["approval_queue"]["ticket"]["human_action_required_zh"] == "是"
     assert result["approval_queue"]["ticket"]["expires_at"] == result["intent"]["expires_at"]
     assert result["approval_queue"]["ticket"]["broker_payload"]["client_order_id"] == result["intent"]["idempotency_key"]
+    assert result["approval_queue"]["ticket"]["broker_payload"]["side_zh"] == "买入"
+    assert result["approval_queue"]["ticket"]["broker_payload"]["order_type_zh"] == "市价单"
+    assert result["approval_queue"]["ticket"]["risk_check"]["reason_zh"] == "下单前风控检查通过"
     assert any(candidate["strategy_id"] == result["intent"]["strategy_id"] for candidate in result["strategy_tournament"]["candidates"])
     assert result["paper_portfolio"]["trade_count"] == 1
     assert result["strategy_journal"]["status"] == "written"

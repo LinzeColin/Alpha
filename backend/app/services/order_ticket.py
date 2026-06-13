@@ -4,6 +4,8 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
+from backend.app.services.display_locale import zh_order_type, zh_reason, zh_side, zh_status, zh_strategy_id, zh_time_in_force
+
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -59,7 +61,12 @@ class OrderIntent:
         )
 
     def as_dict(self) -> dict:
-        return asdict(self)
+        payload = asdict(self)
+        payload["strategy_id_zh"] = zh_strategy_id(payload.get("strategy_id"))
+        payload["side_zh"] = zh_side(payload.get("side"))
+        payload["order_type_zh"] = zh_order_type(payload.get("order_type"))
+        payload["time_in_force_zh"] = zh_time_in_force(payload.get("time_in_force"))
+        return payload
 
 
 @dataclass(frozen=True)
@@ -97,4 +104,17 @@ class BrokerReadyOrderTicket:
         )
 
     def as_dict(self) -> dict:
-        return asdict(self)
+        payload = asdict(self)
+        payload["status_zh"] = zh_status(payload.get("status"))
+        payload["human_action_required_zh"] = "是" if payload.get("human_action_required") else "否"
+        broker_payload = dict(payload.get("broker_payload") or {})
+        broker_payload["side_zh"] = zh_side(broker_payload.get("side"))
+        broker_payload["order_type_zh"] = zh_order_type(broker_payload.get("order_type"))
+        broker_payload["time_in_force_zh"] = zh_time_in_force(broker_payload.get("time_in_force"))
+        payload["broker_payload"] = broker_payload
+        risk_check = dict(payload.get("risk_check") or {})
+        risk_check["status_zh"] = zh_status(risk_check.get("status"))
+        risk_check["reason_zh"] = zh_reason(risk_check.get("reason"))
+        risk_check["allowed_zh"] = "是" if risk_check.get("allowed") else "否"
+        payload["risk_check"] = risk_check
+        return payload

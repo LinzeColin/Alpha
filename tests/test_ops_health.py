@@ -179,6 +179,8 @@ def test_create_runtime_backup_copies_durable_state(tmp_path):
     backup_dir = Path(backup["backup_path"])
     manifest = json.loads(Path(backup["manifest_path"]).read_text(encoding="utf-8"))
 
+    assert backup["status"] == "completed"
+    assert backup["status_zh"] == "已完成"
     assert backup_dir.exists()
     assert (backup_dir / "approval_queue.sqlite3").exists()
     assert (backup_dir / "paper_portfolio.json").exists()
@@ -186,6 +188,7 @@ def test_create_runtime_backup_copies_durable_state(tmp_path):
     assert (backup_dir / "alpha_dashboard.log.tail").exists()
     assert ApprovalQueue(backup_dir / "approval_queue.sqlite3").summary()["total_count"] == 1
     assert manifest["live_order_submission_enabled"] is False
+    assert manifest["status_zh"] == "已完成"
     assert manifest["missing_files"] == []
 
 

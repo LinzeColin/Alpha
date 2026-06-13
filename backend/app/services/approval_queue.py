@@ -30,14 +30,15 @@ class ApprovalQueue:
             self._tickets = json.loads(self.path.read_text(encoding="utf-8"))
 
     def enqueue(self, ticket: dict) -> dict:
+        annotated_ticket = annotate_ticket_freshness(ticket)
         if self.get_ticket(str(ticket.get("ticket_id", ""))):
-            return {"status": "duplicate", "status_zh": zh_status("duplicate"), "ticket": ticket}
+            return {"status": "duplicate", "status_zh": zh_status("duplicate"), "ticket": annotated_ticket}
         if self.storage_backend == "sqlite":
             self._save_sqlite_ticket(ticket, insert=True)
-            return {"status": "queued", "status_zh": zh_status("queued"), "ticket": ticket}
+            return {"status": "queued", "status_zh": zh_status("queued"), "ticket": annotated_ticket}
         self._tickets.append(ticket)
         self._persist()
-        return {"status": "queued", "status_zh": zh_status("queued"), "ticket": ticket}
+        return {"status": "queued", "status_zh": zh_status("queued"), "ticket": annotated_ticket}
 
     def list_tickets(self) -> list[dict]:
         if self.storage_backend == "sqlite":

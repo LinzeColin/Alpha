@@ -33,6 +33,8 @@ scripts/check_alpha_ops.sh --backup
 scripts/check_alpha_soak.sh
 python -m backend.app.services.paper_readiness
 python -m backend.app.services.soak_readiness
+python scripts/verify_chinese_display.py
+python scripts/verify_dashboard_http_smoke.py --base-url http://127.0.0.1:8000 --exercise-actions
 ```
 
 控制台启动后，FastAPI 应用生命周期会启动自动模拟交易智能体运行时：立即运行一次模拟交易周期，然后每 300 秒刷新一次。
@@ -123,6 +125,7 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - `scripts/check_alpha_soak.sh` 输出中文长运行预检摘要；加 `--json` 可输出机器 JSON。
 - `python -m backend.app.services.paper_readiness` 输出中文交付就绪摘要；加 `--json` 可查看完整机器证据。
 - `python -m backend.app.services.soak_readiness` 输出中文长运行预检摘要；该报告证明是否可以开始本地 soak，不等于已经完成 30 天验证。
+- `python scripts/verify_dashboard_http_smoke.py --base-url http://127.0.0.1:8000 --exercise-actions` 会通过 HTTP 检查 `/health`、`/dashboard`、`/dashboard/state` 的中文文案、关键中文字段和真实下单禁用边界，并安全调用模拟交易周期与运行备份端点。
 - 控制台启动后会自动启动运行维护：默认每 300 秒采样一次健康状态，默认每天自动备份一次，并保留最近 30 份备份。
 - 健康检查和备份只覆盖模拟交易与工单状态，不会提交真实资金订单。
 

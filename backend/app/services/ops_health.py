@@ -143,6 +143,8 @@ def create_runtime_backup(
     _write_log_tail(log_path, backup_dir / "alpha_dashboard.log.tail", copied_files=copied_files, missing_files=missing_files)
 
     manifest = {
+        "status": "completed",
+        "status_zh": "已完成",
         "backup_id": backup_dir.name,
         "created_at": utc_now_iso(),
         "backup_path": str(backup_dir),

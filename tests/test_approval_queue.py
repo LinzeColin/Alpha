@@ -8,7 +8,12 @@ def test_approval_queue_persists_ticket(tmp_path):
     ticket = {"ticket_id": "ticket_1", "status": "pending_owner_approval"}
 
     queue = ApprovalQueue(path)
-    assert queue.enqueue(ticket)["status"] == "queued"
+    result = queue.enqueue(ticket)
+
+    assert result["status"] == "queued"
+    assert result["status_zh"] == "已入队"
+    assert result["ticket"]["status_zh"] == "待人工确认"
+    assert result["ticket"]["actionability_zh"] == "已过期，需重新生成"
 
     reloaded = ApprovalQueue(path)
     assert reloaded.list_tickets() == [ticket]
