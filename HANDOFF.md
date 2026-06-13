@@ -51,6 +51,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - Dashboard startup now also starts the app-managed `AutoOpsMaintenanceRuntime`: health sampling every 300 seconds, stale-backup creation, backup rotation, and JSONL health history.
 - `/ops/maintenance/status` exposes automatic maintenance state, run count, backup count, next maintenance time, history file, retention config, and Chinese display fields.
 - Owner-facing API/status surfaces now include non-breaking Chinese display fields such as `status_zh`, `reason_zh`, `enabled_zh`, and `task_running_zh`; raw machine fields remain stable.
+- Chinese display coverage includes FastAPI/OpenAPI metadata, owner summary actions, approval queue storage/freshness/actionability, HTTP error detail, and Moomoo OpenD next-step guidance.
 - `AGENTS.md` now records the product rule: user-visible dashboard, App/script output, statuses, risk reasons, and owner-facing messages must default to Chinese.
 - `scripts/start_alpha_dashboard.sh` now performs a post-health-check stability confirmation before reporting startup success.
 - AppleScript `Alpha.app` is installed at `/Users/linzezhang/Downloads/Alpha.app`, `/Users/linzezhang/Applications/Alpha.app`, and `/Applications/Alpha.app`.
@@ -65,6 +66,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - Refresh cadence target is 300 seconds by default.
 - Use one app-managed paper loop; do not start a second external agent process beside the dashboard.
 - User-visible runtime surfaces must display Chinese; API field names, enum values, ticket IDs, paths, and symbols stay machine-readable and stable.
+- Owner-facing API errors must return a stable machine `code` plus Chinese `message_zh`.
 - If a raw machine value must be shown to the owner, show it with a Chinese label or adjacent Chinese explanation.
 - Paper execution adapters may be broker-like, but committed defaults must stay local sandbox or broker paper/read-only only.
 - Dashboard approval actions update local ticket state only; they do not call any real broker order endpoint.

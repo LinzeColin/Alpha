@@ -120,6 +120,14 @@ Reason: 用户要求“整个系统彻底的全中文显示”，运行期间不
 
 Consequence: API 字段名、内部枚举、工单号、文件路径和股票代码继续保持机器可读格式；Dashboard、CLI 摘要和 owner-facing API 会提供中文映射或 `*_zh` 字段。新增界面或命令输出必须补对应中文展示测试。
 
+## 2026-06-13: Owner-Facing API Errors And Metadata Are Chinese
+
+Decision: OpenAPI 产品元信息、owner 摘要、审批队列时效性、存储状态、HTTP 错误说明和 broker 探测下一步提示必须提供中文展示值。
+
+Reason: “全中文显示”不能只停留在 dashboard HTML；用户从 `/dashboard/state`、`/orders/...` 错误响应或 `/broker/moomoo/status` 读取状态时也应能直接理解系统含义。
+
+Consequence: FastAPI app title/description 改为中文；队列状态、时效性、存储状态和转移结果补 `*_zh`；HTTP 错误 detail 返回 `code` 与 `message_zh`；Moomoo OpenD 探测返回 `next_step_zh`。Raw enum/API key 继续保留给自动化兼容。
+
 ## 2026-06-13: Broker-Ready Ticket Export Is Manual-Only
 
 Decision: 已人工复核且仍在有效期内的候选单可以导出为 JSON/CSV 人工录入工单包，但 Alpha 不调用真实经纪商下单接口。

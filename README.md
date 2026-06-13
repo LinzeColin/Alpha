@@ -113,6 +113,7 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 
 - 控制台页面、按钮、表格、状态、风险原因、执行层名称、策略名称、行情状态、模拟绩效和本地命令摘要默认中文显示。
 - 策略迭代历史、模拟绩效历史、自动循环状态、运行健康、维护状态、风控原因和工单导出包会提供中文展示字段，例如 `status_zh`、`reason_zh`、`winner_strategy_id_zh`、`winner_decision_zh`。
+- FastAPI OpenAPI 元信息、owner 摘要、审批队列时效性、存储状态、人工操作、HTTP 错误说明和 Moomoo 下一步提示均提供中文展示字段。
 - API 字段名、内部枚举、工单号、文件路径和股票代码保持机器可读格式，供测试、MCP、后续券商适配器和自动化流程稳定使用；面向 owner 的界面必须优先展示中文字段。
 - 新增界面或命令输出时必须补充中文展示映射；如确需展示 raw enum，必须同时给出中文标签或中文解释。
 
