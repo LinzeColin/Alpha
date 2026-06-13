@@ -77,6 +77,15 @@ def test_collect_ops_health_reports_e_safe_runtime_checks(tmp_path):
         log_path=log_path,
         market_data_gateway=FakeMarketDataGateway(_market_data_status(tmp_path)),
         loop_snapshot=_healthy_loop_snapshot(now),
+        moomoo_probe_status={
+            "status": "ready_read_only",
+            "status_zh": "只读探测就绪",
+            "message_zh": "Moomoo API 包和本机 OpenD 端口均可用；当前仅允许只读探测。",
+            "read_only_ready": True,
+            "live_order_submission_enabled": False,
+            "trade_context_enabled": False,
+            "supports_real_broker_place_order": False,
+        },
     )
 
     checks = {item["id"]: item for item in health["checks"]}
@@ -84,6 +93,7 @@ def test_collect_ops_health_reports_e_safe_runtime_checks(tmp_path):
     assert checks["approval_queue"]["status"] == "pass"
     assert checks["paper_portfolio"]["status"] == "pass"
     assert checks["live_order_boundary"]["status"] == "pass"
+    assert checks["moomoo_read_only_probe"]["status"] == "pass"
     assert checks["market_data"]["status"] == "warn"
     assert checks["dashboard_process"]["status"] == "warn"
     assert health["overall_status"] == "degraded"

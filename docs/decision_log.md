@@ -159,3 +159,11 @@ Decision: Dashboard 默认“查看工单”必须打开中文 HTML 工单视图
 Reason: 用户要求系统彻底中文显示，而点击 dashboard 工单按钮直接打开原始 JSON 会暴露英文字段名和内部枚举，不适合作为 owner 默认界面。
 
 Consequence: `/orders/approval-queue/{ticket_id}/broker-ticket/view` 渲染中文工单详情、人工录入字段、风控结果和安全说明；dashboard 的“查看工单”指向该中文视图。JSON 与 CSV 端点保持不变，用于 broker-ready 导出、测试和 MCP/自动化流程。
+
+## 2026-06-13: Moomoo OpenD Starts As Read-Only Probe
+
+Decision: Moomoo OpenD 集成第一阶段只做本机只读探测，检查 Python API 包和 OpenD 端口状态，不创建交易上下文、不解锁交易、不提交真实订单。
+
+Reason: 用户已在本机安装 Moomoo、Moomoo OpenD 和 API；Alpha 需要把这个环境纳入 dashboard 可观测性。但在没有完成账户读取、paper API 边界、权限分离和长运行验证之前，不能把真实 broker 接入 agent 自动执行链路。
+
+Consequence: `/broker/moomoo/status` 和 dashboard “Moomoo OpenD”面板显示 API 包、OpenD 连接、只读就绪、交易解锁、真实下单禁用、安全操作和禁止操作。该探测层不读取交易凭据，不调用 `place_order`，也不改变 committed 默认真实下单禁用边界。

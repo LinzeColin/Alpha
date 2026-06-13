@@ -62,6 +62,7 @@ POST /paper/run-once
 GET  /paper/portfolio
 GET  /paper/performance/history
 GET  /paper/broker/status
+GET  /broker/moomoo/status
 POST /strategy/tournament/run
 GET  /strategy/tournament/history
 GET  /agent/loop/status
@@ -87,12 +88,13 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - 外部 API 不得触发真实资金下单。
 - Alpha 可以生成供用户审核的经纪商就绪订单工单，但不得自主提交真实资金订单。
 - 当前模拟交易执行层使用 `LocalSandboxPaperBrokerAdapter`；它返回类经纪商模拟回执，但不需要凭据，也不允许真实下单。
+- Moomoo OpenD 集成当前只做只读连接探测：检测当前 Python 环境是否可导入 `moomoo`/`futu` API 包，并检测本机 OpenD 端口；不会解锁交易、不会读取或提交交易凭据、不会调用真实下单接口。
 - 审批队列默认使用 SQLite 持久化，支持在网页/API 中标记“已人工复核”“已拒绝”“工单已导出”；这些动作只更新本地审计状态，不会调用真实 broker 下单接口。
 - 已人工复核且仍在有效期内的工单可导出为 JSON 或 CSV 人工录入包；过期工单不能复核或导出。
 
 ## 运行健康与备份
 
-- `GET /ops/health` 汇总自动循环、SQLite 审批队列、模拟组合、模拟执行层边界、行情数据、控制台进程、日志和最近备份状态。
+- `GET /ops/health` 汇总自动循环、SQLite 审批队列、模拟组合、模拟执行层边界、Moomoo OpenD 只读探测、行情数据、控制台进程、日志和最近备份状态。
 - `POST /ops/backup` 会在 `runtime/backups/` 下生成一次本地运行状态备份，包含审批队列快照、模拟组合、行情缓存、PID 和日志尾部。
 - `GET /ops/maintenance/status` 显示应用托管自动运行维护：健康采样次数、自动备份次数、下次维护时间、健康历史文件和备份轮转配置。
 - `scripts/check_alpha_ops.sh` 输出中文健康检查摘要；加 `--json` 可输出机器 JSON。
@@ -132,3 +134,10 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - Paper broker 会把模拟成交价、参考价、佣金、滑点和累计佣金写入组合状态与绩效历史。
 - Dashboard 的“模拟交易执行层”和“模拟绩效”会显示执行模型、模拟滑点、单笔佣金、累计佣金和最近成交成本。
 - 该模型只影响本地 paper trading 绩效，不调用真实经纪商下单接口。
+
+## Moomoo OpenD 只读探测
+
+- `GET /broker/moomoo/status` 显示 Moomoo OpenD 只读探测状态。
+- 默认连接地址为 `127.0.0.1:11111`；可用 `MOOMOO_OPEND_HOST`、`MOOMOO_OPEND_PORT`、`MOOMOO_OPEND_TIMEOUT_SECONDS` 调整。
+- Dashboard 的“Moomoo OpenD”面板会显示 API 包、OpenD 连接、只读就绪、交易解锁、允许真实下单和禁止操作。
+- 该探测层只用于确认本机环境是否准备好接入后续 read-only quote/account 能力；当前不会提交真实资金订单。

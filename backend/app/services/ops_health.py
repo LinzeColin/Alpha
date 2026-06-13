@@ -12,6 +12,7 @@ from typing import Any
 from backend.app.services.approval_queue import ApprovalQueue
 from backend.app.services.broker_paper_adapter import LocalSandboxPaperBrokerAdapter
 from backend.app.services.market_data_gateway import MarketDataGateway
+from backend.app.services.moomoo_broker_probe import probe_moomoo_opend
 from backend.app.services.paper_broker import PaperBroker
 
 
@@ -39,6 +40,7 @@ def collect_ops_health(
     log_path: str | Path | None = None,
     market_data_gateway: MarketDataGateway | None = None,
     loop_snapshot: dict | None = None,
+    moomoo_probe_status: dict | None = None,
     max_loop_lag_seconds: int = DEFAULT_MAX_LOOP_LAG_SECONDS,
     max_backup_age_seconds: int = DEFAULT_MAX_BACKUP_AGE_SECONDS,
 ) -> dict:
@@ -54,6 +56,7 @@ def collect_ops_health(
         _check_approval_queue(queue_path),
         _check_paper_portfolio(paper_state_path),
         _check_paper_broker_boundary(paper_state_path),
+        _check_moomoo_read_only_probe(moomoo_probe_status if moomoo_probe_status is not None else probe_moomoo_opend()),
         _check_market_data(gateway),
         _check_dashboard_process(pid_path, loop_snapshot=loop_snapshot),
         _check_log_tail(log_path),
@@ -304,6 +307,20 @@ def _check_paper_broker_boundary(paper_state_path: Path) -> dict:
     if status.get("live_order_submission_enabled"):
         return _check("live_order_boundary", "真实下单边界", "fail", "模拟执行层错误地允许真实下单。", status)
     return _check("live_order_boundary", "真实下单边界", "pass", "执行层保持模拟模式，真实下单禁用。", status)
+
+
+def _check_moomoo_read_only_probe(status: dict) -> dict:
+    if status.get("live_order_submission_enabled") or status.get("trade_context_enabled") or status.get("supports_real_broker_place_order"):
+        return _check("moomoo_read_only_probe", "Moomoo OpenD 只读探测", "fail", "Moomoo 探测层出现真实交易能力，必须立即停用。", status)
+    if status.get("read_only_ready"):
+        return _check("moomoo_read_only_probe", "Moomoo OpenD 只读探测", "pass", "Moomoo API 包和本机 OpenD 端口可用，且保持只读。", status)
+    return _check(
+        "moomoo_read_only_probe",
+        "Moomoo OpenD 只读探测",
+        "warn",
+        status.get("message_zh") or "Moomoo OpenD 只读探测未就绪；本地模拟交易仍可继续。",
+        status,
+    )
 
 
 def _check_market_data(gateway: MarketDataGateway) -> dict:

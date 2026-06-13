@@ -16,6 +16,7 @@ from backend.app.services.broker_ticket_export import (
 from backend.app.services.policy import GovernorPolicy
 from backend.app.services.live_broker import FailClosedLiveBroker, LiveOrderIntent
 from backend.app.services.market_data_gateway import MarketDataGateway, MarketDataSnapshot
+from backend.app.services.moomoo_broker_probe import probe_moomoo_opend
 from backend.app.services.ops_health import collect_ops_health, create_runtime_backup
 from backend.app.services.ops_runtime import AUTO_OPS_MAINTENANCE
 from backend.app.services.paper_trading_loop import DEFAULT_REFRESH_INTERVAL_SECONDS, build_default_loop, latest_mark_prices
@@ -225,6 +226,11 @@ def paper_broker_status() -> dict:
     return LocalSandboxPaperBrokerAdapter(PaperBroker.load(PAPER_STATE_PATH)).status()
 
 
+@router.get("/broker/moomoo/status")
+def moomoo_broker_status() -> dict:
+    return probe_moomoo_opend()
+
+
 @router.post("/strategy/tournament/run")
 def strategy_tournament_run() -> dict:
     return run_strategy_tournament(resolve_market_data().price_path)
@@ -298,6 +304,7 @@ def dashboard_state() -> dict:
         "paper_portfolio": paper_portfolio(),
         "paper_performance": paper_performance_history(),
         "paper_broker_status": paper_broker_status(),
+        "moomoo_broker_status": moomoo_broker_status(),
         "strategy_tournament": strategy_tournament_run(),
         "strategy_journal": strategy_tournament_history(),
         "approval_queue": approval_queue(),
@@ -363,6 +370,7 @@ def dashboard() -> str:
       <section><h2>模拟绩效</h2><div id="paperPerformance"></div></section>
       <section><h2>智能体状态</h2><div id="agent"></div></section>
       <section><h2>模拟交易执行层</h2><div id="broker"></div></section>
+      <section><h2>Moomoo OpenD</h2><div id="moomooBroker"></div></section>
       <section><h2>行情数据</h2><div id="marketData"></div></section>
       <section><h2>运行健康</h2><div id="opsHealth"></div></section>
     </div>
@@ -396,6 +404,12 @@ def dashboard() -> str:
       owner_rejected: '已拒绝',
       broker_ticket_exported: '工单已导出',
       paper: '模拟交易',
+      read_only_probe: '只读连接探测',
+      ready_read_only: '只读探测就绪',
+      api_missing: 'API 包未安装',
+      opend_unreachable: 'OpenD 未连接',
+      not_configured: '未就绪',
+      probe_error: '探测异常',
       fresh: '有效',
       expired: '已过期',
       invalid: '无效',
@@ -546,6 +560,7 @@ def dashboard() -> str:
       const agent = data.agent_status || {};
       const loop = agent.loop || {};
       const marketData = data.market_data || {};
+      const moomoo = data.moomoo_broker_status || {};
       const opsHealth = data.ops_health || {};
       const opsMaintenance = data.ops_maintenance || {};
       const strategyJournal = data.strategy_journal || {};
@@ -556,6 +571,7 @@ def dashboard() -> str:
         metric('运行健康', pill(displayStatus(opsHealth.overall_status, '未知'), opsHealth.fail_count ? 'danger' : (opsHealth.warn_count ? 'warn' : 'ok'))),
         metric('自动维护', pill(displayStatus(opsMaintenance.status, '未知'), opsMaintenance.error_count ? 'danger' : (opsMaintenance.task_running ? 'ok' : 'warn'))),
         metric('行情源', displayMarketDataSource(marketData.source_kind)),
+        metric('Moomoo OpenD', pill(moomoo.status_zh || displayStatus(moomoo.status, '未知'), moomoo.read_only_ready ? 'ok' : 'warn')),
         metric('行情质量', pill(displayDataQuality(marketData.data_quality), marketData.real_market_data ? 'ok' : 'warn')),
         metric('最新行情日', displayValue(marketData.latest_date)),
         metric('模拟权益', Number(portfolio.total_equity || 0).toFixed(2)),
@@ -731,6 +747,30 @@ def dashboard() -> str:
         </table>
       `;
     }
+    function renderMoomooBroker(status) {
+      const packageInfo = status.package || {};
+      const connection = status.opend_connection || {};
+      const kind = status.read_only_ready ? 'ok' : 'warn';
+      document.getElementById('moomooBroker').innerHTML = `
+        <table>
+          <tbody>
+            <tr><th>连接模式</th><td>${status.mode_zh || displayStatus(status.mode, '未知')}</td></tr>
+            <tr><th>探测结果</th><td>${pill(status.status_zh || displayStatus(status.status, '未知'), kind)}</td></tr>
+            <tr><th>说明</th><td>${status.message_zh || '暂无说明'}</td></tr>
+            <tr><th>OpenD 地址</th><td>${displayValue(status.host)}:${displayValue(status.port)}</td></tr>
+            <tr><th>OpenD 连接</th><td>${status.opend_connected_zh || displayBool(status.opend_connected)}</td></tr>
+            <tr><th>API 包</th><td>${status.package_available_zh || displayBool(status.package_available)} / ${displayValue(packageInfo.import_name, '未发现')} / ${displayValue(packageInfo.version, '未知版本')}</td></tr>
+            <tr><th>只读就绪</th><td>${status.read_only_ready_zh || displayBool(status.read_only_ready)}</td></tr>
+            <tr><th>探测需凭据</th><td>${status.credential_required_for_probe_zh || displayBool(status.credential_required_for_probe)}</td></tr>
+            <tr><th>交易解锁</th><td>${status.trade_unlock_required_zh || displayBool(status.trade_unlock_required)}</td></tr>
+            <tr><th>允许真实下单</th><td>${status.live_order_submission_enabled_zh || displayBool(status.live_order_submission_enabled)}</td></tr>
+            <tr><th>安全操作</th><td>${(status.safe_operations_zh || []).join('，') || '无'}</td></tr>
+            <tr><th>禁止操作</th><td>${(status.forbidden_operations_zh || []).join('，') || '无'}</td></tr>
+            <tr><th>连接错误</th><td>${connection.error_zh || '无'}</td></tr>
+          </tbody>
+        </table>
+      `;
+    }
     function renderTournament(tournament) {
       const rows = (tournament.candidates || []).slice(0, 8).map(row => `
         <tr>
@@ -813,6 +853,7 @@ def dashboard() -> str:
         renderPaperPerformance(data.paper_performance || {});
         renderAgent(data.agent_status || {});
         renderBroker(data.paper_broker_status || {});
+        renderMoomooBroker(data.moomoo_broker_status || {});
         renderMarketData(data.market_data || {});
         renderOpsHealth(data.ops_health || {});
         document.getElementById('opsHealth').insertAdjacentHTML('beforeend', renderOpsMaintenance(data.ops_maintenance || {}));

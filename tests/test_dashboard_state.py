@@ -60,6 +60,12 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
     assert state["paper_broker_status"]["commission_per_order"] == 1.0
     assert state["paper_broker_status"]["slippage_bps"] == 5.0
     assert state["paper_broker_status"]["paper_trade_count"] == 1
+    assert state["moomoo_broker_status"]["provider_id"] == "moomoo_opend"
+    assert state["moomoo_broker_status"]["mode_zh"] == "只读连接探测"
+    assert state["moomoo_broker_status"]["live_order_submission_enabled"] is False
+    assert state["moomoo_broker_status"]["trade_unlock_required"] is False
+    assert state["moomoo_broker_status"]["supports_real_broker_place_order"] is False
+    assert "提交真实资金订单" in state["moomoo_broker_status"]["forbidden_operations_zh"]
     assert state["strategy_tournament"]["candidate_count"] > 0
     assert state["strategy_tournament"]["validation_summary"]["validated_count"] > 0
     assert "hit_rate" in state["strategy_tournament"]["winner"]
@@ -184,6 +190,12 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "连续胜出次数" in html
     assert "审批队列" in html
     assert "模拟交易执行层" in html
+    assert "Moomoo OpenD" in html
+    assert "只读连接探测" in html
+    assert "OpenD 连接" in html
+    assert "API 包" in html
+    assert "交易解锁" in html
+    assert "禁止操作" in html
     assert "行情数据" in html
     assert "运行健康" in html
     assert "刷新公共行情" in html
