@@ -76,6 +76,14 @@ STORAGE_BACKEND_TEXT_ZH = {
     "memory": "内存",
 }
 
+SYSTEM_MODE_TEXT_ZH = {
+    "research_paper_order_intent_review": "研究、模拟交易与候选订单人工复核模式",
+}
+
+OWNER_ACTION_TEXT_ZH = {
+    "review_order_tickets": "复核候选订单工单",
+}
+
 MARKET_DATA_PROVIDER_TEXT_ZH = {
     "cache_or_fixture": "本地缓存优先",
     "stooq": "Stooq 公共延迟行情",
@@ -176,6 +184,18 @@ def zh_storage_backend(value: object) -> str:
     if value is None or value == "":
         return "未知存储"
     return STORAGE_BACKEND_TEXT_ZH.get(str(value), "未知存储")
+
+
+def zh_system_mode(value: object) -> str:
+    if value is None or value == "":
+        return "未知系统模式"
+    return SYSTEM_MODE_TEXT_ZH.get(str(value), "未知系统模式")
+
+
+def zh_owner_action(value: object) -> str:
+    if value is None or value == "":
+        return "无"
+    return OWNER_ACTION_TEXT_ZH.get(str(value), "未知人工操作")
 
 
 def zh_market_data_provider(value: object) -> str:

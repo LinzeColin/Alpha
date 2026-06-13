@@ -52,10 +52,15 @@ def test_approval_queue_summarizes_fresh_and_expired_pending_tickets(tmp_path):
     assert summary["total_count"] == 2
     assert summary["fresh_pending_count"] == 1
     assert summary["expired_pending_count"] == 1
+    assert summary["message_zh"] == "当前有 1 张有效候选单需要人工复核。"
     assert latest[0]["actionability"] == "fresh_pending_owner_approval"
+    assert latest[0]["actionability_zh"] == "有效，待人工确认"
     assert latest[0]["freshness"]["seconds_until_expiry"] == 300
+    assert latest[0]["freshness"]["status_zh"] == "有效"
     assert latest[1]["actionability"] == "expired_owner_approval"
+    assert latest[1]["actionability_zh"] == "已过期，需重新生成"
     assert latest[1]["freshness"]["status"] == "expired"
+    assert latest[1]["freshness"]["status_zh"] == "已过期"
 
 
 def test_approval_queue_tracks_owner_review_and_export_transitions(tmp_path):
@@ -77,7 +82,9 @@ def test_approval_queue_tracks_owner_review_and_export_transitions(tmp_path):
     summary = reloaded.summary()
 
     assert reviewed["status"] == "updated"
+    assert reviewed["status_zh"] == "已更新"
     assert reviewed["new_status"] == "owner_reviewed"
+    assert reviewed["new_status_zh"] == "已人工复核"
     assert exported["status"] == "updated"
     assert exported["new_status"] == "broker_ticket_exported"
     assert stored["status"] == "broker_ticket_exported"
@@ -124,6 +131,7 @@ def test_sqlite_approval_queue_imports_existing_json_sibling(tmp_path):
     queue = ApprovalQueue(sqlite_path)
 
     assert queue.storage_status()["backend"] == "sqlite"
+    assert queue.storage_status()["backend_zh"] == "SQLite 数据库"
     assert queue.get_ticket("ticket_legacy")["ticket_id"] == "ticket_legacy"
     assert queue.summary()["total_count"] == 1
 
@@ -136,7 +144,9 @@ def test_approval_queue_blocks_export_before_owner_review(tmp_path):
     result = queue.mark_exported("ticket_pending")
 
     assert result["status"] == "blocked"
+    assert result["status_zh"] == "已阻止"
     assert result["reason"] == "ticket_must_be_owner_reviewed_before_export"
+    assert result["reason_zh"] == "导出前必须先完成所有者复核"
     assert queue.get_ticket("ticket_pending")["status"] == "pending_owner_approval"
 
 

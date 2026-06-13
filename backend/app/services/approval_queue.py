@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
+from backend.app.services.display_locale import zh_reason, zh_status, zh_storage_backend
+
 SQLITE_SUFFIXES = {".db", ".sqlite", ".sqlite3"}
 SQLITE_SCHEMA_VERSION = 1
 
@@ -29,13 +31,13 @@ class ApprovalQueue:
 
     def enqueue(self, ticket: dict) -> dict:
         if self.get_ticket(str(ticket.get("ticket_id", ""))):
-            return {"status": "duplicate", "ticket": ticket}
+            return {"status": "duplicate", "status_zh": zh_status("duplicate"), "ticket": ticket}
         if self.storage_backend == "sqlite":
             self._save_sqlite_ticket(ticket, insert=True)
-            return {"status": "queued", "ticket": ticket}
+            return {"status": "queued", "status_zh": zh_status("queued"), "ticket": ticket}
         self._tickets.append(ticket)
         self._persist()
-        return {"status": "queued", "ticket": ticket}
+        return {"status": "queued", "status_zh": zh_status("queued"), "ticket": ticket}
 
     def list_tickets(self) -> list[dict]:
         if self.storage_backend == "sqlite":
@@ -77,15 +79,19 @@ class ApprovalQueue:
             "latest_fresh_ticket_created_at": fresh_pending[-1].get("created_at") if fresh_pending else None,
             "latest_ticket_created_at": annotated[-1].get("created_at") if annotated else None,
             "storage": self.storage_status(),
+            "message_zh": _summary_message_zh(len(fresh_pending), len(expired_pending), len(exported)),
         }
 
     def storage_status(self) -> dict:
         exists = bool(self.path and self.path.exists())
         return {
             "backend": self.storage_backend,
+            "backend_zh": zh_storage_backend(self.storage_backend),
             "durable": self.storage_backend in {"json", "sqlite"},
+            "durable_zh": "是" if self.storage_backend in {"json", "sqlite"} else "否",
             "path": str(self.path) if self.path else None,
             "exists": exists,
+            "exists_zh": "是" if exists else "否",
             "schema_version": SQLITE_SCHEMA_VERSION if self.storage_backend == "sqlite" else None,
             "file_size_bytes": self.path.stat().st_size if exists and self.path else None,
         }
@@ -132,12 +138,20 @@ class ApprovalQueue:
     ) -> dict:
         ticket = self.get_ticket(ticket_id)
         if not ticket:
-            return {"status": "not_found", "ticket_id": ticket_id}
+            return {
+                "status": "not_found",
+                "status_zh": zh_status("not_found"),
+                "reason": "ticket_not_found",
+                "reason_zh": zh_reason("ticket_not_found"),
+                "ticket_id": ticket_id,
+            }
         current_status = str(ticket.get("status", "unknown"))
         if current_status == new_status:
             return {
                 "status": "unchanged",
+                "status_zh": zh_status("unchanged"),
                 "reason": "ticket_already_in_requested_state",
+                "reason_zh": zh_reason("ticket_already_in_requested_state"),
                 "ticket": annotate_ticket_freshness(ticket),
             }
         blocked_reason = _transition_blocker(current_status, new_status)
@@ -145,14 +159,18 @@ class ApprovalQueue:
         if blocked_reason:
             return {
                 "status": "blocked",
+                "status_zh": zh_status("blocked"),
                 "reason": blocked_reason,
+                "reason_zh": zh_reason(blocked_reason),
                 "ticket": annotated_ticket,
             }
         freshness_status = (annotated_ticket.get("freshness") or {}).get("status")
         if new_status in {"owner_reviewed", "broker_ticket_exported"} and freshness_status != "fresh":
             return {
                 "status": "blocked",
+                "status_zh": zh_status("blocked"),
                 "reason": "expired_ticket_cannot_be_owner_reviewed_or_exported",
+                "reason_zh": zh_reason("expired_ticket_cannot_be_owner_reviewed_or_exported"),
                 "ticket": annotated_ticket,
             }
         updated = dict(ticket)
@@ -186,8 +204,11 @@ class ApprovalQueue:
         self._save_ticket(updated)
         return {
             "status": "updated",
+            "status_zh": zh_status("updated"),
             "previous_status": current_status,
+            "previous_status_zh": zh_status(current_status),
             "new_status": new_status,
+            "new_status_zh": zh_status(new_status),
             "ticket": annotate_ticket_freshness(updated),
         }
 
@@ -316,18 +337,22 @@ def annotate_ticket_freshness(ticket: dict, *, now: datetime | None = None) -> d
         annotated["actionability"] = annotated["status"]
     else:
         annotated["actionability"] = annotated.get("status", "unknown")
+    annotated["status_zh"] = zh_status(annotated.get("status"))
+    annotated["actionability_zh"] = zh_status(annotated.get("actionability"))
     return annotated
 
 
 def _freshness(expires_at: str | None, *, now: datetime) -> dict:
     if not expires_at:
-        return {"status": "unknown", "expires_at": None, "seconds_until_expiry": None}
+        return {"status": "unknown", "status_zh": zh_status("unknown"), "expires_at": None, "seconds_until_expiry": None}
     expires = _parse_iso_datetime(expires_at)
     if not expires:
-        return {"status": "invalid", "expires_at": expires_at, "seconds_until_expiry": None}
+        return {"status": "invalid", "status_zh": zh_status("invalid"), "expires_at": expires_at, "seconds_until_expiry": None}
     seconds_until_expiry = int((expires - now).total_seconds())
+    status = "fresh" if seconds_until_expiry > 0 else "expired"
     return {
-        "status": "fresh" if seconds_until_expiry > 0 else "expired",
+        "status": status,
+        "status_zh": zh_status(status),
         "expires_at": expires.isoformat(),
         "seconds_until_expiry": seconds_until_expiry,
     }
@@ -353,6 +378,16 @@ def _transition_blocker(current_status: str, new_status: str) -> str | None:
     if new_status == "broker_ticket_exported" and current_status != "owner_reviewed":
         return "ticket_must_be_owner_reviewed_before_export"
     return None
+
+
+def _summary_message_zh(fresh_pending_count: int, expired_pending_count: int, exported_count: int) -> str:
+    if fresh_pending_count:
+        return f"当前有 {fresh_pending_count} 张有效候选单需要人工复核。"
+    if expired_pending_count:
+        return f"当前没有有效候选单，已有 {expired_pending_count} 张过期候选单保留用于审计。"
+    if exported_count:
+        return f"当前没有待处理候选单，已有 {exported_count} 张工单完成导出记录。"
+    return "当前没有待处理候选单。"
 
 
 def _storage_backend_for_path(path: Path | None) -> str:

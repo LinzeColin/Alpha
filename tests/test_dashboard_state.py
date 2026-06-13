@@ -1,7 +1,11 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+from fastapi import HTTPException
+
 from backend.app.api import routes
+from backend.app.main import app
 from backend.app.services.display_locale import format_paper_cycle_summary_zh, zh_reason, zh_status
 from backend.app.services.approval_queue import ApprovalQueue
 
@@ -77,8 +81,12 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
     assert state["strategy_journal"]["stability_ratio_zh"] == "100.00%"
     assert state["approval_queue"]["count"] == 1
     assert state["approval_queue"]["storage"]["backend"] == "sqlite"
+    assert state["approval_queue"]["storage"]["backend_zh"] == "SQLite 数据库"
     assert state["approval_queue"]["storage"]["durable"] is True
     assert state["owner_summary"]["approval_queue_storage"]["backend"] == "sqlite"
+    assert state["owner_summary"]["system_mode_zh"] == "研究、模拟交易与候选订单人工复核模式"
+    assert state["owner_summary"]["required_owner_actions_zh"] == ["复核候选订单工单"]
+    assert state["owner_summary"]["message_zh"] == "当前有 1 张有效候选单需要人工复核。"
     assert state["agent_status"]["approval_queue_storage"]["backend"] == "sqlite"
 
 
@@ -194,6 +202,7 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "只读连接探测" in html
     assert "OpenD 连接" in html
     assert "API 包" in html
+    assert "下一步" in html
     assert "交易解锁" in html
     assert "禁止操作" in html
     assert "行情数据" in html
@@ -242,6 +251,22 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "No pending tickets" not in html
     assert "<th>Adapter</th>" not in html
     assert " bps" not in html
+
+
+def test_fastapi_metadata_is_chinese():
+    schema = app.openapi()
+
+    assert schema["info"]["title"] == "Alpha 个人量化智能体工作台"
+    assert "本地优先" in schema["info"]["description"]
+    assert "Personal Alpha Agent Workspace" not in schema["info"]["title"]
+
+
+def test_owner_facing_http_errors_are_chinese():
+    with pytest.raises(HTTPException) as exc_info:
+        routes.approval_queue_broker_ticket("missing_ticket")
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == {"code": "ticket_not_found", "message_zh": "未找到工单"}
 
 
 def test_python_display_locale_covers_runtime_statuses_and_live_reasons():

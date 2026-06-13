@@ -13,6 +13,7 @@ from backend.app.services.broker_ticket_export import (
     format_broker_ready_order_csv,
     format_broker_ready_order_html_zh,
 )
+from backend.app.services.display_locale import zh_owner_action, zh_reason, zh_system_mode
 from backend.app.services.policy import GovernorPolicy
 from backend.app.services.live_broker import FailClosedLiveBroker, LiveOrderIntent
 from backend.app.services.market_data_gateway import MarketDataGateway, MarketDataSnapshot
@@ -66,13 +67,23 @@ def resolve_market_data() -> MarketDataSnapshot:
 def owner_summary() -> dict:
     queue = ApprovalQueue(QUEUE_PATH)
     queue_summary = queue.summary()
+    system_mode = "research_paper_order_intent_review"
+    required_actions = ["review_order_tickets"] if queue_summary["fresh_pending_count"] else []
     return {
-        "system_mode": "research_paper_order_intent_review",
+        "system_mode": system_mode,
+        "system_mode_zh": zh_system_mode(system_mode),
         "strategies": {"research": 1, "paper": 1, "live_order_review": queue_summary["fresh_pending_count"]},
-        "required_owner_actions": ["review_order_tickets"] if queue_summary["fresh_pending_count"] else [],
+        "strategies_zh": {
+            "research": "研究策略 1 个",
+            "paper": "模拟交易策略 1 个",
+            "live_order_review": f"待人工复核候选单 {queue_summary['fresh_pending_count']} 张",
+        },
+        "required_owner_actions": required_actions,
+        "required_owner_actions_zh": [zh_owner_action(action) for action in required_actions],
         "pending_order_tickets": queue_summary["fresh_pending_count"],
         "expired_order_tickets": queue_summary["expired_pending_count"],
         "approval_queue_storage": queue.storage_status(),
+        "message_zh": queue_summary["message_zh"],
     }
 
 
@@ -151,7 +162,7 @@ def approval_queue_mark_exported(ticket_id: str, payload: dict | None = None) ->
 def approval_queue_broker_ticket(ticket_id: str) -> dict:
     ticket = ApprovalQueue(QUEUE_PATH).get_ticket(ticket_id)
     if not ticket:
-        raise HTTPException(status_code=404, detail="ticket_not_found")
+        raise _http_error(404, "ticket_not_found")
     return build_broker_ready_order_export(ticket)
 
 
@@ -159,7 +170,7 @@ def approval_queue_broker_ticket(ticket_id: str) -> dict:
 def approval_queue_broker_ticket_view(ticket_id: str) -> HTMLResponse:
     ticket = ApprovalQueue(QUEUE_PATH).get_ticket(ticket_id)
     if not ticket:
-        raise HTTPException(status_code=404, detail="ticket_not_found")
+        raise _http_error(404, "ticket_not_found")
     export_package = build_broker_ready_order_export(ticket)
     return HTMLResponse(format_broker_ready_order_html_zh(export_package))
 
@@ -168,17 +179,21 @@ def approval_queue_broker_ticket_view(ticket_id: str) -> HTMLResponse:
 def approval_queue_broker_ticket_csv(ticket_id: str) -> PlainTextResponse:
     ticket = ApprovalQueue(QUEUE_PATH).get_ticket(ticket_id)
     if not ticket:
-        raise HTTPException(status_code=404, detail="ticket_not_found")
+        raise _http_error(404, "ticket_not_found")
     export_package = build_broker_ready_order_export(ticket)
     return PlainTextResponse(format_broker_ready_order_csv(export_package), media_type="text/csv; charset=utf-8")
 
 
 def _queue_transition_response(result: dict) -> dict:
     if result.get("status") == "not_found":
-        raise HTTPException(status_code=404, detail="ticket_not_found")
+        raise _http_error(404, "ticket_not_found")
     if result.get("status") == "blocked":
-        raise HTTPException(status_code=409, detail=result.get("reason", "ticket_transition_blocked"))
+        raise _http_error(409, str(result.get("reason", "ticket_transition_blocked")))
     return result
+
+
+def _http_error(status_code: int, code: str) -> HTTPException:
+    return HTTPException(status_code=status_code, detail={"code": code, "message_zh": zh_reason(code)})
 
 
 @router.get("/agent/status")
@@ -757,6 +772,7 @@ def dashboard() -> str:
             <tr><th>连接模式</th><td>${status.mode_zh || displayStatus(status.mode, '未知')}</td></tr>
             <tr><th>探测结果</th><td>${pill(status.status_zh || displayStatus(status.status, '未知'), kind)}</td></tr>
             <tr><th>说明</th><td>${status.message_zh || '暂无说明'}</td></tr>
+            <tr><th>下一步</th><td>${status.next_step_zh || '暂无'}</td></tr>
             <tr><th>OpenD 地址</th><td>${displayValue(status.host)}:${displayValue(status.port)}</td></tr>
             <tr><th>OpenD 连接</th><td>${status.opend_connected_zh || displayBool(status.opend_connected)}</td></tr>
             <tr><th>API 包</th><td>${status.package_available_zh || displayBool(status.package_available)} / ${displayValue(packageInfo.import_name, '未发现')} / ${displayValue(packageInfo.version, '未知版本')}</td></tr>

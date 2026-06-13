@@ -34,6 +34,14 @@ MESSAGE_ZH = {
     "probe_error": "Moomoo OpenD 探测过程中发生异常；系统保持只读与真实下单禁用状态。",
 }
 
+NEXT_STEP_ZH = {
+    "ready_read_only": "下一步：只接入只读行情和账户状态探测，继续保持真实下单禁用。",
+    "api_missing": "下一步：在项目虚拟环境中安装 Moomoo/Futu OpenAPI Python 包后重新探测。",
+    "opend_unreachable": "下一步：启动本机 Moomoo OpenD，并确认监听地址和端口配置。",
+    "not_configured": "下一步：安装 Moomoo/Futu OpenAPI Python 包并启动本机 OpenD。",
+    "probe_error": "下一步：查看探测异常和本机 OpenD 状态；修复前保持只读和真实下单禁用。",
+}
+
 
 @dataclass(frozen=True)
 class MoomooOpenDProbeConfig:
@@ -91,6 +99,7 @@ def _probe_status(
         "status": status,
         "status_zh": STATUS_ZH[status],
         "message_zh": MESSAGE_ZH[status],
+        "next_step_zh": NEXT_STEP_ZH[status],
         "generated_at": _utc_now_iso(),
         "host": cfg.host,
         "port": cfg.port,
@@ -126,6 +135,7 @@ def detect_moomoo_api_package() -> dict:
         version = _package_version(import_name, candidate["distribution_names"])
         return {
             "available": True,
+            "available_zh": "是",
             "import_name": import_name,
             "distribution_name": version["distribution_name"],
             "version": version["version"],
@@ -133,6 +143,7 @@ def detect_moomoo_api_package() -> dict:
         }
     return {
         "available": False,
+        "available_zh": "否",
         "import_name": None,
         "distribution_name": None,
         "version": None,

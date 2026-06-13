@@ -212,6 +212,10 @@ Moomoo read-only probe safety scan -> no new real broker place_order/unlock_trad
 Runtime Moomoo probe verification -> GET /broker/moomoo/status returned status_zh=API 包未安装, opend_connected=true, package_available=false, read_only_ready=false, live_order_submission_enabled=false, trade_unlock_required=false
 Runtime dashboard Moomoo verification -> GET /dashboard/state exposed Moomoo OpenD mode_zh=只读连接探测 and forbidden_operations_zh includes 解锁交易/提交真实资金订单/修改真实账户
 Runtime ops health Moomoo verification -> GET /ops/health included Moomoo OpenD 只读探测 as warn because OpenD port is reachable but current .venv cannot import moomoo/futu API package; real-order submission false
+Owner-facing Chinese API reinforcement target tests -> .venv/bin/python -m pytest tests/test_dashboard_state.py tests/test_approval_queue.py tests/test_moomoo_broker_probe.py tests/test_live_broker_fail_closed.py -q -> 23 passed
+Owner-facing Chinese API reinforcement full regression -> .venv/bin/python -m pytest tests -q -> 53 passed
+Owner-facing Chinese API reinforcement diff hygiene -> git diff --check -> passed
+Owner-facing Chinese API reinforcement safety scan -> no new real broker place_order/unlock_trade path; live-order submission remains disabled
 ```
 
 ## Unresolved Risks

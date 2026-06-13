@@ -77,7 +77,12 @@ async def lifespan(app: FastAPI):
     await AUTO_PAPER_AGENT.stop()
 
 
-app = FastAPI(title="Personal Alpha Agent Workspace", version="0.1.0", lifespan=lifespan)
+app = FastAPI(
+    title="Alpha 个人量化智能体工作台",
+    description="本地优先的研究、回测、自动模拟交易、候选订单人工复核与运行健康控制台。",
+    version="0.1.0",
+    lifespan=lifespan,
+)
 app.include_router(router)
 
 if __name__ == "__main__":
