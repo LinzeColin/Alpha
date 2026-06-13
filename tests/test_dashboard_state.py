@@ -18,6 +18,8 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
     assert state["agent_status"]["status"] == "ready"
     assert state["paper_portfolio"]["trade_count"] == 1
     assert state["strategy_tournament"]["candidate_count"] > 0
+    assert state["strategy_tournament"]["validation_summary"]["validated_count"] > 0
+    assert "hit_rate" in state["strategy_tournament"]["winner"]
     assert state["approval_queue"]["count"] == 1
 
 
