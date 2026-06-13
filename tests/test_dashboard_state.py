@@ -6,7 +6,7 @@ from backend.app.services.approval_queue import ApprovalQueue
 
 
 def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, monkeypatch):
-    monkeypatch.setattr(routes, "QUEUE_PATH", tmp_path / "approval_queue.json")
+    monkeypatch.setattr(routes, "QUEUE_PATH", tmp_path / "approval_queue.sqlite3")
     monkeypatch.setattr(routes, "PAPER_STATE_PATH", tmp_path / "paper_portfolio.json")
     monkeypatch.setattr(routes, "DATA_PATH", Path("data/sample_prices.csv"))
 
@@ -25,6 +25,10 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
     assert state["strategy_tournament"]["validation_summary"]["validated_count"] > 0
     assert "hit_rate" in state["strategy_tournament"]["winner"]
     assert state["approval_queue"]["count"] == 1
+    assert state["approval_queue"]["storage"]["backend"] == "sqlite"
+    assert state["approval_queue"]["storage"]["durable"] is True
+    assert state["owner_summary"]["approval_queue_storage"]["backend"] == "sqlite"
+    assert state["agent_status"]["approval_queue_storage"]["backend"] == "sqlite"
 
 
 def test_agent_status_reports_app_runtime_loop_state(tmp_path, monkeypatch):
@@ -37,13 +41,14 @@ def test_agent_status_reports_app_runtime_loop_state(tmp_path, monkeypatch):
         "error_count": 0,
     }
     monkeypatch.setattr(routes.AUTO_PAPER_AGENT, "snapshot", lambda: loop_state)
-    monkeypatch.setattr(routes, "QUEUE_PATH", tmp_path / "approval_queue.json")
+    monkeypatch.setattr(routes, "QUEUE_PATH", tmp_path / "approval_queue.sqlite3")
 
     status = routes.agent_status()
 
     assert status["loop"] == loop_state
     assert status["loop"]["task_running"] is True
     assert status["pending_tickets"] == 0
+    assert status["approval_queue_storage"]["backend"] == "sqlite"
 
 
 def test_owner_summary_counts_only_fresh_pending_tickets(tmp_path, monkeypatch):
@@ -73,7 +78,7 @@ def test_owner_summary_counts_only_fresh_pending_tickets(tmp_path, monkeypatch):
 
 
 def test_approval_queue_review_actions_are_exposed_to_dashboard_state(tmp_path, monkeypatch):
-    monkeypatch.setattr(routes, "QUEUE_PATH", tmp_path / "approval_queue.json")
+    monkeypatch.setattr(routes, "QUEUE_PATH", tmp_path / "approval_queue.sqlite3")
     monkeypatch.setattr(routes, "PAPER_STATE_PATH", tmp_path / "paper_portfolio.json")
     monkeypatch.setattr(routes, "DATA_PATH", Path("data/sample_prices.csv"))
 
@@ -90,6 +95,7 @@ def test_approval_queue_review_actions_are_exposed_to_dashboard_state(tmp_path, 
     assert state["approval_queue"]["summary"]["broker_ticket_exported_count"] == 1
     assert state["approval_queue"]["tickets"][0]["status"] == "broker_ticket_exported"
     assert state["approval_queue"]["tickets"][0]["broker_ticket_export"]["live_order_submission_enabled"] is False
+    assert state["approval_queue"]["storage"]["backend"] == "sqlite"
 
 
 def test_dashboard_html_uses_chinese_user_visible_text():
@@ -108,6 +114,8 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "过期候选单" in html
     assert "已复核" in html
     assert "已导出工单" in html
+    assert "队列存储" in html
+    assert "持久化" in html
     assert "标记已复核" in html
     assert "标记已导出" in html
     assert "待人工确认" in html

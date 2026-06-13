@@ -19,7 +19,7 @@ router = APIRouter()
 ROOT = Path(__file__).resolve().parents[3]
 POLICY_PATH = ROOT / "configs" / "trading_governor_policy.yaml"
 DATA_PATH = ROOT / "data" / "sample_prices.csv"
-QUEUE_PATH = ROOT / "runtime" / "approval_queue.json"
+QUEUE_PATH = ROOT / "runtime" / "approval_queue.sqlite3"
 PAPER_STATE_PATH = ROOT / "runtime" / "paper_portfolio.json"
 
 
@@ -44,6 +44,7 @@ def owner_summary() -> dict:
         "required_owner_actions": ["review_order_tickets"] if queue_summary["fresh_pending_count"] else [],
         "pending_order_tickets": queue_summary["fresh_pending_count"],
         "expired_order_tickets": queue_summary["expired_pending_count"],
+        "approval_queue_storage": queue.storage_status(),
     }
 
 
@@ -74,6 +75,7 @@ def approval_queue() -> dict:
         "tickets": queue.latest_with_freshness(),
         "count": summary["fresh_pending_count"],
         "summary": summary,
+        "storage": queue.storage_status(),
     }
 
 
@@ -137,6 +139,7 @@ def agent_status() -> dict:
         "expired_tickets": queue_summary["expired_pending_count"],
         "latest_ticket_created_at": queue_summary["latest_ticket_created_at"],
         "latest_fresh_ticket_created_at": queue_summary["latest_fresh_ticket_created_at"],
+        "approval_queue_storage": queue.storage_status(),
         "loop": AUTO_PAPER_AGENT.snapshot(),
     }
 
@@ -288,6 +291,12 @@ def dashboard() -> str:
     function displayBool(value) {
       return value ? '是' : '否';
     }
+    function displayStorageBackend(value) {
+      if (value === 'sqlite') return 'SQLite';
+      if (value === 'json') return 'JSON 文件';
+      if (value === 'memory') return '内存';
+      return displayValue(value);
+    }
     function pill(text, kind) {
       return `<span class="pill ${kind}">${text}</span>`;
     }
@@ -310,6 +319,7 @@ def dashboard() -> str:
         metric('过期候选单', queueSummary.expired_pending_count || 0),
         metric('已复核', queueSummary.owner_reviewed_count || 0),
         metric('已导出工单', queueSummary.broker_ticket_exported_count || 0),
+        metric('队列存储', displayStorageBackend((queue.storage || {}).backend)),
         metric('刷新间隔', `${health.refresh_interval_seconds || 300} 秒`)
       ].join('');
     }
@@ -382,6 +392,7 @@ def dashboard() -> str:
       `;
     }
     function renderQueue(queue) {
+      const storage = queue.storage || {};
       const rows = (queue.tickets || []).map(ticket => {
         const payload = ticket.broker_payload || {};
         const risk = ticket.risk_check || {};
@@ -394,7 +405,10 @@ def dashboard() -> str:
           <td>${renderTicketActions(ticket)}</td>
         </tr>`;
       }).join('');
-      document.getElementById('queue').innerHTML = `<table><thead><tr><th>候选单</th><th>可操作性</th><th>标的</th><th>方向</th><th>数量</th><th>价格</th><th>风控</th><th>时效性</th><th>剩余秒数</th><th>操作</th></tr></thead><tbody>${rows || '<tr><td colspan="10" class="muted">暂无待审批候选单</td></tr>'}</tbody></table>`;
+      document.getElementById('queue').innerHTML = `
+        <div class="status">队列存储：${displayStorageBackend(storage.backend)} / 持久化：${displayBool(storage.durable)} / 文件：${displayValue(storage.path)}</div>
+        <table><thead><tr><th>候选单</th><th>可操作性</th><th>标的</th><th>方向</th><th>数量</th><th>价格</th><th>风控</th><th>时效性</th><th>剩余秒数</th><th>操作</th></tr></thead><tbody>${rows || '<tr><td colspan="10" class="muted">暂无待审批候选单</td></tr>'}</tbody></table>
+      `;
     }
     function renderTicketActions(ticket) {
       const ticketId = ticket.ticket_id || '';

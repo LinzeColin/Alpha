@@ -71,3 +71,11 @@ Decision: Owner-facing approval queue actions may update local ticket state to `
 Reason: The workspace needs a usable dashboard workflow for reviewing timely broker-ready candidates. The real-money boundary still belongs to the owner inside the broker app/API session.
 
 Consequence: `/orders/approval-queue/{ticket_id}/owner-review`, `/reject`, and `/mark-exported` record status history and review/export metadata. Export requires prior owner review, risk-blocked tickets cannot be reviewed/exported, and exported tickets record `live_order_submission_enabled: false`.
+
+## 2026-06-13: Approval Queue Uses SQLite By Default
+
+Decision: The default runtime approval queue should persist to `runtime/approval_queue.sqlite3`.
+
+Reason: A five-minute autonomous paper loop will create repeated order candidates. The queue must survive dashboard restarts and support reliable owner actions without rewriting a whole JSON file on every transition.
+
+Consequence: `ApprovalQueue` chooses SQLite for `.sqlite`, `.sqlite3`, and `.db` paths, keeps JSON compatibility for `.json`, and exposes storage status to `/orders/approval-queue`, `/owner/summary`, `/agent/status`, and the dashboard.

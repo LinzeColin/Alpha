@@ -30,6 +30,8 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - `/paper/broker/status` and the dashboard "模拟交易执行层" section expose paper adapter status, mode, connection, credential requirement, live-order disabled state, trade count, and latest simulated fill.
 - Approval queue now has owner-facing review transitions: `owner_reviewed`, `owner_rejected`, and `broker_ticket_exported`, exposed through API routes and Chinese dashboard buttons.
 - Approval queue export is non-executing: export requires prior owner review and records `live_order_submission_enabled: false`; risk-blocked tickets cannot be reviewed/exported.
+- Approval queue now uses SQLite by default at `runtime/approval_queue.sqlite3`; `.json` paths remain supported for compatibility and one-time sibling migration.
+- `/orders/approval-queue`, `/owner/summary`, `/agent/status`, and dashboard state expose approval queue storage status.
 - AppleScript `Alpha.app` is installed at `/Users/linzezhang/Downloads/Alpha.app`, `/Users/linzezhang/Applications/Alpha.app`, and `/Applications/Alpha.app`.
 - GitHub connector backup now contains the core runtime/dashboard/code/test changes from this run.
 - Repo launcher exists at `outputs/applications/Alpha.command`; an older external copy was observed at `/Users/linzezhang/Downloads/applicatioins/Alpha.command`.
@@ -44,6 +46,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - User-visible runtime surfaces should display Chinese; API field names and enum values stay machine-readable and stable.
 - Paper execution adapters may be broker-like, but committed defaults must stay local sandbox or broker paper/read-only only.
 - Dashboard approval actions update local ticket state only; they do not call any real broker order endpoint.
+- Default durable runtime state is local-first: SQLite approval queue plus JSON paper portfolio.
 
 ## Files To Read First
 
@@ -99,6 +102,7 @@ Browser broker execution layer verification -> dashboard showed 模拟交易执�
 Repo launcher -> outputs/applications/Alpha.command exists and is executable
 External app launchers -> /Users/linzezhang/Downloads/Alpha.app, /Users/linzezhang/Applications/Alpha.app, and /Applications/Alpha.app exist and pass plist validation
 Approval queue review actions -> pending ticket can be marked owner_reviewed, then broker_ticket_exported; exported ticket records live_order_submission_enabled=false
+SQLite approval queue validation -> ticket persists across `ApprovalQueue` instances, owner review/export survives reload, and storage status reports backend=sqlite durable=true
 ```
 
 ## Unresolved Risks
@@ -106,11 +110,11 @@ Approval queue review actions -> pending ticket can be marked owner_reviewed, th
 - Current market data is fixture-only.
 - External broker paper API integration is not connected yet; local sandbox paper adapter abstraction now exists.
 - Dashboard is local MVP only.
-- Approval queue is interactive and file-backed, but not yet a SQLite/production database.
+- Approval queue is SQLite-backed locally, but still needs production-grade backup/rotation and multi-process contention hardening before long unattended runs.
 - Real broker live order submission remains intentionally out of scope.
 - Strategy tournament is still fixture-level; it now has simple walk-forward/OOS metrics, but not multi-year OOS, cost-model, slippage-model, or walk-forward portfolio validation.
 - Local `git push -u origin main` is blocked by missing HTTPS credentials (`could not read Username`); GitHub connector synced core runtime files, but older `docs/seed_pack/**` and `docs/task_pack_seed/**` still need a normal authenticated push or follow-up connector sync.
 
 ## Next Step
 
-Authenticate GitHub CLI/HTTPS push or continue connector-based sync, then either harden approval queue storage with SQLite or implement a concrete broker paper/read-only adapter for the user's chosen broker.
+Authenticate GitHub CLI/HTTPS push or continue connector-based sync, then implement a concrete broker paper/read-only adapter for the user's chosen broker or add real market data ingestion.

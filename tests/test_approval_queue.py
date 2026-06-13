@@ -12,6 +12,22 @@ def test_approval_queue_persists_ticket(tmp_path):
 
     reloaded = ApprovalQueue(path)
     assert reloaded.list_tickets() == [ticket]
+    assert reloaded.storage_status()["backend"] == "json"
+
+
+def test_approval_queue_persists_ticket_in_sqlite(tmp_path):
+    path = tmp_path / "approval_queue.sqlite3"
+    ticket = {"ticket_id": "ticket_1", "status": "pending_owner_approval", "created_at": "2026-06-13T00:00:00+00:00"}
+
+    queue = ApprovalQueue(path)
+    assert queue.storage_status()["backend"] == "sqlite"
+    assert queue.storage_status()["durable"] is True
+    assert queue.enqueue(ticket)["status"] == "queued"
+
+    reloaded = ApprovalQueue(path)
+    assert reloaded.list_tickets() == [ticket]
+    assert reloaded.get_ticket("ticket_1") == ticket
+    assert reloaded.summary()["storage"]["backend"] == "sqlite"
 
 
 def test_approval_queue_summarizes_fresh_and_expired_pending_tickets(tmp_path):
@@ -69,6 +85,43 @@ def test_approval_queue_tracks_owner_review_and_export_transitions(tmp_path):
     assert summary["fresh_pending_count"] == 0
     assert summary["owner_reviewed_count"] == 0
     assert summary["broker_ticket_exported_count"] == 1
+
+
+def test_sqlite_approval_queue_tracks_owner_review_and_export_across_instances(tmp_path):
+    path = tmp_path / "approval_queue.sqlite3"
+    queue = ApprovalQueue(path)
+    ticket = {
+        "ticket_id": "ticket_sqlite_review",
+        "status": "pending_owner_approval",
+        "broker_payload": {"symbol": "TLT"},
+        "risk_check": {"allowed": True},
+    }
+    queue.enqueue(ticket)
+
+    reviewed = ApprovalQueue(path).mark_owner_reviewed("ticket_sqlite_review", actor_id="owner_dashboard")
+    exported = ApprovalQueue(path).mark_exported("ticket_sqlite_review", actor_id="owner_dashboard")
+    stored = ApprovalQueue(path).get_ticket("ticket_sqlite_review")
+
+    assert reviewed["new_status"] == "owner_reviewed"
+    assert exported["new_status"] == "broker_ticket_exported"
+    assert stored["status"] == "broker_ticket_exported"
+    assert stored["broker_ticket_export"]["live_order_submission_enabled"] is False
+    assert [event["to_status"] for event in stored["status_history"]] == ["owner_reviewed", "broker_ticket_exported"]
+
+
+def test_sqlite_approval_queue_imports_existing_json_sibling(tmp_path):
+    json_path = tmp_path / "approval_queue.json"
+    sqlite_path = tmp_path / "approval_queue.sqlite3"
+    json_path.write_text(
+        '[{"ticket_id": "ticket_legacy", "status": "pending_owner_approval", "created_at": "2026-06-13T00:00:00+00:00"}]',
+        encoding="utf-8",
+    )
+
+    queue = ApprovalQueue(sqlite_path)
+
+    assert queue.storage_status()["backend"] == "sqlite"
+    assert queue.get_ticket("ticket_legacy")["ticket_id"] == "ticket_legacy"
+    assert queue.summary()["total_count"] == 1
 
 
 def test_approval_queue_blocks_export_before_owner_review(tmp_path):

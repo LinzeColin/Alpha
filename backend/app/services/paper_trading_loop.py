@@ -147,7 +147,7 @@ def build_default_loop(
     return PaperTradingLoop(
         policy=policy,
         price_path=root / "data" / "sample_prices.csv",
-        approval_queue=ApprovalQueue(queue_path or root / "runtime" / "approval_queue.json"),
+        approval_queue=ApprovalQueue(queue_path or root / "runtime" / "approval_queue.sqlite3"),
         paper_state_path=state_path,
         refresh_interval_seconds=interval_seconds,
     )
