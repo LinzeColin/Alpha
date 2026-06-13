@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from backend.app.services.approval_queue import ApprovalQueue
@@ -10,6 +11,19 @@ from backend.app.services.paper_readiness import (
 from backend.app.services.paper_trading_loop import PaperTradingLoop
 from backend.app.services.policy import GovernorPolicy
 from backend.app.services.runtime_status import atomic_write_runtime_snapshot, utc_now_iso
+
+
+def _loop_snapshot(*, interval_seconds: int = 300, run_count: int = 1, scheduled_delay_seconds: int = 300) -> dict:
+    completed_at = datetime.now(timezone.utc).replace(microsecond=0)
+    return {
+        "enabled": True,
+        "task_running": True,
+        "interval_seconds": interval_seconds,
+        "run_count": run_count,
+        "status": "sleeping",
+        "last_run_completed_at": completed_at.isoformat(),
+        "next_run_at": (completed_at + timedelta(seconds=scheduled_delay_seconds)).isoformat(),
+    }
 
 
 def test_paper_readiness_fails_closed_without_loop_snapshot(tmp_path):
@@ -36,13 +50,7 @@ def test_paper_readiness_passes_with_paper_cycle_loop_snapshot_and_app_entry(tmp
     performance_history_path = tmp_path / "performance_history.jsonl"
     app_path = tmp_path / "Alpha.app"
     app_path.mkdir()
-    loop_snapshot = {
-        "enabled": True,
-        "task_running": True,
-        "interval_seconds": 300,
-        "run_count": 1,
-        "status": "sleeping",
-    }
+    loop_snapshot = _loop_snapshot()
     loop = PaperTradingLoop(
         policy=GovernorPolicy.load(Path("configs/trading_governor_policy.yaml")),
         price_path=Path("data/sample_prices.csv"),
@@ -89,13 +97,7 @@ def test_paper_readiness_can_use_fresh_persisted_loop_heartbeat(tmp_path):
     loop_status_path = tmp_path / "runtime" / "agent_loop_status.json"
     atomic_write_runtime_snapshot(
         loop_status_path,
-        {
-            "enabled": True,
-            "task_running": True,
-            "interval_seconds": 300,
-            "run_count": 1,
-            "status": "sleeping",
-        },
+        _loop_snapshot(),
         snapshot_kind="agent_loop",
     )
     loop = PaperTradingLoop(
@@ -140,11 +142,7 @@ def test_paper_readiness_rejects_dead_persisted_loop_heartbeat(tmp_path):
                 "snapshot_kind": "agent_loop",
                 "persisted_at": utc_now_iso(),
                 "process_id": -1,
-                "enabled": True,
-                "task_running": True,
-                "interval_seconds": 300,
-                "run_count": 1,
-                "status": "sleeping",
+                **_loop_snapshot(),
             },
             ensure_ascii=False,
         ),
@@ -174,3 +172,37 @@ def test_paper_readiness_rejects_dead_persisted_loop_heartbeat(tmp_path):
     assert report["overall_status"] == "unhealthy"
     assert loop_check["status"] == "fail"
     assert loop_check["evidence"]["persisted_runtime_evidence"]["reason"] == "process_not_alive"
+
+
+def test_paper_readiness_rejects_loop_with_wrong_next_run_schedule(tmp_path):
+    queue_path = tmp_path / "approval_queue.sqlite3"
+    paper_state_path = tmp_path / "paper_portfolio.json"
+    strategy_history_path = tmp_path / "strategy_history.jsonl"
+    performance_history_path = tmp_path / "performance_history.jsonl"
+    app_path = tmp_path / "Alpha.app"
+    app_path.mkdir()
+    loop = PaperTradingLoop(
+        policy=GovernorPolicy.load(Path("configs/trading_governor_policy.yaml")),
+        price_path=Path("data/sample_prices.csv"),
+        approval_queue=ApprovalQueue(queue_path),
+        paper_state_path=paper_state_path,
+        strategy_history_path=strategy_history_path,
+        performance_history_path=performance_history_path,
+    )
+
+    loop.run_once()
+    report = collect_paper_trading_readiness(
+        root=tmp_path,
+        queue_path=queue_path,
+        paper_state_path=paper_state_path,
+        strategy_history_path=strategy_history_path,
+        performance_history_path=performance_history_path,
+        loop_snapshot=_loop_snapshot(scheduled_delay_seconds=600),
+        app_paths=[app_path],
+    )
+
+    loop_check = {item["id"]: item for item in report["checks"]}["automatic_paper_loop"]
+    assert report["overall_status"] == "unhealthy"
+    assert loop_check["status"] == "fail"
+    assert loop_check["evidence"]["scheduled_delay_seconds"] == 600
+    assert "300 秒刷新契约" in loop_check["message_zh"]

@@ -4,7 +4,7 @@ import argparse
 import copy
 import json
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -126,7 +126,7 @@ def _run_normal_cycles(*, root: Path, temp_root: Path, cycles: int, interval_sec
         paper_state_path=paths["paper_state_path"],
         strategy_history_path=paths["strategy_history_path"],
         performance_history_path=paths["performance_history_path"],
-        loop_snapshot={"enabled": True, "task_running": True, "interval_seconds": interval_seconds, "run_count": cycles, "status": "sleeping"},
+        loop_snapshot=_loop_snapshot(interval_seconds=interval_seconds, run_count=cycles),
         app_paths=[app_path],
         max_refresh_interval_seconds=interval_seconds,
     )
@@ -155,7 +155,7 @@ def _run_rebalance_cycle(*, root: Path, temp_root: Path, interval_seconds: int) 
         paper_state_path=paths["paper_state_path"],
         strategy_history_path=paths["strategy_history_path"],
         performance_history_path=paths["performance_history_path"],
-        loop_snapshot={"enabled": True, "task_running": True, "interval_seconds": interval_seconds, "run_count": 1, "status": "sleeping"},
+        loop_snapshot=_loop_snapshot(interval_seconds=interval_seconds, run_count=1),
         app_paths=[app_path],
         max_refresh_interval_seconds=interval_seconds,
     )
@@ -185,7 +185,7 @@ def _run_cash_rebalance_cycle(*, root: Path, temp_root: Path, interval_seconds: 
         paper_state_path=paths["paper_state_path"],
         strategy_history_path=paths["strategy_history_path"],
         performance_history_path=paths["performance_history_path"],
-        loop_snapshot={"enabled": True, "task_running": True, "interval_seconds": interval_seconds, "run_count": 1, "status": "sleeping"},
+        loop_snapshot=_loop_snapshot(interval_seconds=interval_seconds, run_count=1),
         app_paths=[app_path],
         max_refresh_interval_seconds=interval_seconds,
     )
@@ -206,6 +206,20 @@ def _cash_rebalance_policy(path: Path) -> GovernorPolicy:
     limits["max_total_gross_exposure_pct"] = 0
     data["policy_version"] = f"{base.version}.cash_rebalance_isolation"
     return GovernorPolicy(data)
+
+
+def _loop_snapshot(*, interval_seconds: int, run_count: int) -> dict:
+    completed_at = datetime.now(timezone.utc).replace(microsecond=0)
+    next_run_at = completed_at + timedelta(seconds=interval_seconds)
+    return {
+        "enabled": True,
+        "task_running": True,
+        "interval_seconds": interval_seconds,
+        "run_count": run_count,
+        "status": "sleeping",
+        "last_run_completed_at": completed_at.isoformat(),
+        "next_run_at": next_run_at.isoformat(),
+    }
 
 
 def _scenario_paths(temp_root: Path) -> dict[str, Path]:

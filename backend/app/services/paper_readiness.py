@@ -153,12 +153,16 @@ def _check_automatic_loop(
     task_running = bool(loop_snapshot.get("task_running"))
     interval = int(loop_snapshot.get("interval_seconds") or 0)
     run_count = int(loop_snapshot.get("run_count") or 0)
+    scheduled_delay_seconds = _scheduled_delay_seconds(loop_snapshot)
     evidence = {
         "enabled": enabled,
         "task_running": task_running,
         "interval_seconds": interval,
         "run_count": run_count,
         "status": loop_snapshot.get("status"),
+        "last_run_completed_at": loop_snapshot.get("last_run_completed_at"),
+        "next_run_at": loop_snapshot.get("next_run_at"),
+        "scheduled_delay_seconds": scheduled_delay_seconds,
         "persisted_runtime_evidence": loop_snapshot.get("persisted_runtime_evidence") or persisted_evidence,
     }
     if not enabled or not task_running:
@@ -167,6 +171,11 @@ def _check_automatic_loop(
         return _check("automatic_paper_loop", "全自动模拟交易循环", "fail", "自动循环间隔超过 300 秒。", evidence)
     if run_count <= 0 and loop_snapshot.get("status") not in {"starting", "running_cycle"}:
         return _check("automatic_paper_loop", "全自动模拟交易循环", "warn", "自动循环已启动但尚未完成首轮。", evidence)
+    if run_count > 0 and loop_snapshot.get("status") == "sleeping":
+        if scheduled_delay_seconds is None:
+            return _check("automatic_paper_loop", "全自动模拟交易循环", "fail", "自动循环缺少下一次运行时间，无法证明 5 分钟调度。", evidence)
+        if abs(scheduled_delay_seconds - interval) > 5:
+            return _check("automatic_paper_loop", "全自动模拟交易循环", "fail", "自动循环下一次运行时间与 300 秒刷新契约不一致。", evidence)
     return _check("automatic_paper_loop", "全自动模拟交易循环", "pass", "自动循环正在运行，刷新间隔不超过 300 秒。", evidence)
 
 
@@ -364,6 +373,26 @@ def _summary_zh(checks: list[dict]) -> str:
     if warn_count:
         return f"核心自动链路可运行，但仍有 {warn_count} 个关注项需要补强后再声明成熟交付。"
     return "自动模拟交易、候选订单、风控、审批队列、工单、5分钟时效和本地 App 入口均通过就绪检查。"
+
+
+def _scheduled_delay_seconds(loop_snapshot: dict) -> int | None:
+    completed_at = _parse_iso(loop_snapshot.get("last_run_completed_at"))
+    next_run_at = _parse_iso(loop_snapshot.get("next_run_at"))
+    if not completed_at or not next_run_at:
+        return None
+    return int((next_run_at - completed_at).total_seconds())
+
+
+def _parse_iso(value: Any) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _default_app_paths(root: Path) -> list[Path]:

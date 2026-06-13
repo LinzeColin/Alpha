@@ -19,11 +19,12 @@ class FakePaperLoop:
         }
 
 
-def test_auto_paper_agent_runtime_runs_immediate_cycle_and_stops():
+def test_auto_paper_agent_runtime_runs_immediate_cycle_and_stops(tmp_path):
     runtime = AutoPaperAgentRuntime()
+    status_path = tmp_path / "runtime" / "agent_loop_status.json"
 
     async def exercise():
-        runtime.start(loop_factory=FakePaperLoop, interval_seconds=60)
+        runtime.start(loop_factory=FakePaperLoop, interval_seconds=60, status_path=status_path)
         for _ in range(50):
             snapshot = runtime.snapshot()
             if snapshot["run_count"] >= 1:
