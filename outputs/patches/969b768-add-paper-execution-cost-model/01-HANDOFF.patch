@@ -1,0 +1,43 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+index ddcb17b..55186af 100644
+--- a/HANDOFF.md
++++ b/HANDOFF.md
+@@ -23,6 +23,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
+ - Strategy history records and summaries now provide owner-facing Chinese fields such as `winner_strategy_id_zh`, `winner_decision_zh`, and `market_data_quality_zh`.
+ - Every paper cycle now appends paper portfolio performance evidence to `runtime/paper_performance_history.jsonl`.
+ - `/paper/performance/history` and dashboard "模拟绩效" expose run count, latest equity, cumulative return, latest equity change, high watermark, max drawdown, current drawdown, and recent equity rows.
++- Paper execution now includes a fixed-cost/slippage model: buy fills use 5.00 bps simulated slippage and 1.00 AUD paper commission, with reference price, fill price, commission, execution model, and cumulative commission visible in API/dashboard/CLI.
+ - Dashboard state includes `paper_portfolio` and `strategy_tournament`.
+ - Local launcher scripts exist at `scripts/start_alpha_dashboard.sh` and `scripts/stop_alpha_dashboard.sh`.
+ - Dashboard startup now starts the app-managed `AutoPaperAgentRuntime`: one immediate paper cycle, then 300-second refreshes.
+@@ -81,6 +82,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
+ - `backend/app/services/ops_runtime.py`
+ - `backend/app/services/display_locale.py`
+ - `backend/app/services/paper_performance.py`
++- `backend/app/services/broker_paper_adapter.py`
+ - `backend/app/services/strategy_journal.py`
+ - `backend/app/services/live_broker.py`
+ - `backend/app/services/broker_ticket_export.py`
+@@ -183,6 +185,13 @@ Paper performance safety scan -> no new real broker place_order path; live-order
+ Runtime paper performance verification -> POST /paper/run-once returned paper_performance.status_zh=已写入, latest_record.strategy_id_zh=动量策略 TLT 20日, total_return_zh=0.00%, live_order_submission_enabled=false
+ Runtime paper performance API verification -> GET /paper/performance/history returned run_count=2, latest_total_equity=10000.0, total_return_zh=0.00%, max_drawdown_zh=0.00%, latest_trade_side_zh=买入
+ Browser paper performance verification -> /dashboard lang=zh-CN, 模拟绩效/模拟收益率/累计收益率/最大回撤/权益高水位/动量策略 TLT 20日 visible, forbidden English/raw enum phrases=[], browser console errors=0
++Execution cost target tests -> .venv/bin/python -m pytest tests/test_broker_paper_adapter.py tests/test_paper_broker_persistence.py tests/test_paper_performance.py tests/test_paper_trading_loop.py tests/test_dashboard_state.py tests/test_agent_runtime.py -q -> 17 passed
++Execution cost full regression -> .venv/bin/python -m pytest tests -q -> 46 passed
++Execution cost diff hygiene -> git diff --check -> passed
++Execution cost safety scan -> no new real broker place_order path; live-order submission remains disabled
++Runtime execution cost verification -> POST /paper/run-once returned execution_model_zh=固定佣金与滑点模型, average_fill_price=91.996, reference_price=91.95, commission=1.0, slippage_bps=5.0, live_order_submission_enabled=false
++Runtime dashboard state cost verification -> /dashboard/state exposed paper_broker_status.execution_model_zh=固定佣金与滑点模型, commission_per_order=1.0, slippage_bps=5.0, paper_performance.latest_total_commission=3.0
++Browser execution cost verification -> /dashboard lang=zh-CN, 固定佣金与滑点模型/模拟滑点/单笔佣金/累计佣金/最近成交成本 visible, forbidden English/raw enum phrases=[], browser console errors=0
+ ```
+ 
+ ## Unresolved Risks
+@@ -194,7 +203,7 @@ Browser paper performance verification -> /dashboard lang=zh-CN, 模拟绩效/
+ - Approval queue is SQLite-backed locally and automatic backup/rotation now exists; it still needs a normal macOS `.app` long-run soak and multi-process contention hardening before claiming unattended 30-day robustness.
+ - The current execution environment may reclaim `nohup` background servers between tool calls; foreground uvicorn verified the app runtime, and the start script now detects post-health-check instability, but final `.app` long-run verification should be done from the user's normal macOS session.
+ - Real broker live order submission remains intentionally out of scope.
+-- Strategy tournament is still fixture-level; it now has simple walk-forward/OOS metrics, persistent strategy history, and persistent paper performance history, but not multi-year OOS, cost-model, slippage-model, or walk-forward portfolio validation.
++- Strategy tournament is still fixture-level; it now has simple walk-forward/OOS metrics, persistent strategy history, persistent paper performance history, and a fixed paper execution cost model, but not multi-year OOS, broker-specific fee schedules, borrow costs, tax lots, or walk-forward portfolio validation.
+ - Local `git push -u origin main` is blocked by missing HTTPS credentials (`could not read Username`); GitHub connector synced core runtime files, but older `docs/seed_pack/**` and `docs/task_pack_seed/**` still need a normal authenticated push or follow-up connector sync.
+ 
+ ## Next Step
