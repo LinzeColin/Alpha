@@ -1,0 +1,16 @@
+diff --git a/docs/decision_log.md b/docs/decision_log.md
+index bdbd926..c11f35d 100644
+--- a/docs/decision_log.md
++++ b/docs/decision_log.md
+@@ -135,3 +135,11 @@ Decision: 每次自动模拟交易周期都必须把策略锦标赛胜出结果
+ Reason: 单次策略锦标赛只能说明当前快照；成熟 paper trading 需要可恢复、可审计的策略迭代轨迹，用于观察胜出策略是否稳定漂移。
+ 
+ Consequence: `PaperTradingLoop` 写入 `runtime/strategy_tournament_history.jsonl`；`GET /strategy/tournament/history` 和 dashboard “策略迭代历史”显示记录次数、最近胜出策略、连续胜出次数、稳定度、样本外收益、命中率、决策和行情质量。Owner-facing 字段提供 `*_zh` 中文展示值，raw enum 继续保留给自动化。
++
++## 2026-06-13: Paper Performance History Is Required Evidence
++
++Decision: 每次自动模拟交易周期都必须把模拟组合权益快照追加到本地绩效历史，并向 dashboard/API 暴露收益率与回撤。
++
++Reason: 成熟 paper trading 不能只证明“下过模拟单”；它必须持续显示组合权益、累计收益、最新权益变化、最大回撤和当前回撤，才能支持策略迭代和运行判断。
++
++Consequence: `PaperTradingLoop` 写入 `runtime/paper_performance_history.jsonl`；`GET /paper/performance/history` 和 dashboard “模拟绩效”显示记录次数、最新总权益、累计收益率、最新权益变化、权益高水位、最大回撤、当前回撤和最近权益历史。该功能只记录模拟交易结果，不改变真实资金执行边界。
