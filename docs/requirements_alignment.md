@@ -6,9 +6,10 @@
 | Agent 自动生成真实交易候选订单 | Improved MVP implemented | `OrderIntent` generated from tradable strategy tournament candidate |
 | Agent 自动完成风险检查 | Improved MVP implemented | `pre_trade_risk_check()` before queue entry, with notional limit enforcement |
 | Agent 自动进入审批队列 | MVP implemented | `ApprovalQueue.enqueue()` |
-| Agent 自动生成 broker-ready order ticket | MVP implemented | `BrokerReadyOrderTicket` |
-| 每 5 分钟更新一次 | Improved MVP implemented | `refresh_interval_seconds: 300` in service, `configs/agent_loop.yaml`, app runtime, and dashboard JS refresh |
-| Web dashboard | Improved MVP implemented | `/dashboard`, `/dashboard/state`, `/agent/loop/status`, `/paper/portfolio`, `/strategy/tournament/run` |
+| Agent 自动生成 broker-ready order ticket | Improved MVP implemented | `BrokerReadyOrderTicket` includes `expires_at`; dashboard/API annotate fresh vs expired actionability |
+| 每 5 分钟更新一次 | Improved MVP implemented | `refresh_interval_seconds: 300` in service, `configs/agent_loop.yaml`, app runtime, dashboard JS refresh, and ticket TTL |
+| Web dashboard | Improved MVP implemented | `/dashboard`, `/dashboard/state`, `/agent/loop/status`, `/paper/portfolio`, `/strategy/tournament/run`; queue table shows actionability/freshness/seconds left |
+| 操作及时性和时间有效性 | Improved MVP implemented | `ApprovalQueue.summary()` counts only fresh pending tickets as owner-actionable; expired tickets remain for audit |
 | 稳定 webpage 交互平台入口 | Improved MVP implemented | `scripts/start_alpha_dashboard.sh` starts dashboard; app lifecycle starts the paper agent runtime; `outputs/applications/Alpha.command` and `outputs/applicatioins/Alpha.command` launch it |
 | 策略迭代 | Improved MVP implemented | `run_strategy_tournament()` ranks momentum candidates and selects tradable paper candidate |
 | `live_trading.enabled:true` | Rejected | Committed defaults must remain disabled |
