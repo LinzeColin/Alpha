@@ -11,6 +11,7 @@ from backend.app.services.paper_readiness import (
 from backend.app.services.paper_trading_loop import PaperTradingLoop
 from backend.app.services.policy import GovernorPolicy
 from backend.app.services.runtime_status import atomic_write_runtime_snapshot, utc_now_iso
+from tests.app_bundle_helper import make_minimal_alpha_app
 
 
 def _loop_snapshot(*, interval_seconds: int = 300, run_count: int = 1, scheduled_delay_seconds: int = 300) -> dict:
@@ -27,13 +28,14 @@ def _loop_snapshot(*, interval_seconds: int = 300, run_count: int = 1, scheduled
 
 
 def test_paper_readiness_fails_closed_without_loop_snapshot(tmp_path):
+    app_path = make_minimal_alpha_app(tmp_path / "Alpha.app")
     report = collect_paper_trading_readiness(
         root=tmp_path,
         queue_path=tmp_path / "approval_queue.sqlite3",
         paper_state_path=tmp_path / "paper_portfolio.json",
         strategy_history_path=tmp_path / "strategy_history.jsonl",
         performance_history_path=tmp_path / "performance_history.jsonl",
-        app_paths=[tmp_path / "Alpha.app"],
+        app_paths=[app_path],
     )
 
     assert report["status"] == "not_ready"
@@ -48,8 +50,7 @@ def test_paper_readiness_passes_with_paper_cycle_loop_snapshot_and_app_entry(tmp
     paper_state_path = tmp_path / "paper_portfolio.json"
     strategy_history_path = tmp_path / "strategy_history.jsonl"
     performance_history_path = tmp_path / "performance_history.jsonl"
-    app_path = tmp_path / "Alpha.app"
-    app_path.mkdir()
+    app_path = make_minimal_alpha_app(tmp_path / "Alpha.app")
     loop_snapshot = _loop_snapshot()
     loop = PaperTradingLoop(
         policy=GovernorPolicy.load(Path("configs/trading_governor_policy.yaml")),
@@ -92,8 +93,7 @@ def test_paper_readiness_can_use_fresh_persisted_loop_heartbeat(tmp_path):
     paper_state_path = tmp_path / "paper_portfolio.json"
     strategy_history_path = tmp_path / "strategy_history.jsonl"
     performance_history_path = tmp_path / "performance_history.jsonl"
-    app_path = tmp_path / "Alpha.app"
-    app_path.mkdir()
+    app_path = make_minimal_alpha_app(tmp_path / "Alpha.app")
     loop_status_path = tmp_path / "runtime" / "agent_loop_status.json"
     atomic_write_runtime_snapshot(
         loop_status_path,
@@ -132,8 +132,7 @@ def test_paper_readiness_rejects_dead_persisted_loop_heartbeat(tmp_path):
     paper_state_path = tmp_path / "paper_portfolio.json"
     strategy_history_path = tmp_path / "strategy_history.jsonl"
     performance_history_path = tmp_path / "performance_history.jsonl"
-    app_path = tmp_path / "Alpha.app"
-    app_path.mkdir()
+    app_path = make_minimal_alpha_app(tmp_path / "Alpha.app")
     loop_status_path = tmp_path / "runtime" / "agent_loop_status.json"
     loop_status_path.parent.mkdir(parents=True)
     loop_status_path.write_text(
@@ -179,8 +178,7 @@ def test_paper_readiness_rejects_loop_with_wrong_next_run_schedule(tmp_path):
     paper_state_path = tmp_path / "paper_portfolio.json"
     strategy_history_path = tmp_path / "strategy_history.jsonl"
     performance_history_path = tmp_path / "performance_history.jsonl"
-    app_path = tmp_path / "Alpha.app"
-    app_path.mkdir()
+    app_path = make_minimal_alpha_app(tmp_path / "Alpha.app")
     loop = PaperTradingLoop(
         policy=GovernorPolicy.load(Path("configs/trading_governor_policy.yaml")),
         price_path=Path("data/sample_prices.csv"),

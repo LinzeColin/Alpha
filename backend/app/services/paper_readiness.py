@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.app.services.approval_queue import ApprovalQueue
+from backend.app.services.app_entry import collect_app_entry_readiness, default_alpha_app_paths
 from backend.app.services.broker_paper_adapter import build_paper_broker_adapter
 from backend.app.services.paper_broker import PaperBroker
 from backend.app.services.paper_performance import summarize_paper_performance_history
@@ -51,7 +52,8 @@ def collect_paper_trading_readiness(
     performance_history_path = (
         Path(performance_history_path) if performance_history_path else root / "runtime" / "paper_performance_history.jsonl"
     )
-    app_paths = [Path(path) for path in (app_paths or _default_app_paths(root))]
+    custom_app_paths = app_paths is not None
+    app_paths = [Path(path) for path in (app_paths or default_alpha_app_paths(root))]
     loop_snapshot_evidence = None
     if loop_snapshot is None:
         loop_snapshot, loop_snapshot_evidence = read_persisted_runtime_snapshot(
@@ -86,7 +88,7 @@ def collect_paper_trading_readiness(
         _check_approval_queue(queue_summary),
         _check_broker_ready_ticket(latest_fresh_ticket or latest_ticket),
         _check_freshness(latest_fresh_ticket, loop_snapshot, max_refresh_interval_seconds=max_refresh_interval_seconds),
-        _check_dashboard_app(app_paths),
+        _check_dashboard_app(root, app_paths, require_launcher_sources=not custom_app_paths),
         _check_real_order_boundary(paper_broker_status),
     ]
     overall_status = _overall_status(checks)
@@ -312,19 +314,24 @@ def _check_freshness(ticket: dict | None, loop_snapshot: dict | None, *, max_ref
     return _check("five_minute_freshness", "5 分钟及时性", "pass", "当前存在有效候选单，且自动循环间隔不超过 300 秒。", evidence)
 
 
-def _check_dashboard_app(app_paths: list[Path]) -> dict:
+def _check_dashboard_app(root: Path, app_paths: list[Path], *, require_launcher_sources: bool) -> dict:
+    report = collect_app_entry_readiness(
+        root=root,
+        app_paths=app_paths,
+        require_launcher_sources=require_launcher_sources,
+    )
     evidence = {
-        "paths": [{"path": str(path), "exists": path.exists(), "is_app": path.suffix == ".app"} for path in app_paths],
+        "status": report.get("status"),
+        "pass_count": report.get("pass_count"),
+        "warn_count": report.get("warn_count"),
+        "fail_count": report.get("fail_count"),
+        "summary_zh": report.get("summary_zh"),
+        "bundle_reports": report.get("bundle_reports", []),
+        "launcher_sources": report.get("launcher_sources", {}),
     }
-    missing = [item["path"] for item in evidence["paths"] if not item["exists"]]
-    non_app = [item["path"] for item in evidence["paths"] if item["exists"] and not item["is_app"]]
-    if non_app:
-        evidence["non_app_paths"] = non_app
-        return _check("dashboard_app_entry", "本地 App 入口", "fail", "存在入口路径但不是 .app 格式。", evidence)
-    if missing:
-        evidence["missing_paths"] = missing
-        return _check("dashboard_app_entry", "本地 App 入口", "warn", "部分 Downloads/Applications App 入口未检测到。", evidence)
-    return _check("dashboard_app_entry", "本地 App 入口", "pass", "Downloads、用户 Applications、系统 Applications 和仓库入口均检测到 Alpha.app。", evidence)
+    if report.get("status") != "pass":
+        return _check("dashboard_app_entry", "本地 App 入口", "fail", "本地 App 入口未通过 bundle 完整性或启动源文件检查。", evidence)
+    return _check("dashboard_app_entry", "本地 App 入口", "pass", "Downloads、用户 Applications、系统 Applications 和仓库入口均为完整 Alpha.app。", evidence)
 
 
 def _check_real_order_boundary(paper_broker_status: dict) -> dict:
@@ -396,12 +403,7 @@ def _parse_iso(value: Any) -> datetime | None:
 
 
 def _default_app_paths(root: Path) -> list[Path]:
-    return [
-        root / "outputs" / "applications" / "Alpha.app",
-        Path.home() / "Downloads" / "Alpha.app",
-        Path.home() / "Applications" / "Alpha.app",
-        Path("/Applications/Alpha.app"),
-    ]
+    return default_alpha_app_paths(root)
 
 
 def main() -> None:

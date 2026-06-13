@@ -27,6 +27,24 @@ def _patch_fixture_market_data(monkeypatch, tmp_path):
     monkeypatch.setattr(routes, "MARKET_DATA_CONFIG_PATH", config)
 
 
+def _patch_app_entry_readiness(monkeypatch):
+    monkeypatch.setattr(
+        routes,
+        "app_entry_readiness",
+        lambda: {
+            "status": "pass",
+            "status_zh": "通过",
+            "summary_zh": "本地应用入口完整。",
+            "check_count": 2,
+            "pass_count": 2,
+            "warn_count": 0,
+            "fail_count": 0,
+            "checks": [{"title_zh": "应用包完整性", "status": "pass", "status_zh": "通过", "message_zh": "应用包有效。"}],
+            "bundle_reports": [{"path": "/tmp/Alpha.app", "status": "pass", "status_zh": "通过"}],
+        },
+    )
+
+
 def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, monkeypatch):
     monkeypatch.setattr(routes, "QUEUE_PATH", tmp_path / "approval_queue.sqlite3")
     monkeypatch.setattr(routes, "PAPER_STATE_PATH", tmp_path / "paper_portfolio.json")
@@ -35,6 +53,7 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
     monkeypatch.setattr(routes, "SOAK_HISTORY_PATH", tmp_path / "soak_readiness_history.jsonl")
     monkeypatch.setattr(routes, "DATA_PATH", Path("data/sample_prices.csv"))
     _patch_fixture_market_data(monkeypatch, tmp_path)
+    _patch_app_entry_readiness(monkeypatch)
 
     run_result = routes.paper_run_once()
     state = routes.dashboard_state()
@@ -64,6 +83,8 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
     assert state["soak_readiness"]["safety_boundary"]["live_order_submission_enabled"] is False
     assert state["soak_readiness_history"]["status_zh"] == "暂无记录"
     assert state["soak_readiness_history"]["consecutive_no_fail_count"] == 0
+    assert state["app_entry_readiness"]["status_zh"] == "通过"
+    assert state["app_entry_readiness"]["summary_zh"] == "本地应用入口完整。"
     assert state["agent_status"]["status"] == "ready"
     assert state["paper_portfolio"]["trade_count"] == 1
     assert state["paper_performance"]["status"] == "ready"
@@ -182,6 +203,7 @@ def test_approval_queue_review_actions_are_exposed_to_dashboard_state(tmp_path, 
     monkeypatch.setattr(routes, "SOAK_HISTORY_PATH", tmp_path / "soak_readiness_history.jsonl")
     monkeypatch.setattr(routes, "DATA_PATH", Path("data/sample_prices.csv"))
     _patch_fixture_market_data(monkeypatch, tmp_path)
+    _patch_app_entry_readiness(monkeypatch)
 
     run_result = routes.paper_run_once()
     ticket_id = run_result["approval_queue"]["ticket"]["ticket_id"]
@@ -254,6 +276,7 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "禁止操作" in html
     assert "行情数据" in html
     assert "运行健康" in html
+    assert "本地应用入口" in html
     assert "交付就绪" in html
     assert "模拟交易交付日期" in html
     assert "网页与本地应用交付日期" in html

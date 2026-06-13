@@ -1,0 +1,224 @@
+{
+  "bundle_reports": [
+    {
+      "applet_executable": true,
+      "exists": true,
+      "fingerprint_matches_reference": null,
+      "is_app": true,
+      "is_dir": true,
+      "missing_files": [],
+      "path": "/Users/linzezhang/Documents/Codex/2026-06-13/files-mentioned-by-the-user-alpha/outputs/applications/Alpha.app",
+      "plist_error": null,
+      "plist_mismatches": {},
+      "plist_valid": true,
+      "plist_values": {
+        "CFBundleExecutable": "applet",
+        "CFBundleName": "Alpha",
+        "CFBundlePackageType": "APPL"
+      },
+      "status": "pass",
+      "status_zh": "通过"
+    },
+    {
+      "applet_executable": true,
+      "exists": true,
+      "fingerprint_matches_reference": true,
+      "fingerprint_mismatches": [],
+      "is_app": true,
+      "is_dir": true,
+      "missing_files": [],
+      "path": "/Users/linzezhang/Downloads/Alpha.app",
+      "plist_error": null,
+      "plist_mismatches": {},
+      "plist_valid": true,
+      "plist_values": {
+        "CFBundleExecutable": "applet",
+        "CFBundleName": "Alpha",
+        "CFBundlePackageType": "APPL"
+      },
+      "status": "pass",
+      "status_zh": "通过"
+    },
+    {
+      "applet_executable": true,
+      "exists": true,
+      "fingerprint_matches_reference": true,
+      "fingerprint_mismatches": [],
+      "is_app": true,
+      "is_dir": true,
+      "missing_files": [],
+      "path": "/Users/linzezhang/Applications/Alpha.app",
+      "plist_error": null,
+      "plist_mismatches": {},
+      "plist_valid": true,
+      "plist_values": {
+        "CFBundleExecutable": "applet",
+        "CFBundleName": "Alpha",
+        "CFBundlePackageType": "APPL"
+      },
+      "status": "pass",
+      "status_zh": "通过"
+    },
+    {
+      "applet_executable": true,
+      "exists": true,
+      "fingerprint_matches_reference": true,
+      "fingerprint_mismatches": [],
+      "is_app": true,
+      "is_dir": true,
+      "missing_files": [],
+      "path": "/Applications/Alpha.app",
+      "plist_error": null,
+      "plist_mismatches": {},
+      "plist_valid": true,
+      "plist_values": {
+        "CFBundleExecutable": "applet",
+        "CFBundleName": "Alpha",
+        "CFBundlePackageType": "APPL"
+      },
+      "status": "pass",
+      "status_zh": "通过"
+    }
+  ],
+  "check_count": 2,
+  "checks": [
+    {
+      "evidence": {
+        "applescript_exists": true,
+        "applescript_opens_browser": true,
+        "applescript_path": "/Users/linzezhang/Documents/Codex/2026-06-13/files-mentioned-by-the-user-alpha/outputs/applications/Alpha.applescript",
+        "applescript_points_to_root": true,
+        "applescript_starts_dashboard": true,
+        "command_executable": true,
+        "command_exists": true,
+        "command_path": "/Users/linzezhang/Documents/Codex/2026-06-13/files-mentioned-by-the-user-alpha/outputs/applications/Alpha.command",
+        "command_points_to_root": true,
+        "command_starts_dashboard": true,
+        "required": true
+      },
+      "id": "app_launcher_sources",
+      "message_zh": "AppleScript 启动脚本和命令入口均指向当前仓库控制台启动脚本。",
+      "status": "pass",
+      "status_zh": "通过",
+      "title_zh": "应用启动源文件"
+    },
+    {
+      "evidence": {
+        "bundle_count": 4,
+        "bundles": [
+          {
+            "applet_executable": true,
+            "exists": true,
+            "fingerprint_matches_reference": null,
+            "is_app": true,
+            "is_dir": true,
+            "missing_files": [],
+            "path": "/Users/linzezhang/Documents/Codex/2026-06-13/files-mentioned-by-the-user-alpha/outputs/applications/Alpha.app",
+            "plist_error": null,
+            "plist_mismatches": {},
+            "plist_valid": true,
+            "plist_values": {
+              "CFBundleExecutable": "applet",
+              "CFBundleName": "Alpha",
+              "CFBundlePackageType": "APPL"
+            },
+            "status": "pass",
+            "status_zh": "通过"
+          },
+          {
+            "applet_executable": true,
+            "exists": true,
+            "fingerprint_matches_reference": true,
+            "fingerprint_mismatches": [],
+            "is_app": true,
+            "is_dir": true,
+            "missing_files": [],
+            "path": "/Users/linzezhang/Downloads/Alpha.app",
+            "plist_error": null,
+            "plist_mismatches": {},
+            "plist_valid": true,
+            "plist_values": {
+              "CFBundleExecutable": "applet",
+              "CFBundleName": "Alpha",
+              "CFBundlePackageType": "APPL"
+            },
+            "status": "pass",
+            "status_zh": "通过"
+          },
+          {
+            "applet_executable": true,
+            "exists": true,
+            "fingerprint_matches_reference": true,
+            "fingerprint_mismatches": [],
+            "is_app": true,
+            "is_dir": true,
+            "missing_files": [],
+            "path": "/Users/linzezhang/Applications/Alpha.app",
+            "plist_error": null,
+            "plist_mismatches": {},
+            "plist_valid": true,
+            "plist_values": {
+              "CFBundleExecutable": "applet",
+              "CFBundleName": "Alpha",
+              "CFBundlePackageType": "APPL"
+            },
+            "status": "pass",
+            "status_zh": "通过"
+          },
+          {
+            "applet_executable": true,
+            "exists": true,
+            "fingerprint_matches_reference": true,
+            "fingerprint_mismatches": [],
+            "is_app": true,
+            "is_dir": true,
+            "missing_files": [],
+            "path": "/Applications/Alpha.app",
+            "plist_error": null,
+            "plist_mismatches": {},
+            "plist_valid": true,
+            "plist_values": {
+              "CFBundleExecutable": "applet",
+              "CFBundleName": "Alpha",
+              "CFBundlePackageType": "APPL"
+            },
+            "status": "pass",
+            "status_zh": "通过"
+          }
+        ],
+        "failed_count": 0
+      },
+      "id": "app_bundle_integrity",
+      "message_zh": "仓库、Downloads、用户 Applications 和系统 Applications 的 Alpha.app 均为有效应用包。",
+      "status": "pass",
+      "status_zh": "通过",
+      "title_zh": "应用包完整性"
+    }
+  ],
+  "fail_count": 0,
+  "generated_at": "2026-06-13T09:33:31+00:00",
+  "launcher_sources": {
+    "applescript_exists": true,
+    "applescript_opens_browser": true,
+    "applescript_path": "/Users/linzezhang/Documents/Codex/2026-06-13/files-mentioned-by-the-user-alpha/outputs/applications/Alpha.applescript",
+    "applescript_points_to_root": true,
+    "applescript_starts_dashboard": true,
+    "command_executable": true,
+    "command_exists": true,
+    "command_path": "/Users/linzezhang/Documents/Codex/2026-06-13/files-mentioned-by-the-user-alpha/outputs/applications/Alpha.command",
+    "command_points_to_root": true,
+    "command_starts_dashboard": true,
+    "required": true
+  },
+  "pass_count": 2,
+  "status": "pass",
+  "status_zh": "通过",
+  "summary_zh": "仓库、Downloads、用户 Applications 和系统 Applications 的 Alpha.app 入口完整，启动源文件指向当前控制台。",
+  "warn_count": 0,
+  "write_result": {
+    "file_size_bytes": 7245,
+    "path": "/Users/linzezhang/Documents/Codex/2026-06-13/files-mentioned-by-the-user-alpha/outputs/app_entry/app_entry_readiness_latest.json",
+    "status": "written",
+    "status_zh": "已写入"
+  }
+}

@@ -18,6 +18,8 @@
 - 新增 `scripts/verify_dashboard_http_smoke.py`，通过本地 HTTP 检查 `/health`、`/dashboard` 和 `/dashboard/state` 的中文文案、关键中文字段、响应式布局契约和真实下单禁用边界。
 - 新增 `scripts/verify_dashboard_chrome_visual.py`，通过本机 Chrome headless 检查桌面/移动截图、渲染后可见中文文案、旧英文 UI 禁用项、像素多样性和响应式布局契约；JSON 报告可提交，截图/HTML 因包含本机路径只保留本地。
 - `.gitignore` 精确忽略视觉验收 `.html/.png`，避免把本机绝对路径和运行态截图推送到 GitHub；`outputs/visual_acceptance/dashboard_chrome_visual_report.json` 保留为提交证据。
+- 新增 `backend/app/services/app_entry.py` 和 `scripts/verify_app_entry.py`，验证仓库、Downloads、用户 Applications、系统 Applications 四处 `Alpha.app` 的应用包结构、Info.plist、可执行 applet、关键文件指纹一致性，以及 AppleScript/命令入口是否指向当前仓库控制台启动脚本；证据写入 `outputs/app_entry/app_entry_readiness_latest.json`。
+- 新增 `/readiness/app-entry` 和控制台“本地应用入口”面板，显示应用入口总体状态、检查项、四处 `Alpha.app` 路径、plist、可执行状态和指纹一致性。
 - 行情状态提供 `provider_zh`、`source_kind_zh`、`data_quality_zh`、`real_market_data_zh`、`refresh_error_zh` 等中文展示字段；控制台刷新失败优先显示中文错误兜底。
 - 经纪商工单 JSON 仍保留机器字段；默认 HTML 视图和 CSV 下载面向人工操作改为中文。
 - 富途牛牛开放网关仍只允许只读探测和只读行情快照；不得创建交易上下文、不得解锁交易、不得调用真实下单。
@@ -26,8 +28,8 @@
 - Alpaca paper 适配依据见 `docs/paper_broker_provider_notes.md`；当前已实现默认关闭的账户/持仓/最近订单只读同步和纸面订单 mock 下单路径，尚未完成用户真实 Alpaca paper account E2E。
 - Moomoo paper 下单未实现；官方 paper 示例仍需要创建交易上下文并调用 `place_order(..., trd_env=TrdEnv.SIMULATE)`，与当前安全扫描门槛冲突，必须另开受控适配 run 后再做。
 - 控制台“模拟交易执行层”已显示纸面交易提供方、适配器就绪、允许纸面下单、外部纸面 API、未就绪原因和下一步。
-- `PaperTradingLoop` 已具备现金/持仓/目标敞口约束感知：正常优先生成买入候选；若单标的仓位或总敞口超过 policy 上限，则优先生成“目标仓位再平衡”卖出候选；若现金不足以覆盖预计买入成交价、滑点和佣金但组合仍有可卖持仓，则生成现金回收减仓候选；两类卖单都会继续通过风控、审批队列、broker-ready ticket 和本地模拟成交。
-- 新增 `backend/app/services/paper_maturity.py` 和 `scripts/verify_paper_trading_maturity.py`：用临时本地状态验收连续模拟周期、目标仓位再平衡卖单、现金回收减仓、风控、审批队列、broker-ready ticket、5分钟 TTL 和真实下单禁用边界，并写入 `outputs/paper_maturity/paper_trading_maturity_latest.json`。
+- `PaperTradingLoop` 已具备现金/持仓/目标敞口约束感知：正常优先生成买入候选；若单标的仓位或总敞口超过 policy 上限，则优先生成“目标仓位再平衡”卖出候选；若现金不足以覆盖预计买入成交价、滑点和佣金但组合仍有可卖持仓，则生成现金回收减仓候选；两类卖单都会继续通过风控、审批队列、经纪商就绪工单和本地模拟成交。
+- 新增 `backend/app/services/paper_maturity.py` 和 `scripts/verify_paper_trading_maturity.py`：用临时本地状态验收连续模拟周期、目标仓位再平衡卖单、现金回收减仓、风控、审批队列、经纪商就绪工单、5分钟 TTL 和真实下单禁用边界，并写入 `outputs/paper_maturity/paper_trading_maturity_latest.json`。
 - `scripts/start_alpha_dashboard.sh` 和 `scripts/stop_alpha_dashboard.sh` 修复了变量紧贴中文标点时的 zsh 解析问题。
 - 自动模拟交易循环和自动维护循环会分别写入 `runtime/agent_loop_status.json` 与 `runtime/ops_maintenance_status.json`；`/readiness/paper-trading` 和 `/readiness/soak` 可以读取新鲜心跳并校验进程仍存活，避免把已退出的 App 误判为就绪；`/readiness/paper-trading` 还会验证 `next_run_at - last_run_completed_at` 与 300 秒刷新契约一致。
 - 自动维护循环每轮追加 `runtime/soak_readiness_history.jsonl`；`/readiness/soak/history` 和控制台“长运行预检”显示历史采样数、连续无失败采样数、连续完全通过采样数、最近失败时间和最近采样表。
@@ -63,6 +65,9 @@
 - `scripts/verify_chinese_display.py`
 - `scripts/verify_dashboard_http_smoke.py`
 - `scripts/verify_dashboard_chrome_visual.py`
+- `scripts/verify_app_entry.py`
+- `backend/app/services/app_entry.py`
+- `outputs/app_entry/app_entry_readiness_latest.json`
 - `outputs/visual_acceptance/dashboard_chrome_visual_report.json`
 - `tests/test_dashboard_state.py`
 - `tests/test_dashboard_chrome_visual.py`
@@ -113,6 +118,9 @@ python /Users/linzezhang/.codex/skills/webapp-testing/scripts/with_server.py --s
 
 python /Users/linzezhang/.codex/skills/webapp-testing/scripts/with_server.py --server ".venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8142" --port 8142 --timeout 60 -- .venv/bin/python scripts/verify_dashboard_chrome_visual.py --base-url http://127.0.0.1:8142 --output-dir /private/tmp/alpha_visual_check_20260613b --timeout 30 --virtual-time-budget-ms 4000
 # 临时复跑：desktop 视口通过并生成截图/DOM，mobile 截图在本机 Chrome headless/GPU 进程超时；未覆盖已提交的 outputs/visual_acceptance/dashboard_chrome_visual_report.json 通过证据。
+
+python scripts/verify_app_entry.py
+# status_zh=通过，仓库、Downloads、用户 Applications、系统 Applications 的 Alpha.app 应用包完整，安装副本关键文件指纹与仓库 Alpha.app 一致，AppleScript/命令入口指向当前仓库 scripts/start_alpha_dashboard.sh；证据见 outputs/app_entry/app_entry_readiness_latest.json
 
 git diff --check
 # passed

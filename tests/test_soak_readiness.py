@@ -4,6 +4,7 @@ from pathlib import Path
 
 from backend.app.services.runtime_status import atomic_write_runtime_snapshot
 from backend.app.services.soak_readiness import collect_soak_readiness, format_soak_readiness_summary_zh
+from tests.app_bundle_helper import make_minimal_alpha_app
 
 
 def _paper_report(*, fresh_ticket: bool = True, live_order_submission_enabled: bool = False) -> dict:
@@ -76,8 +77,7 @@ def _maintenance_snapshot() -> dict:
 
 
 def test_soak_readiness_passes_when_runtime_evidence_is_complete(tmp_path):
-    app_path = tmp_path / "Alpha.app"
-    app_path.mkdir()
+    app_path = make_minimal_alpha_app(tmp_path / "Alpha.app")
 
     report = collect_soak_readiness(
         root=tmp_path,
@@ -100,8 +100,7 @@ def test_soak_readiness_passes_when_runtime_evidence_is_complete(tmp_path):
 
 
 def test_soak_readiness_can_use_fresh_persisted_maintenance_heartbeat(tmp_path):
-    app_path = tmp_path / "Alpha.app"
-    app_path.mkdir()
+    app_path = make_minimal_alpha_app(tmp_path / "Alpha.app")
     maintenance_path = tmp_path / "runtime" / "ops_maintenance_status.json"
     atomic_write_runtime_snapshot(maintenance_path, _maintenance_snapshot(), snapshot_kind="ops_maintenance")
 
@@ -120,8 +119,7 @@ def test_soak_readiness_can_use_fresh_persisted_maintenance_heartbeat(tmp_path):
 
 
 def test_soak_readiness_fails_without_fresh_broker_ticket(tmp_path):
-    app_path = tmp_path / "Alpha.app"
-    app_path.mkdir()
+    app_path = make_minimal_alpha_app(tmp_path / "Alpha.app")
 
     report = collect_soak_readiness(
         root=tmp_path,
@@ -140,8 +138,7 @@ def test_soak_readiness_fails_without_fresh_broker_ticket(tmp_path):
 
 
 def test_soak_readiness_fails_closed_if_any_boundary_enables_live_orders(tmp_path):
-    app_path = tmp_path / "Alpha.app"
-    app_path.mkdir()
+    app_path = make_minimal_alpha_app(tmp_path / "Alpha.app")
 
     report = collect_soak_readiness(
         root=tmp_path,

@@ -36,6 +36,12 @@
 - 原因：用户需要稳定的本地网页工作台入口，而不是每次手动敲终端命令。
 - 影响：`outputs/applications/Alpha.applescript` 生成 `Alpha.app`，并安装到 Downloads、用户 Applications 和系统 `/Applications`。
 
+## 2026-06-13：应用入口验收必须检查应用包与启动源
+
+- 决策：`scripts/verify_app_entry.py` 必须验证仓库、Downloads、用户 Applications 和系统 Applications 的 `Alpha.app` 应用包结构、Info.plist、可执行 applet、关键文件指纹一致性，以及 AppleScript/命令入口是否指向当前仓库控制台启动脚本。
+- 原因：6月17日稳定入口交付不能只证明路径存在；损坏应用包、旧安装副本或指向旧仓库的启动源都会造成用户无法可靠打开控制台。
+- 影响：`/readiness/paper-trading` 和 `/readiness/soak` 的本地应用入口检查已接入 `collect_app_entry_readiness()`；默认证据写入 `outputs/app_entry/app_entry_readiness_latest.json`。
+
 ## 2026-06-13：策略迭代必须有样本外证据
 
 - 决策：策略锦标赛候选必须提供 walk-forward 样本外收益、命中率和验证窗口数。

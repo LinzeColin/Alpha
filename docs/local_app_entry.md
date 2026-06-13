@@ -1,4 +1,4 @@
-# Alpha 本地 App 入口
+# Alpha 本地应用入口
 
 主要 `.app` 格式入口：
 
@@ -8,7 +8,7 @@
 /Applications/Alpha.app
 ```
 
-仓库内 App 源文件和生成包：
+仓库内应用源文件和生成包：
 
 ```text
 outputs/applications/Alpha.applescript
@@ -19,7 +19,7 @@ outputs/applications/Alpha.app
 
 ```text
 outputs/applications/Alpha.command
-outputs/applicatioins/Alpha.command
+outputs/applications/Alpha.command
 ```
 
 命令会启动 FastAPI 控制台：
@@ -28,7 +28,7 @@ outputs/applicatioins/Alpha.command
 http://127.0.0.1:8000/dashboard
 ```
 
-该 App 是由 `outputs/applications/Alpha.applescript` 生成的 AppleScript `.app`。
+该应用是由 `outputs/applications/Alpha.applescript` 生成的 AppleScript `.app`。
 它会调用 `scripts/start_alpha_dashboard.sh`，在缺少 `.venv` 时创建虚拟环境，
 启动 `uvicorn`，在 FastAPI 应用生命周期内启动 300 秒刷新一次的模拟交易智能体循环，
 同时启动 300 秒采样一次的自动运行维护，
@@ -43,9 +43,12 @@ http://127.0.0.1:8000/dashboard
 http://127.0.0.1:8000/agent/loop/status
 ```
 
-已验证的 App 安装状态：
+已验证的本地应用安装状态：
 
 ```text
-仓库、Downloads、用户 Applications、系统 Applications 中的 Alpha.app 均通过 plutil -lint。
+python scripts/verify_app_entry.py
+仓库、Downloads、用户 Applications、系统 Applications 中的 Alpha.app 均通过 bundle 完整性检查。
+安装副本与仓库 Alpha.app 的关键文件指纹一致。
+AppleScript 和命令入口均指向当前仓库 scripts/start_alpha_dashboard.sh。
 open -n /Users/linzezhang/Downloads/Alpha.app 可启动控制台和应用托管的模拟交易循环。
 ```

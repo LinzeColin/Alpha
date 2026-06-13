@@ -6,7 +6,7 @@ def test_dashboard_http_smoke_validation_accepts_chinese_safe_payloads():
         health={"status": "ok", "status_zh": "正常", "live_trading_enabled": False, "refresh_interval_seconds": 300},
         dashboard_html=(
             "Alpha 控制台 运行模拟交易周期 生成运行备份 刷新公共行情 系统快照 长运行预检 长运行历史 "
-            "审批队列 纸面交易提供方 允许纸面下单 外部账户同步 同步说明 富途牛牛开放网关（只读） /dashboard/state /paper/run-once /ops/backup "
+            "审批队列 本地应用入口 纸面交易提供方 允许纸面下单 外部账户同步 同步说明 富途牛牛开放网关（只读） /dashboard/state /paper/run-once /ops/backup "
             "/market-data/refresh /orders/approval-queue/ owner-review reject mark-exported "
             "/broker-ticket/view /broker-ticket.csv * { box-sizing: border-box; overflow-x: hidden; "
             "flex-wrap: wrap; .header-actions { display: flex; flex-wrap: wrap; "
@@ -41,6 +41,7 @@ def test_dashboard_http_smoke_validation_accepts_chinese_safe_payloads():
                 "trade_context_enabled": False,
                 "supports_real_broker_place_order": False,
             },
+            "app_entry_readiness": {"status_zh": "通过", "summary_zh": "本地应用入口完整。"},
             "soak_readiness": {"summary_zh": "可观察运行"},
             "soak_readiness_history": {
                 "summary_zh": "连续无失败采样 1 次",
@@ -80,6 +81,7 @@ def test_dashboard_http_smoke_validation_rejects_english_and_live_order_paths():
                 "trade_context_enabled": False,
                 "supports_real_broker_place_order": False,
             },
+            "app_entry_readiness": {"status_zh": "通过", "summary_zh": "本地应用入口完整。"},
             "soak_readiness": {"summary_zh": "可观察运行"},
             "soak_readiness_history": {
                 "summary_zh": "连续无失败采样 1 次",

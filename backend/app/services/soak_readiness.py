@@ -6,6 +6,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+from backend.app.services.app_entry import collect_app_entry_readiness, default_alpha_app_paths
 from backend.app.services.ops_health import collect_ops_health
 from backend.app.services.paper_readiness import collect_paper_trading_readiness
 from backend.app.services.runtime_status import read_persisted_runtime_snapshot
@@ -48,10 +49,11 @@ def collect_soak_readiness(
             max_age_seconds=DEFAULT_REFRESH_INTERVAL_SECONDS * 2,
         )
     maintenance = maintenance or {"persisted_runtime_evidence": maintenance_evidence}
-    app_entries = [Path(path) for path in (app_paths or _default_app_paths(root))]
+    custom_app_paths = app_paths is not None
+    app_entries = [Path(path) for path in (app_paths or default_alpha_app_paths(root))]
 
     checks = [
-        _check_app_entries(app_entries),
+        _check_app_entries(root, app_entries, require_launcher_sources=not custom_app_paths),
         _check_paper_delivery(paper_report),
         _check_loop_and_freshness(paper_report),
         _check_fresh_ticket(paper_report),
@@ -125,19 +127,24 @@ def format_soak_readiness_summary_zh(report: dict) -> str:
     return "\n".join(lines)
 
 
-def _check_app_entries(app_paths: list[Path]) -> dict:
+def _check_app_entries(root: Path, app_paths: list[Path], *, require_launcher_sources: bool) -> dict:
+    report = collect_app_entry_readiness(
+        root=root,
+        app_paths=app_paths,
+        require_launcher_sources=require_launcher_sources,
+    )
     evidence = {
-        "paths": [{"path": str(path), "exists": path.exists(), "is_app": path.suffix == ".app"} for path in app_paths]
+        "status": report.get("status"),
+        "pass_count": report.get("pass_count"),
+        "warn_count": report.get("warn_count"),
+        "fail_count": report.get("fail_count"),
+        "summary_zh": report.get("summary_zh"),
+        "bundle_reports": report.get("bundle_reports", []),
+        "launcher_sources": report.get("launcher_sources", {}),
     }
-    bad_suffix = [item["path"] for item in evidence["paths"] if item["exists"] and not item["is_app"]]
-    missing = [item["path"] for item in evidence["paths"] if not item["exists"]]
-    if bad_suffix:
-        evidence["bad_suffix_paths"] = bad_suffix
-        return _check("app_entries", "本地 App 入口", "fail", "检测到非 .app 格式入口，不能作为标准 App 入口交付。", evidence)
-    if missing:
-        evidence["missing_paths"] = missing
-        return _check("app_entries", "本地 App 入口", "warn", "部分 Downloads/Applications App 入口缺失。", evidence)
-    return _check("app_entries", "本地 App 入口", "pass", "仓库、Downloads、用户 Applications 和系统 Applications 的 Alpha.app 均可见。", evidence)
+    if report.get("status") != "pass":
+        return _check("app_entries", "本地 App 入口", "fail", "本地 App 入口未通过 bundle 完整性或启动源文件检查。", evidence)
+    return _check("app_entries", "本地 App 入口", "pass", "仓库、Downloads、用户 Applications 和系统 Applications 的 Alpha.app 均完整可用。", evidence)
 
 
 def _check_paper_delivery(report: dict) -> dict:
@@ -290,12 +297,7 @@ def _summary_zh(checks: list[dict], *, target_days: int) -> str:
 
 
 def _default_app_paths(root: Path) -> list[Path]:
-    return [
-        root / "outputs" / "applications" / "Alpha.app",
-        Path.home() / "Downloads" / "Alpha.app",
-        Path.home() / "Applications" / "Alpha.app",
-        Path("/Applications/Alpha.app"),
-    ]
+    return default_alpha_app_paths(root)
 
 
 def main() -> None:

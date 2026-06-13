@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import plistlib
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -109,7 +110,7 @@ def write_paper_trading_maturity_report(report: dict, output_path: str | Path = 
 def _run_normal_cycles(*, root: Path, temp_root: Path, cycles: int, interval_seconds: int) -> dict:
     paths = _scenario_paths(temp_root)
     app_path = paths["app_path"]
-    app_path.mkdir(parents=True, exist_ok=True)
+    _create_minimal_app_bundle(app_path)
     loop = PaperTradingLoop(
         policy=GovernorPolicy.load(root / "configs" / "trading_governor_policy.yaml"),
         price_path=root / "data" / "sample_prices.csv",
@@ -136,7 +137,7 @@ def _run_normal_cycles(*, root: Path, temp_root: Path, cycles: int, interval_sec
 def _run_rebalance_cycle(*, root: Path, temp_root: Path, interval_seconds: int) -> dict:
     paths = _scenario_paths(temp_root)
     app_path = paths["app_path"]
-    app_path.mkdir(parents=True, exist_ok=True)
+    _create_minimal_app_bundle(app_path)
     broker = PaperBroker(cash=5000.0, positions={"TLT": 50.0})
     loop = PaperTradingLoop(
         policy=GovernorPolicy.load(root / "configs" / "trading_governor_policy.yaml"),
@@ -165,7 +166,7 @@ def _run_rebalance_cycle(*, root: Path, temp_root: Path, interval_seconds: int) 
 def _run_cash_rebalance_cycle(*, root: Path, temp_root: Path, interval_seconds: int) -> dict:
     paths = _scenario_paths(temp_root)
     app_path = paths["app_path"]
-    app_path.mkdir(parents=True, exist_ok=True)
+    _create_minimal_app_bundle(app_path)
     policy = _cash_rebalance_policy(root / "configs" / "trading_governor_policy.yaml")
     broker = PaperBroker(cash=1.0, positions={"TLT": 2.0})
     loop = PaperTradingLoop(
@@ -206,6 +207,25 @@ def _cash_rebalance_policy(path: Path) -> GovernorPolicy:
     limits["max_total_gross_exposure_pct"] = 0
     data["policy_version"] = f"{base.version}.cash_rebalance_isolation"
     return GovernorPolicy(data)
+
+
+def _create_minimal_app_bundle(path: Path) -> None:
+    (path / "Contents" / "MacOS").mkdir(parents=True, exist_ok=True)
+    (path / "Contents" / "Resources" / "Scripts").mkdir(parents=True, exist_ok=True)
+    (path / "Contents" / "Info.plist").write_bytes(
+        plistlib.dumps(
+            {
+                "CFBundleName": "Alpha",
+                "CFBundlePackageType": "APPL",
+                "CFBundleExecutable": "applet",
+            }
+        )
+    )
+    applet = path / "Contents" / "MacOS" / "applet"
+    applet.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    applet.chmod(0o755)
+    (path / "Contents" / "PkgInfo").write_text("APPLaplt", encoding="utf-8")
+    (path / "Contents" / "Resources" / "Scripts" / "main.scpt").write_bytes(b"compiled-script-placeholder")
 
 
 def _loop_snapshot(*, interval_seconds: int, run_count: int) -> dict:

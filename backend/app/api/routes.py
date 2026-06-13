@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from backend.app.schemas.strategy_dsl import validate_strategy
 from backend.app.services.agent_runtime import AUTO_PAPER_AGENT
+from backend.app.services.app_entry import collect_app_entry_readiness
 from backend.app.services.backtest import run_buy_and_hold_fixture
 from backend.app.services.broker_paper_adapter import build_paper_broker_adapter
 from backend.app.services.approval_queue import ApprovalQueue
@@ -376,6 +377,11 @@ def soak_readiness_history() -> dict:
     return summarize_soak_readiness_history(SOAK_HISTORY_PATH)
 
 
+@router.get("/readiness/app-entry")
+def app_entry_readiness() -> dict:
+    return collect_app_entry_readiness(root=ROOT)
+
+
 @router.get("/dashboard/state")
 def dashboard_state() -> dict:
     return {
@@ -386,6 +392,7 @@ def dashboard_state() -> dict:
         "paper_readiness": paper_trading_readiness(),
         "soak_readiness": soak_readiness(),
         "soak_readiness_history": soak_readiness_history(),
+        "app_entry_readiness": app_entry_readiness(),
         "owner_summary": owner_summary(),
         "agent_status": agent_status(),
         "paper_portfolio": paper_portfolio(),
@@ -476,6 +483,7 @@ def dashboard() -> str:
       <section><h2>富途牛牛开放网关（只读）</h2><div id="moomooBroker"></div></section>
       <section><h2>行情数据</h2><div id="marketData"></div></section>
       <section><h2>运行健康</h2><div id="opsHealth"></div></section>
+      <section><h2>本地应用入口</h2><div id="appEntry"></div></section>
       <section><h2>交付就绪</h2><div id="paperReadiness"></div></section>
       <section><h2>长运行预检</h2><div id="soakReadiness"></div></section>
       <section><h2>长运行历史</h2><div id="soakHistory"></div></section>
@@ -711,6 +719,7 @@ def dashboard() -> str:
       const paperReadiness = data.paper_readiness || {};
       const soakReadiness = data.soak_readiness || {};
       const soakHistory = data.soak_readiness_history || {};
+      const appEntry = data.app_entry_readiness || {};
       const moomooQuote = data.moomoo_quote_snapshot || {};
       const strategyJournal = data.strategy_journal || {};
       const paperPerformance = data.paper_performance || {};
@@ -718,6 +727,7 @@ def dashboard() -> str:
         metric('智能体', pill(displayStatus(agent.status), 'ok')),
         metric('循环', pill(displayStatus(loop.status, '未知'), loop.error_count ? 'danger' : 'ok')),
         metric('运行健康', pill(displayStatus(opsHealth.overall_status, '未知'), opsHealth.fail_count ? 'danger' : (opsHealth.warn_count ? 'warn' : 'ok'))),
+        metric('本地应用入口', pill(appEntry.status_zh || displayStatus(appEntry.status, '未知'), appEntry.fail_count ? 'danger' : (appEntry.warn_count ? 'warn' : 'ok'))),
         metric('交付就绪', pill(paperReadiness.overall_status_zh || displayStatus(paperReadiness.overall_status, '未知'), paperReadiness.fail_count ? 'danger' : (paperReadiness.warn_count ? 'warn' : 'ok'))),
         metric('长运行预检', pill(soakReadiness.overall_status_zh || displayStatus(soakReadiness.overall_status, '未知'), soakReadiness.fail_count ? 'danger' : (soakReadiness.warn_count ? 'warn' : 'ok'))),
         metric('连续无失败采样', soakHistory.consecutive_no_fail_count || 0),
@@ -803,6 +813,43 @@ def dashboard() -> str:
           </tbody>
         </table>
         <table><thead><tr><th>检查项</th><th>状态</th><th>说明</th></tr></thead><tbody>${rows || '<tr><td colspan="3" class="muted">暂无健康检查结果</td></tr>'}</tbody></table>
+      `;
+    }
+    function renderAppEntry(readiness) {
+      const checks = readiness.checks || [];
+      const bundles = readiness.bundle_reports || [];
+      const rows = checks.map(check => {
+        const kind = check.status === 'fail' ? 'danger' : (check.status === 'warn' ? 'warn' : 'ok');
+        return `<tr><td>${check.title_zh || '未知检查'}</td><td>${pill(check.status_zh || displayStatus(check.status), kind)}</td><td>${check.message_zh || ''}</td></tr>`;
+      }).join('');
+      const bundleRows = bundles.map(bundle => {
+        const kind = bundle.status === 'pass' ? 'ok' : 'danger';
+        return `
+          <tr>
+            <td>${displayValue(bundle.path)}</td>
+            <td>${pill(bundle.status_zh || displayStatus(bundle.status, '未知'), kind)}</td>
+            <td>${displayBool(bundle.exists)}</td>
+            <td>${displayBool(bundle.plist_valid)}</td>
+            <td>${displayBool(bundle.applet_executable)}</td>
+            <td>${bundle.fingerprint_matches_reference === null || bundle.fingerprint_matches_reference === undefined ? '仓库源包' : displayBool(bundle.fingerprint_matches_reference)}</td>
+          </tr>
+        `;
+      }).join('');
+      document.getElementById('appEntry').innerHTML = `
+        <div class="metric-grid">
+          ${metric('总体状态', pill(readiness.status_zh || displayStatus(readiness.status, '未知'), readiness.fail_count ? 'danger' : (readiness.warn_count ? 'warn' : 'ok')))}
+          ${metric('通过', readiness.pass_count || 0)}
+          ${metric('需关注', readiness.warn_count || 0)}
+          ${metric('失败', readiness.fail_count || 0)}
+        </div>
+        <table>
+          <tbody>
+            <tr><th>生成时间</th><td>${displayTime(readiness.generated_at)}</td></tr>
+            <tr><th>结论</th><td>${readiness.summary_zh || '无'}</td></tr>
+          </tbody>
+        </table>
+        <table><thead><tr><th>检查项</th><th>状态</th><th>说明</th></tr></thead><tbody>${rows || '<tr><td colspan="3" class="muted">暂无应用入口验收结果</td></tr>'}</tbody></table>
+        <table><thead><tr><th>应用路径</th><th>状态</th><th>存在</th><th>plist 有效</th><th>可执行</th><th>文件指纹一致</th></tr></thead><tbody>${bundleRows || '<tr><td colspan="6" class="muted">暂无应用包记录</td></tr>'}</tbody></table>
       `;
     }
     function renderPaperReadiness(readiness) {
@@ -1131,6 +1178,7 @@ def dashboard() -> str:
         renderMoomooBroker(data.moomoo_broker_status || {}, data.moomoo_quote_snapshot || {});
         renderMarketData(data.market_data || {});
         renderOpsHealth(data.ops_health || {});
+        renderAppEntry(data.app_entry_readiness || {});
         renderPaperReadiness(data.paper_readiness || {});
         renderSoakReadiness(data.soak_readiness || {}, data.soak_readiness_history || {});
         renderSoakHistory(data.soak_readiness_history || {});

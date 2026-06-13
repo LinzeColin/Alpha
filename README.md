@@ -33,6 +33,7 @@ scripts/check_alpha_ops.sh --backup
 scripts/check_alpha_soak.sh
 python -m backend.app.services.paper_readiness
 python -m backend.app.services.soak_readiness
+python scripts/verify_app_entry.py
 python scripts/verify_paper_trading_maturity.py --cycles 3
 python scripts/verify_chinese_display.py
 python scripts/verify_dashboard_http_smoke.py --base-url http://127.0.0.1:8000 --exercise-actions
@@ -53,6 +54,7 @@ runtime/soak_readiness_history.jsonl
 runtime/market_data/latest_prices.csv
 runtime/strategy_tournament_history.jsonl
 runtime/backups/
+outputs/app_entry/app_entry_readiness_latest.json
 outputs/paper_maturity/paper_trading_maturity_latest.json
 ```
 
@@ -101,6 +103,7 @@ GET  /ops/health
 POST /ops/backup
 GET  /ops/maintenance/status
 GET  /readiness/paper-trading
+GET  /readiness/app-entry
 GET  /readiness/soak
 GET  /readiness/soak/history
 GET  /orders/approval-queue
@@ -130,16 +133,18 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - `GET /ops/health` 汇总自动循环、SQLite 审批队列、模拟组合、模拟执行层边界、富途牛牛开放网关只读探测、行情数据、控制台进程、日志和最近备份状态。
 - `POST /ops/backup` 会在 `runtime/backups/` 下生成一次本地运行状态备份，包含审批队列快照、模拟组合、行情缓存、PID 和日志尾部。
 - `GET /ops/maintenance/status` 显示应用托管自动运行维护：健康采样次数、自动备份次数、下次维护时间、健康历史文件和备份轮转配置。
-- `GET /readiness/paper-trading` 输出 6月15日模拟交易交付就绪报告，并标注 6月17日网页与本地应用入口交付目标；逐项验证自动循环、策略迭代、模拟成交、OrderIntent、风控、审批队列、经纪商就绪工单、5分钟时效、本地 App 入口和真实下单边界。自动循环检查会验证心跳新鲜度、进程存活、`interval_seconds` 不超过 300 秒，以及 `next_run_at - last_run_completed_at` 与刷新间隔一致。
-- `GET /readiness/soak` 输出 30 天本地长运行预检报告，聚合 App 入口、模拟交易交付就绪、5分钟循环、有效经纪商就绪工单、运行健康、自动维护、恢复备份和真实下单边界。
+- `GET /readiness/paper-trading` 输出 6月15日模拟交易交付就绪报告，并标注 6月17日网页与本地应用入口交付目标；逐项验证自动循环、策略迭代、模拟成交、OrderIntent、风控、审批队列、经纪商就绪工单、5分钟时效、本地应用入口和真实下单边界。自动循环检查会验证心跳新鲜度、进程存活、`interval_seconds` 不超过 300 秒，以及 `next_run_at - last_run_completed_at` 与刷新间隔一致。
+- `GET /readiness/app-entry` 输出本地应用入口验收，控制台“本地应用入口”面板显示仓库、Downloads、用户 Applications 和系统 Applications 中 `Alpha.app` 的完整性、plist、可执行状态和指纹一致性。
+- `GET /readiness/soak` 输出 30 天本地长运行预检报告，聚合应用入口、模拟交易交付就绪、5分钟循环、有效经纪商就绪工单、运行健康、自动维护、恢复备份和真实下单边界。
 - `GET /readiness/soak/history` 输出自动维护写入的长运行采样历史摘要，包括历史采样数、连续无失败采样数、连续完全通过采样数、最近失败时间和最近采样记录。
-- 自动模拟交易循环会写入 `runtime/agent_loop_status.json`，自动维护循环会写入 `runtime/ops_maintenance_status.json`；就绪检查会校验这些心跳是否新鲜、进程是否仍在运行，并检查自动模拟交易循环的下一次运行时间确实按 300 秒调度，用于跨进程证明本地 App 正在运行。
+- 自动模拟交易循环会写入 `runtime/agent_loop_status.json`，自动维护循环会写入 `runtime/ops_maintenance_status.json`；就绪检查会校验这些心跳是否新鲜、进程是否仍在运行，并检查自动模拟交易循环的下一次运行时间确实按 300 秒调度，用于跨进程证明本地应用正在运行。
 - 自动维护循环每 300 秒会把 `/readiness/soak` 等价预检结果追加到 `runtime/soak_readiness_history.jsonl`；控制台“长运行预检”读取该历史并显示连续无失败采样数。
 - `scripts/check_alpha_ops.sh` 输出中文健康检查摘要；加 `--json` 可输出机器 JSON。
 - `scripts/check_alpha_ops.sh --backup` 可在终端生成一次本地运行状态备份。
 - `scripts/check_alpha_soak.sh` 输出中文长运行预检摘要；加 `--json` 可输出机器 JSON。
 - `python -m backend.app.services.paper_readiness` 输出中文交付就绪摘要；加 `--json` 可查看完整机器证据。
 - `python -m backend.app.services.soak_readiness` 输出中文长运行预检摘要；该报告证明是否可以开始本地 soak，不等于已经完成 30 天验证。
+- `python scripts/verify_app_entry.py` 验证仓库、Downloads、用户 Applications 和系统 Applications 的 `Alpha.app` 应用包结构、Info.plist、可执行 applet、安装副本关键文件指纹，以及 AppleScript/命令入口是否指向当前仓库控制台启动脚本；默认输出证据到 `outputs/app_entry/app_entry_readiness_latest.json`。
 - `python scripts/verify_paper_trading_maturity.py --cycles 3` 使用临时运行态连续跑多轮模拟交易，并额外验证目标仓位再平衡卖单、现金回收减仓、风控、审批队列、经纪商就绪工单、5 分钟 TTL、300 秒调度契约和真实下单禁用边界；现金回收分支使用临时策略覆写隔离验证，不修改默认提交配置；默认输出证据到 `outputs/paper_maturity/paper_trading_maturity_latest.json`。
 - `python scripts/verify_dashboard_http_smoke.py --base-url http://127.0.0.1:8000 --exercise-actions` 会通过 HTTP 检查 `/health`、`/dashboard`、`/dashboard/state` 的中文文案、关键中文字段、响应式布局契约和真实下单禁用边界，并安全调用模拟交易周期与运行备份端点。
 - `python scripts/verify_dashboard_chrome_visual.py --base-url http://127.0.0.1:8000` 会调用本机 Chrome headless 截取桌面和移动视口，检查截图尺寸、像素多样性、渲染后可见中文文案、旧英文界面文案禁用项和响应式布局契约；截图与 DOM HTML 只作为本地临时证据，提交到 GitHub 的默认证据是 `outputs/visual_acceptance/dashboard_chrome_visual_report.json`。
@@ -193,4 +198,4 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - `ALPHA_MARKET_DATA_PROVIDER=moomoo_opend` 时，行情数据网关会把只读快照转换成本地价格缓存，用于模拟交易的价格路径。
 - 控制台的“富途牛牛开放网关（只读）”面板会显示接口包、软件开发包可导入、开放网关连接、只读就绪、只读行情快照、交易解锁、允许真实下单和禁止操作。
 - 该探测层只用于确认本机环境和只读行情是否可用；当前不会创建交易上下文、不会解锁交易、不会提交真实资金订单。
-- `moomoo_paper` 仍保持 fail-closed。安装 Moomoo、Moomoo OpenD 和 Moomoo API 只代表行情/网关前置条件满足，不代表 Alpha 可以自动提交 Moomoo 模拟或真实订单。
+- `moomoo_paper` 仍保持 fail-closed。安装富途牛牛客户端、富途牛牛开放网关和 `moomoo-api` 只代表行情/网关前置条件满足，不代表 Alpha 可以自动提交富途牛牛模拟或真实订单。

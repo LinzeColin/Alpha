@@ -44,6 +44,8 @@ REQUIRED_VISIBLE_RENDERED_TEXT = [
     "外部持仓数",
     "队列存储",
     "安全边界",
+    "本地应用入口",
+    "应用包完整性",
     "模拟交易循环智能体",
     "本地沙盒模拟经纪商适配器",
 ]
@@ -59,6 +61,7 @@ BANNED_VISIBLE_TEXT = [
     " bps",
     "cash_rebalance_",
     "target_rebalance_",
+    "App Bundle",
 ]
 
 

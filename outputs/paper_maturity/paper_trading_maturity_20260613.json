@@ -9,7 +9,7 @@
         "commission": 1.0,
         "execution_model_id": "fixed_cost_slippage_v1",
         "gross_notional": 91.9,
-        "idempotency_key": "run_598df63f42f7:cash_rebalance_TLT:TLT:sell:1.0:2026-06-13T09:15:04+00:00",
+        "idempotency_key": "run_320a5c08d566:cash_rebalance_TLT:TLT:sell:1.0:2026-06-13T09:26:44+00:00",
         "notional": 90.9,
         "price": 91.904,
         "quantity": 1.0,
@@ -44,7 +44,7 @@
     "readiness_overall_status_zh": "就绪",
     "risk_allowed_count": 1,
     "run_ids": [
-      "run_598df63f42f7"
+      "run_320a5c08d566"
     ],
     "scenario_id": "cash_rebalance",
     "sides": [
@@ -67,7 +67,7 @@
             "commission": 1.0,
             "execution_model_id": "fixed_cost_slippage_v1",
             "gross_notional": 92.0,
-            "idempotency_key": "run_014968bd2137:momentum_TLT_20d:TLT:buy:1.0:2026-06-13T09:15:02+00:00",
+            "idempotency_key": "run_0a71c6a13133:momentum_TLT_20d:TLT:buy:1.0:2026-06-13T09:26:43+00:00",
             "notional": 93.0,
             "price": 91.996,
             "quantity": 1.0,
@@ -102,9 +102,9 @@
         "readiness_overall_status_zh": "就绪",
         "risk_allowed_count": 3,
         "run_ids": [
-          "run_6c20d0fe46e0",
-          "run_96906799b764",
-          "run_014968bd2137"
+          "run_899a6a557c22",
+          "run_a6080d44007a",
+          "run_0a71c6a13133"
         ],
         "scenario_id": "normal_cycles",
         "sides": [
@@ -127,7 +127,7 @@
     {
       "evidence": {
         "fail_count": 0,
-        "latest_fresh_ticket_id": "ticket_5054604b10e6",
+        "latest_fresh_ticket_id": "ticket_fcee246f1237",
         "overall_status": "healthy",
         "pass_count": 10,
         "warn_count": 0
@@ -253,7 +253,7 @@
   ],
   "cycle_count": 3,
   "fail_count": 0,
-  "generated_at": "2026-06-13T09:15:04+00:00",
+  "generated_at": "2026-06-13T09:26:44+00:00",
   "normal_cycles": {
     "broker_ready_ticket_count": 3,
     "cycle_count": 3,
@@ -264,7 +264,7 @@
         "commission": 1.0,
         "execution_model_id": "fixed_cost_slippage_v1",
         "gross_notional": 92.0,
-        "idempotency_key": "run_014968bd2137:momentum_TLT_20d:TLT:buy:1.0:2026-06-13T09:15:02+00:00",
+        "idempotency_key": "run_0a71c6a13133:momentum_TLT_20d:TLT:buy:1.0:2026-06-13T09:26:43+00:00",
         "notional": 93.0,
         "price": 91.996,
         "quantity": 1.0,
@@ -299,9 +299,9 @@
     "readiness_overall_status_zh": "就绪",
     "risk_allowed_count": 3,
     "run_ids": [
-      "run_6c20d0fe46e0",
-      "run_96906799b764",
-      "run_014968bd2137"
+      "run_899a6a557c22",
+      "run_a6080d44007a",
+      "run_0a71c6a13133"
     ],
     "scenario_id": "normal_cycles",
     "sides": [
@@ -328,7 +328,7 @@
         "commission": 1.0,
         "execution_model_id": "fixed_cost_slippage_v1",
         "gross_notional": 99.95,
-        "idempotency_key": "run_58791092c05e:target_rebalance_TLT:TLT:sell:1.087548:2026-06-13T09:15:03+00:00",
+        "idempotency_key": "run_bbd7a014577b:target_rebalance_TLT:TLT:sell:1.087548:2026-06-13T09:26:43+00:00",
         "notional": 98.95,
         "price": 91.904,
         "quantity": 1.087548,
@@ -363,7 +363,7 @@
     "readiness_overall_status_zh": "就绪",
     "risk_allowed_count": 1,
     "run_ids": [
-      "run_58791092c05e"
+      "run_bbd7a014577b"
     ],
     "scenario_id": "rebalance",
     "sides": [
@@ -392,7 +392,7 @@
         "commission": 1.0,
         "execution_model_id": "fixed_cost_slippage_v1",
         "gross_notional": 99.95,
-        "idempotency_key": "run_58791092c05e:target_rebalance_TLT:TLT:sell:1.087548:2026-06-13T09:15:03+00:00",
+        "idempotency_key": "run_bbd7a014577b:target_rebalance_TLT:TLT:sell:1.087548:2026-06-13T09:26:43+00:00",
         "notional": 98.95,
         "price": 91.904,
         "quantity": 1.087548,
@@ -427,7 +427,7 @@
     "readiness_overall_status_zh": "就绪",
     "risk_allowed_count": 1,
     "run_ids": [
-      "run_58791092c05e"
+      "run_bbd7a014577b"
     ],
     "scenario_id": "rebalance",
     "sides": [
