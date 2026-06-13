@@ -31,6 +31,7 @@ def test_auto_ops_maintenance_runtime_runs_backup_and_history(tmp_path):
             max_backup_count=2,
             max_history_rows=5,
             history_path=tmp_path / "runtime" / "ops_health_history.jsonl",
+            soak_history_path=tmp_path / "runtime" / "soak_readiness_history.jsonl",
             backup_dir=tmp_path / "runtime" / "backups",
             status_path=status_path,
         )
@@ -57,7 +58,11 @@ def test_auto_ops_maintenance_runtime_runs_backup_and_history(tmp_path):
     assert running["last_result_summary"]["backup_created"] is True
     assert running["last_result_summary"]["status_zh"] == "已完成"
     assert running["last_result_summary"]["rotation_status_zh"] in {"未变化", "已轮转"}
+    assert running["last_result_summary"]["soak_status"] in {"healthy", "degraded", "unhealthy"}
+    assert running["last_result_summary"]["soak_history_row_count"] == 1
+    assert running["last_result_summary"]["soak_consecutive_no_fail_count"] >= 0
     assert Path(running["history_path"]).exists()
+    assert Path(running["soak_history_path"]).exists()
     assert len(list((tmp_path / "runtime" / "backups").glob("alpha_state_*"))) == 1
     assert heartbeat["snapshot_kind"] == "ops_maintenance"
     assert heartbeat["process_id"] == os.getpid()

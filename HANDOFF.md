@@ -18,6 +18,7 @@
 - 富途牛牛开放网关仍只允许只读探测和只读行情快照；不得创建交易上下文、不得解锁交易、不得调用真实下单。
 - `scripts/start_alpha_dashboard.sh` 和 `scripts/stop_alpha_dashboard.sh` 修复了变量紧贴中文标点时的 zsh 解析问题。
 - 自动模拟交易循环和自动维护循环会分别写入 `runtime/agent_loop_status.json` 与 `runtime/ops_maintenance_status.json`；`/readiness/paper-trading` 和 `/readiness/soak` 可以读取新鲜心跳并校验进程仍存活，避免把已退出的 App 误判为就绪。
+- 自动维护循环每轮追加 `runtime/soak_readiness_history.jsonl`；`/readiness/soak/history` 和控制台“长运行预检”显示历史采样数、连续无失败采样数、连续完全通过采样数、最近失败时间和最近采样表。
 
 ## 关键决策
 
@@ -25,6 +26,7 @@
 - 真实资金执行必须由所有者在经纪商侧确认。
 - 所有用户可见运行面默认中文；机器接口保持稳定。
 - `/readiness/paper-trading` 是模拟交易交付门槛；`/readiness/soak` 是 30 天长运行开始门槛，不代表已经完成 30 天验证。
+- `runtime/soak_readiness_history.jsonl` 是 30 天观察证据，不是 30 天已完成证明；连续无失败采样数必须随真实运行时间积累。
 
 ## 当前中文显示相关文件
 
@@ -50,6 +52,7 @@
 - `tests/test_ops_runtime.py`
 - `tests/test_paper_readiness.py`
 - `tests/test_soak_readiness.py`
+- `tests/test_soak_history.py`
 - `tests/test_ops_health.py`
 - `tests/test_strategy_dsl.py`
 - `AGENTS.md`
@@ -63,11 +66,11 @@
 已通过：
 
 ```bash
-.venv/bin/python -m pytest tests/test_dashboard_state.py tests/test_market_data_gateway.py tests/test_paper_readiness.py tests/test_soak_readiness.py -q
-# 22 passed
+.venv/bin/python -m pytest tests/test_soak_history.py tests/test_ops_runtime.py tests/test_dashboard_state.py tests/test_soak_readiness.py -q
+# 17 passed
 
 .venv/bin/python -m pytest tests -q
-# 71 passed
+# 73 passed
 
 git diff --check
 # passed
@@ -88,6 +91,6 @@ git diff --check
 
 ## 下一步
 
-1. 提交并推送运行心跳与全中文显示改动到 `codex/soak-readiness-quote`，不要强推 `main`。
-2. 继续做长运行采样历史：把 `/readiness/soak` 按周期写入 `runtime/soak_readiness_history.jsonl` 并在控制台显示连续无失败采样数。
-3. 若要进一步提高“全中文显示”覆盖率，可追加一个 dashboard 渲染快照审计脚本，检查用户可见 DOM 中是否出现未映射 raw enum。
+1. 提交并推送长运行采样历史改动到 `codex/soak-readiness-quote`，不要强推 `main`。
+2. 继续补 dashboard 稳定性：增加 Browser/Chrome 视觉验收脚本，检查长运行预检、长运行历史、审批队列和中文状态在真实页面中不重叠、不露 raw enum。
+3. 继续补外部 broker paper API 适配调研和接口壳，但仍不得接入真实下单。

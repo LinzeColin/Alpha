@@ -45,6 +45,7 @@ runtime/agent_loop_status.json
 runtime/ops_maintenance_status.json
 runtime/paper_portfolio.json
 runtime/paper_performance_history.jsonl
+runtime/soak_readiness_history.jsonl
 runtime/market_data/latest_prices.csv
 runtime/strategy_tournament_history.jsonl
 runtime/backups/
@@ -85,6 +86,7 @@ POST /ops/backup
 GET  /ops/maintenance/status
 GET  /readiness/paper-trading
 GET  /readiness/soak
+GET  /readiness/soak/history
 GET  /orders/approval-queue
 GET  /orders/approval-queue/{ticket_id}/broker-ticket
 GET  /orders/approval-queue/{ticket_id}/broker-ticket/view
@@ -113,7 +115,9 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - `GET /ops/maintenance/status` 显示应用托管自动运行维护：健康采样次数、自动备份次数、下次维护时间、健康历史文件和备份轮转配置。
 - `GET /readiness/paper-trading` 输出 6月15日模拟交易交付就绪报告，并标注 6月17日网页与本地应用入口交付目标；逐项验证自动循环、策略迭代、模拟成交、OrderIntent、风控、审批队列、经纪商就绪工单、5分钟时效、本地 App 入口和真实下单边界。
 - `GET /readiness/soak` 输出 30 天本地长运行预检报告，聚合 App 入口、模拟交易交付就绪、5分钟循环、有效经纪商就绪工单、运行健康、自动维护、恢复备份和真实下单边界。
+- `GET /readiness/soak/history` 输出自动维护写入的长运行采样历史摘要，包括历史采样数、连续无失败采样数、连续完全通过采样数、最近失败时间和最近采样记录。
 - 自动模拟交易循环会写入 `runtime/agent_loop_status.json`，自动维护循环会写入 `runtime/ops_maintenance_status.json`；就绪检查会校验这些心跳是否新鲜、进程是否仍在运行，用于跨进程证明本地 App 正在运行。
+- 自动维护循环每 300 秒会把 `/readiness/soak` 等价预检结果追加到 `runtime/soak_readiness_history.jsonl`；控制台“长运行预检”读取该历史并显示连续无失败采样数。
 - `scripts/check_alpha_ops.sh` 输出中文健康检查摘要；加 `--json` 可输出机器 JSON。
 - `scripts/check_alpha_ops.sh --backup` 可在终端生成一次本地运行状态备份。
 - `scripts/check_alpha_soak.sh` 输出中文长运行预检摘要；加 `--json` 可输出机器 JSON。

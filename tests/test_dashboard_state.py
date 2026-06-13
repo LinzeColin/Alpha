@@ -32,6 +32,7 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
     monkeypatch.setattr(routes, "PAPER_STATE_PATH", tmp_path / "paper_portfolio.json")
     monkeypatch.setattr(routes, "STRATEGY_HISTORY_PATH", tmp_path / "strategy_tournament_history.jsonl")
     monkeypatch.setattr(routes, "PAPER_PERFORMANCE_PATH", tmp_path / "paper_performance_history.jsonl")
+    monkeypatch.setattr(routes, "SOAK_HISTORY_PATH", tmp_path / "soak_readiness_history.jsonl")
     monkeypatch.setattr(routes, "DATA_PATH", Path("data/sample_prices.csv"))
     _patch_fixture_market_data(monkeypatch, tmp_path)
 
@@ -61,6 +62,8 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
     assert state["soak_readiness"]["target_days"] == 30
     assert state["soak_readiness"]["check_count"] == 8
     assert state["soak_readiness"]["safety_boundary"]["live_order_submission_enabled"] is False
+    assert state["soak_readiness_history"]["status_zh"] == "暂无记录"
+    assert state["soak_readiness_history"]["consecutive_no_fail_count"] == 0
     assert state["agent_status"]["status"] == "ready"
     assert state["paper_portfolio"]["trade_count"] == 1
     assert state["paper_performance"]["status"] == "ready"
@@ -157,6 +160,7 @@ def test_approval_queue_review_actions_are_exposed_to_dashboard_state(tmp_path, 
     monkeypatch.setattr(routes, "PAPER_STATE_PATH", tmp_path / "paper_portfolio.json")
     monkeypatch.setattr(routes, "STRATEGY_HISTORY_PATH", tmp_path / "strategy_tournament_history.jsonl")
     monkeypatch.setattr(routes, "PAPER_PERFORMANCE_PATH", tmp_path / "paper_performance_history.jsonl")
+    monkeypatch.setattr(routes, "SOAK_HISTORY_PATH", tmp_path / "soak_readiness_history.jsonl")
     monkeypatch.setattr(routes, "DATA_PATH", Path("data/sample_prices.csv"))
     _patch_fixture_market_data(monkeypatch, tmp_path)
 
@@ -236,6 +240,11 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "交付项" in html
     assert "长运行预检" in html
     assert "目标周期" in html
+    assert "历史采样数" in html
+    assert "连续无失败采样" in html
+    assert "连续完全通过采样" in html
+    assert "采样时间" in html
+    assert "最近失败" in html
     assert "预检项" in html
     assert "刷新公共行情" in html
     assert "生成运行备份" in html

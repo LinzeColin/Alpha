@@ -16,7 +16,9 @@ from backend.app.services.ops_health import (
     create_runtime_backup,
     prune_runtime_backups,
 )
+from backend.app.services.paper_readiness import collect_paper_trading_readiness
 from backend.app.services.runtime_status import atomic_write_runtime_snapshot
+from backend.app.services.soak_readiness import append_soak_readiness_history, collect_soak_readiness
 
 
 def _utc_now() -> datetime:
@@ -54,6 +56,7 @@ class AutoOpsMaintenanceRuntime:
         self._max_backup_count = DEFAULT_MAX_BACKUP_COUNT
         self._max_history_rows = DEFAULT_MAX_HISTORY_ROWS
         self._history_path = self._root / "runtime" / "ops_health_history.jsonl"
+        self._soak_history_path = self._root / "runtime" / "soak_readiness_history.jsonl"
         self._backup_dir = self._root / "runtime" / "backups"
         self._status_path = self._root / "runtime" / "ops_maintenance_status.json"
         self._started_at: datetime | None = None
@@ -77,6 +80,7 @@ class AutoOpsMaintenanceRuntime:
         max_backup_count: int = DEFAULT_MAX_BACKUP_COUNT,
         max_history_rows: int = DEFAULT_MAX_HISTORY_ROWS,
         history_path: str | Path | None = None,
+        soak_history_path: str | Path | None = None,
         backup_dir: str | Path | None = None,
         status_path: str | Path | None = None,
     ) -> dict:
@@ -89,6 +93,9 @@ class AutoOpsMaintenanceRuntime:
         self._max_backup_count = max(1, int(max_backup_count))
         self._max_history_rows = max(1, int(max_history_rows))
         self._history_path = Path(history_path) if history_path else self._root / "runtime" / "ops_health_history.jsonl"
+        self._soak_history_path = (
+            Path(soak_history_path) if soak_history_path else self._root / "runtime" / "soak_readiness_history.jsonl"
+        )
         self._backup_dir = Path(backup_dir) if backup_dir else self._root / "runtime" / "backups"
         self._status_path = Path(status_path) if status_path else self._root / "runtime" / "ops_maintenance_status.json"
         self._enabled = True
@@ -164,12 +171,28 @@ class AutoOpsMaintenanceRuntime:
                 output_dir=self._backup_dir,
             )
         rotation = prune_runtime_backups(backup_root=self._backup_dir, max_backup_count=self._max_backup_count)
+        paper_readiness = collect_paper_trading_readiness(root=self._root, loop_snapshot=loop_snapshot)
+        maintenance_snapshot = self._cycle_maintenance_snapshot(backup_created=bool(backup))
+        soak_readiness = collect_soak_readiness(
+            root=self._root,
+            ops_health_report=health,
+            paper_readiness_report=paper_readiness,
+            maintenance_snapshot=maintenance_snapshot,
+        )
+        soak_history = append_soak_readiness_history(
+            soak_readiness,
+            history_path=self._soak_history_path,
+            max_rows=self._max_history_rows,
+        )
         maintenance_summary = {
             "status": "completed",
             "backup_created": bool(backup),
             "backup_path": backup.get("backup_path") if backup else None,
             "rotation_status": rotation.get("status"),
             "deleted_backup_count": rotation.get("deleted_count", 0),
+            "soak_status": soak_readiness.get("overall_status"),
+            "soak_status_zh": soak_readiness.get("overall_status_zh"),
+            "soak_consecutive_no_fail_count": soak_history.get("summary", {}).get("consecutive_no_fail_count", 0),
         }
         history = append_ops_health_history(
             health,
@@ -185,6 +208,9 @@ class AutoOpsMaintenanceRuntime:
             "backup": backup,
             "rotation": rotation,
             "history": history,
+            "paper_readiness": paper_readiness,
+            "soak_readiness": soak_readiness,
+            "soak_history": soak_history,
             "backup_interval_seconds": self._backup_interval_seconds,
             "max_backup_count": self._max_backup_count,
         }
@@ -201,6 +227,9 @@ class AutoOpsMaintenanceRuntime:
         health = result.get("health") or {}
         rotation = result.get("rotation") or {}
         history = result.get("history") or {}
+        soak = result.get("soak_readiness") or {}
+        soak_history = result.get("soak_history") or {}
+        soak_summary = soak_history.get("summary") or {}
         backup = result.get("backup") or {}
         return {
             "status": result.get("status"),
@@ -217,6 +246,25 @@ class AutoOpsMaintenanceRuntime:
             "deleted_backup_count": rotation.get("deleted_count", 0),
             "history_path": history.get("path"),
             "history_row_count": history.get("row_count"),
+            "soak_status": soak.get("overall_status"),
+            "soak_status_zh": soak.get("overall_status_zh"),
+            "soak_history_path": soak_history.get("path"),
+            "soak_history_row_count": soak_summary.get("row_count", soak_history.get("row_count")),
+            "soak_consecutive_no_fail_count": soak_summary.get("consecutive_no_fail_count", 0),
+            "soak_consecutive_healthy_count": soak_summary.get("consecutive_healthy_count", 0),
+        }
+
+    def _cycle_maintenance_snapshot(self, *, backup_created: bool) -> dict:
+        return {
+            "status": "maintenance_sleeping",
+            "status_zh": zh_status("maintenance_sleeping"),
+            "task_running": True,
+            "task_running_zh": "是",
+            "interval_seconds": self._interval_seconds,
+            "backup_interval_seconds": self._backup_interval_seconds,
+            "run_count": self._run_count + 1,
+            "backup_count": self._backup_count + (1 if backup_created else 0),
+            "error_count": self._error_count,
         }
 
     def _build_snapshot(self) -> dict:
@@ -233,6 +281,7 @@ class AutoOpsMaintenanceRuntime:
             "max_backup_count": self._max_backup_count,
             "max_history_rows": self._max_history_rows,
             "history_path": str(self._history_path),
+            "soak_history_path": str(self._soak_history_path),
             "backup_dir": str(self._backup_dir),
             "started_at": _iso(self._started_at),
             "last_run_started_at": _iso(self._last_run_started_at),

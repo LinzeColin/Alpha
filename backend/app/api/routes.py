@@ -24,7 +24,7 @@ from backend.app.services.paper_readiness import collect_paper_trading_readiness
 from backend.app.services.paper_trading_loop import DEFAULT_REFRESH_INTERVAL_SECONDS, build_default_loop, latest_mark_prices
 from backend.app.services.paper_broker import PaperBroker
 from backend.app.services.paper_performance import summarize_paper_performance_history
-from backend.app.services.soak_readiness import collect_soak_readiness
+from backend.app.services.soak_readiness import collect_soak_readiness, summarize_soak_readiness_history
 from backend.app.services.strategy_journal import summarize_strategy_tournament_history
 from backend.app.services.strategy_iteration import run_strategy_tournament
 
@@ -38,6 +38,7 @@ QUEUE_PATH = ROOT / "runtime" / "approval_queue.sqlite3"
 PAPER_STATE_PATH = ROOT / "runtime" / "paper_portfolio.json"
 STRATEGY_HISTORY_PATH = ROOT / "runtime" / "strategy_tournament_history.jsonl"
 PAPER_PERFORMANCE_PATH = ROOT / "runtime" / "paper_performance_history.jsonl"
+SOAK_HISTORY_PATH = ROOT / "runtime" / "soak_readiness_history.jsonl"
 PID_PATH = ROOT / "runtime" / "alpha_dashboard.pid"
 LOG_PATH = ROOT / "runtime" / "alpha_dashboard.log"
 
@@ -361,6 +362,11 @@ def soak_readiness() -> dict:
     )
 
 
+@router.get("/readiness/soak/history")
+def soak_readiness_history() -> dict:
+    return summarize_soak_readiness_history(SOAK_HISTORY_PATH)
+
+
 @router.get("/dashboard/state")
 def dashboard_state() -> dict:
     return {
@@ -370,6 +376,7 @@ def dashboard_state() -> dict:
         "ops_maintenance": ops_maintenance_status(),
         "paper_readiness": paper_trading_readiness(),
         "soak_readiness": soak_readiness(),
+        "soak_readiness_history": soak_readiness_history(),
         "owner_summary": owner_summary(),
         "agent_status": agent_status(),
         "paper_portfolio": paper_portfolio(),
@@ -447,6 +454,7 @@ def dashboard() -> str:
       <section><h2>运行健康</h2><div id="opsHealth"></div></section>
       <section><h2>交付就绪</h2><div id="paperReadiness"></div></section>
       <section><h2>长运行预检</h2><div id="soakReadiness"></div></section>
+      <section><h2>长运行历史</h2><div id="soakHistory"></div></section>
     </div>
     <section><h2>策略锦标赛</h2><div id="tournament"></div></section>
     <section><h2>审批队列</h2><div id="queue"></div></section>
@@ -654,6 +662,7 @@ def dashboard() -> str:
       const opsMaintenance = data.ops_maintenance || {};
       const paperReadiness = data.paper_readiness || {};
       const soakReadiness = data.soak_readiness || {};
+      const soakHistory = data.soak_readiness_history || {};
       const moomooQuote = data.moomoo_quote_snapshot || {};
       const strategyJournal = data.strategy_journal || {};
       const paperPerformance = data.paper_performance || {};
@@ -663,6 +672,8 @@ def dashboard() -> str:
         metric('运行健康', pill(displayStatus(opsHealth.overall_status, '未知'), opsHealth.fail_count ? 'danger' : (opsHealth.warn_count ? 'warn' : 'ok'))),
         metric('交付就绪', pill(paperReadiness.overall_status_zh || displayStatus(paperReadiness.overall_status, '未知'), paperReadiness.fail_count ? 'danger' : (paperReadiness.warn_count ? 'warn' : 'ok'))),
         metric('长运行预检', pill(soakReadiness.overall_status_zh || displayStatus(soakReadiness.overall_status, '未知'), soakReadiness.fail_count ? 'danger' : (soakReadiness.warn_count ? 'warn' : 'ok'))),
+        metric('连续无失败采样', soakHistory.consecutive_no_fail_count || 0),
+        metric('观察覆盖', soakHistory.target_coverage_zh || '0.00%'),
         metric('自动维护', pill(displayStatus(opsMaintenance.status, '未知'), opsMaintenance.error_count ? 'danger' : (opsMaintenance.task_running ? 'ok' : 'warn'))),
         metric('行情源', displayMarketDataSource(marketData.source_kind)),
         metric('富途牛牛开放网关', pill(moomoo.status_zh || displayStatus(moomoo.status, '未知'), moomoo.read_only_ready ? 'ok' : 'warn')),
@@ -770,12 +781,21 @@ def dashboard() -> str:
         <table><thead><tr><th>交付项</th><th>状态</th><th>证据说明</th></tr></thead><tbody>${rows || '<tr><td colspan="3" class="muted">暂无就绪检查结果</td></tr>'}</tbody></table>
       `;
     }
-    function renderSoakReadiness(readiness) {
+    function renderSoakReadiness(readiness, history) {
       const checks = readiness.checks || [];
       const rows = checks.map(check => {
         const kind = check.status === 'fail' ? 'danger' : (check.status === 'warn' ? 'warn' : 'ok');
         return `<tr><td>${check.title_zh || '未知预检'}</td><td>${pill(check.status_zh || displayStatus(check.status), kind)}</td><td>${check.message_zh || ''}</td></tr>`;
       }).join('');
+      const recentRows = ((history || {}).recent || []).slice(0, 8).map(row => `
+        <tr>
+          <td>${displayValue(row.generated_at)}</td>
+          <td>${row.overall_status_zh || displayStatus(row.overall_status, '未知')}</td>
+          <td>${row.pass_count || 0} / ${row.warn_count || 0} / ${row.fail_count || 0}</td>
+          <td>${displayValue(row.latest_fresh_ticket_id)}</td>
+          <td>${row.summary_zh || '无'}</td>
+        </tr>
+      `).join('');
       document.getElementById('soakReadiness').innerHTML = `
         <div class="metric-grid">
           ${metric('总体状态', pill(readiness.overall_status_zh || displayStatus(readiness.overall_status), readiness.fail_count ? 'danger' : (readiness.warn_count ? 'warn' : 'ok')))}
@@ -783,14 +803,57 @@ def dashboard() -> str:
           ${metric('通过', readiness.pass_count || 0)}
           ${metric('需关注', readiness.warn_count || 0)}
           ${metric('失败', readiness.fail_count || 0)}
+          ${metric('历史采样数', (history || {}).run_count || 0)}
+          ${metric('连续无失败采样', (history || {}).consecutive_no_fail_count || 0)}
+          ${metric('连续完全通过采样', (history || {}).consecutive_healthy_count || 0)}
+          ${metric('观察覆盖', (history || {}).target_coverage_zh || '0.00%')}
         </div>
         <table>
           <tbody>
             <tr><th>结论</th><td>${readiness.summary_zh || '无'}</td></tr>
+            <tr><th>历史结论</th><td>${(history || {}).summary_zh || '尚无长运行采样历史'}</td></tr>
+            <tr><th>历史文件</th><td>${displayValue((history || {}).path)}</td></tr>
+            <tr><th>最近采样</th><td>${displayValue((history || {}).latest_generated_at)}</td></tr>
+            <tr><th>最近失败时间</th><td>${displayValue((history || {}).last_failure_at, '无')}</td></tr>
+            <tr><th>已覆盖天数</th><td>${(history || {}).observed_days_zh || '0.00 天'}</td></tr>
             <tr><th>安全边界</th><td>${displayValue(readiness.safety_boundary && readiness.safety_boundary.message_zh)}</td></tr>
           </tbody>
         </table>
         <table><thead><tr><th>预检项</th><th>状态</th><th>说明</th></tr></thead><tbody>${rows || '<tr><td colspan="3" class="muted">暂无长运行预检结果</td></tr>'}</tbody></table>
+        <table><thead><tr><th>采样时间</th><th>状态</th><th>通过/关注/失败</th><th>有效工单</th><th>摘要</th></tr></thead><tbody>${recentRows || '<tr><td colspan="5" class="muted">暂无长运行采样历史</td></tr>'}</tbody></table>
+      `;
+    }
+    function renderSoakHistory(history) {
+      const recentRows = (history.recent || []).slice(0, 12).map(row => `
+        <tr>
+          <td>${displayValue(row.generated_at)}</td>
+          <td>${row.overall_status_zh || displayStatus(row.overall_status, '未知')}</td>
+          <td>${row.pass_count || 0} / ${row.warn_count || 0} / ${row.fail_count || 0}</td>
+          <td>${displayValue(row.latest_fresh_ticket_id)}</td>
+          <td>${row.ops_health_status_zh || '未知'}</td>
+          <td>${row.paper_readiness_status_zh || '未知'}</td>
+        </tr>
+      `).join('');
+      document.getElementById('soakHistory').innerHTML = `
+        <div class="metric-grid">
+          ${metric('采样次数', history.run_count || 0)}
+          ${metric('连续无失败', history.consecutive_no_fail_count || 0)}
+          ${metric('连续完全通过', history.consecutive_healthy_count || 0)}
+          ${metric('已覆盖', history.observed_days_zh || '0.00 天')}
+          ${metric('目标覆盖率', history.target_coverage_zh || '0.00%')}
+          ${metric('完成状态', history.completion_status_zh || '尚未开始')}
+        </div>
+        <table>
+          <tbody>
+            <tr><th>历史文件</th><td>${displayValue(history.path)}</td></tr>
+            <tr><th>首次采样</th><td>${displayValue(history.first_generated_at)}</td></tr>
+            <tr><th>最近采样</th><td>${displayValue(history.latest_generated_at)}</td></tr>
+            <tr><th>最近失败时间</th><td>${displayValue(history.last_failure_at, '无')}</td></tr>
+            <tr><th>历史结论</th><td>${history.summary_zh || '尚无长运行采样历史'}</td></tr>
+            <tr><th>安全边界</th><td>${displayValue(history.safety_boundary && history.safety_boundary.message_zh)}</td></tr>
+          </tbody>
+        </table>
+        <table><thead><tr><th>采样时间</th><th>状态</th><th>通过/关注/失败</th><th>有效工单</th><th>运行健康</th><th>模拟交易交付</th></tr></thead><tbody>${recentRows || '<tr><td colspan="6" class="muted">暂无长运行采样历史</td></tr>'}</tbody></table>
       `;
     }
     function renderOpsMaintenance(opsMaintenance) {
@@ -1008,7 +1071,8 @@ def dashboard() -> str:
         renderMarketData(data.market_data || {});
         renderOpsHealth(data.ops_health || {});
         renderPaperReadiness(data.paper_readiness || {});
-        renderSoakReadiness(data.soak_readiness || {});
+        renderSoakReadiness(data.soak_readiness || {}, data.soak_readiness_history || {});
+        renderSoakHistory(data.soak_readiness_history || {});
         document.getElementById('opsHealth').insertAdjacentHTML('beforeend', renderOpsMaintenance(data.ops_maintenance || {}));
         renderTournament(data.strategy_tournament || {});
         document.getElementById('tournament').insertAdjacentHTML('beforeend', renderStrategyJournal(data.strategy_journal || {}));
