@@ -1,0 +1,48 @@
+diff --git a/backend/app/api/routes.py b/backend/app/api/routes.py
+index 4cab367..2f0b2ad 100644
+--- a/backend/app/api/routes.py
++++ b/backend/app/api/routes.py
+@@ -579,6 +579,8 @@ def dashboard() -> str:
+           <td>${displayStrategyId(row.strategy_id)}</td>
+           <td>${displayValue(row.latest_trade_symbol)}</td>
+           <td>${row.latest_trade_side_zh || displaySide(row.latest_trade_side)}</td>
++          <td>${Number(row.latest_trade_commission || 0).toFixed(2)}</td>
++          <td>${row.execution_model_zh || '未知执行模型'}</td>
+           <td>${displayValue(row.trade_count)}</td>
+         </tr>
+       `).join('');
+@@ -589,9 +591,11 @@ def dashboard() -> str:
+           ${metric('最新权益变化', performance.latest_change_zh || '0.00')}
+           ${metric('最大回撤', performance.max_drawdown_zh || '0.00%')}
+           ${metric('当前回撤', performance.current_drawdown_zh || '0.00%')}
++          ${metric('累计佣金', Number(performance.latest_total_commission || 0).toFixed(2))}
++          ${metric('执行模型', performance.latest_execution_model_zh || '未知执行模型')}
+           ${metric('权益高水位', Number(performance.equity_high_watermark || 0).toFixed(2))}
+         </div>
+-        <table><thead><tr><th>时间</th><th>总权益</th><th>累计收益率</th><th>策略</th><th>标的</th><th>方向</th><th>交易次数</th></tr></thead><tbody>${rows || '<tr><td colspan="7" class="muted">暂无模拟绩效历史</td></tr>'}</tbody></table>
++        <table><thead><tr><th>时间</th><th>总权益</th><th>累计收益率</th><th>策略</th><th>标的</th><th>方向</th><th>佣金</th><th>执行模型</th><th>交易次数</th></tr></thead><tbody>${rows || '<tr><td colspan="9" class="muted">暂无模拟绩效历史</td></tr>'}</tbody></table>
+       `;
+     }
+     function renderOpsHealth(opsHealth) {
+@@ -692,6 +696,7 @@ def dashboard() -> str:
+     function renderBroker(broker) {
+       const latest = broker.latest_trade || {};
+       const latestLine = latest.symbol ? `${latest.symbol} / ${displaySide(latest.side)} / ${displayValue(latest.quantity)} @ ${displayValue(latest.price)}` : '暂无';
++      const latestCostLine = latest.symbol ? `佣金 ${Number(latest.commission || 0).toFixed(2)} / 滑点 ${Number(latest.slippage_bps || 0).toFixed(2)} bps` : '暂无';
+       document.getElementById('broker').innerHTML = `
+         <table>
+           <tbody>
+@@ -702,8 +707,13 @@ def dashboard() -> str:
+             <tr><th>连接</th><td>${displayBool(broker.connected)}</td></tr>
+             <tr><th>需要凭据</th><td>${displayBool(broker.credential_required)}</td></tr>
+             <tr><th>允许真实下单</th><td>${displayBool(broker.live_order_submission_enabled)}</td></tr>
++            <tr><th>执行模型</th><td>${broker.execution_model_zh || '未知执行模型'}</td></tr>
++            <tr><th>模拟滑点</th><td>${Number(broker.slippage_bps || 0).toFixed(2)} bps</td></tr>
++            <tr><th>单笔佣金</th><td>${Number(broker.commission_per_order || 0).toFixed(2)}</td></tr>
++            <tr><th>累计佣金</th><td>${Number(broker.total_commission || 0).toFixed(2)}</td></tr>
+             <tr><th>交易次数</th><td>${broker.paper_trade_count || 0}</td></tr>
+             <tr><th>最近模拟成交</th><td>${latestLine}</td></tr>
++            <tr><th>最近成交成本</th><td>${latestCostLine}</td></tr>
+           </tbody>
+         </table>
+       `;
