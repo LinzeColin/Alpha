@@ -32,6 +32,14 @@ Reason: Broker-ready tickets can become stale; a candidate older than its TTL sh
 
 Consequence: `ApprovalQueue.summary()` separates fresh pending, expired pending, blocked, and total tickets. The dashboard shows actionability, freshness, and seconds until expiry.
 
+## 2026-06-13: App Bundle Entrypoints
+
+Decision: Alpha should ship a macOS `.app` entrypoint in Downloads and Applications, backed by the same dashboard start script.
+
+Reason: The user needs a stable local webpage workspace entry that behaves like a normal app instead of requiring terminal commands.
+
+Consequence: `outputs/applications/Alpha.applescript` generates `Alpha.app`, and copies were installed to Downloads, user Applications, and system `/Applications`.
+
 ## 2026-06-13: Strategy Iteration Requires Walk-Forward Evidence
 
 Decision: Strategy tournament candidates must expose simple out-of-sample evidence: walk-forward return, hit rate, and validation window count.
