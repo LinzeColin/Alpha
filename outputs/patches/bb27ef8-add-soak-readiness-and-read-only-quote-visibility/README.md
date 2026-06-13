@@ -1,7 +1,7 @@
 # Backup: bb27ef8 Add soak readiness and read-only quote visibility
 
 Local commit: `bb27ef8bfcd6035dc8b4ee8fb75ce55501652f12`
-Base commit: `a50aa769306c34d06e598ccdaad090bfa04080c6`
+Backup branch: `codex/soak-readiness-quote`
 Created by: Codex local run on 2026-06-13
 
 ## Why this backup exists
@@ -13,15 +13,14 @@ A normal `git push origin main` could not fast-forward because the GitHub `main`
 error: failed to push some refs to 'github.com:LinzeColin/Alpha.git'
 ```
 
-The pre-push verification itself passed when the hook used the project virtualenv:
+A non-conflicting backup branch was pushed successfully instead:
 
 ```text
-PATH="$PWD/.venv/bin:$PATH" git push origin main
+PATH="$PWD/.venv/bin:$PATH" git push origin HEAD:refs/heads/codex/soak-readiness-quote
 [ECC pre-push] Verification checks passed.
 61 passed, 1 warning
+[new branch] HEAD -> codex/soak-readiness-quote
 ```
-
-This folder stores connector-backed recovery shards for the local commit.
 
 ## Scope
 
@@ -50,14 +49,16 @@ scripts/check_alpha_soak.sh with running API -> 可观察运行, pass/warn/fail=
 Safety scan -> no real broker place_order/unlock_trade/trade_context_enabled=true/live_order_submission_enabled=true path
 ```
 
-## Patch Shards
+## Recovery
 
-Apply by concatenating files in lexical order:
+Use the backup branch directly:
 
 ```bash
-cat changes.patch.part-aa changes.patch.part-ab changes.patch.part-ac changes.patch.part-ad > changes.patch
-git am changes.patch
+git fetch origin codex/soak-readiness-quote
+git checkout codex/soak-readiness-quote
 ```
+
+Or cherry-pick the commit from that branch after resolving the current `main` history divergence.
 
 ## Safety Boundary
 
