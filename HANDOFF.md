@@ -13,6 +13,8 @@
 - 控制台入口：`/dashboard`；状态接口：`/dashboard/state`。
 - 控制台显示、脚本输出、策略校验错误、工单 HTML、工单 CSV 表头、富途牛牛开放网关状态、行情刷新错误、就绪预检工单文案和主要文档已按中文显示规则更新。
 - API 机器字段、路径、枚举、工单号、股票代码和 `provider_id=moomoo_opend` 保持稳定；用户可见展示优先使用中文字段或中文标签。
+- 模拟经纪商状态/回执、策略锦标赛候选、审批队列时效、风险原因和页面时间显示已补中文展示兜底，前端未知枚举不直接露出英文状态值。
+- 新增 `scripts/verify_chinese_display.py`，作为无额外浏览器依赖的中文显示审计门槛。
 - 行情状态提供 `provider_zh`、`source_kind_zh`、`data_quality_zh`、`real_market_data_zh`、`refresh_error_zh` 等中文展示字段；控制台刷新失败优先显示中文错误兜底。
 - 经纪商工单 JSON 仍保留机器字段；默认 HTML 视图和 CSV 下载面向人工操作改为中文。
 - 富途牛牛开放网关仍只允许只读探测和只读行情快照；不得创建交易上下文、不得解锁交易、不得调用真实下单。
@@ -78,6 +80,9 @@
 .venv/bin/python scripts/verify_chinese_display.py
 # status_zh=通过, error_count=0
 
+python /Users/linzezhang/.codex/skills/webapp-testing/scripts/with_server.py --server ".venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8125" --port 8125 --timeout 60 -- .venv/bin/python -c "..."
+# dashboard_http_smoke_ok
+
 git diff --check
 # passed
 ```
@@ -86,7 +91,7 @@ git diff --check
 
 短周期运行验证：`ALPHA_MARKET_DATA_PROVIDER=moomoo_opend` 下启动 `AutoPaperAgentRuntime` 与 `AutoOpsMaintenanceRuntime` 各完成 1 轮；`runtime/soak_readiness_history.jsonl` 写入 1 条采样，`consecutive_no_fail_count=1`、`latest_fail_count=0`、`completion_status_zh=观察运行中`、`live_order_submission_enabled=false`。该验证只使用本机富途牛牛开放网关只读行情/本地模拟交易，不创建交易上下文、不解锁交易、不提交真实订单。
 
-运行态检查：沙箱对本机 HTTP 读取和部分 Python 直接导入调用有阻塞/超时现象；启动脚本 bug 已在本轮修复。控制台静态 HTML 中文显示由测试覆盖，临时 HTTP 读取曾验证到页面包含“富途牛牛开放网关（只读）/富途行情/接口包/软件开发包可导入”，且旧英文标签为空；后续若需要最终视觉证据，建议用 Browser/Chrome 工具或用户本机浏览器打开 `http://127.0.0.1:8000/dashboard` 再截屏。
+运行态检查：普通沙箱内绑定 `127.0.0.1` 会触发权限限制；提权后本地 uvicorn HTTP smoke 已验证 `/dashboard` 包含“Alpha 控制台”、不包含旧英文 `Alpha Dashboard`，`/health` 返回中文“正常”。当前环境未安装 Playwright/Chromium，因此尚未完成截图级视觉验收；后续若需要最终视觉证据，建议安装浏览器测试依赖或用 Browser/Chrome 工具打开 `http://127.0.0.1:8000/dashboard` 再截屏。
 
 ## 未解决风险
 
@@ -98,5 +103,5 @@ git diff --check
 ## 下一步
 
 1. 提交并推送长运行采样历史改动到 GitHub 备份分支，建议 `codex/alpha-soak-history-20260613`，不要强推 `main`。
-2. 继续补 dashboard 稳定性：增加 Browser/Chrome 视觉验收脚本，检查长运行预检、长运行历史、审批队列和中文状态在真实页面中不重叠、不露 raw enum。
+2. 继续补 dashboard 稳定性：增加 Browser/Chrome 或 Playwright 视觉验收脚本，检查长运行预检、长运行历史、审批队列和中文状态在真实页面中不重叠、不露 raw enum。
 3. 继续补外部 broker paper API 适配调研和接口壳，但仍不得接入真实下单。
