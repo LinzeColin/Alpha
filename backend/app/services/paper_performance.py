@@ -42,10 +42,16 @@ def append_paper_performance_history(
             "positions_value": _round_money(portfolio.get("positions_value", 0)),
             "position_count": len(positions),
             "trade_count": int(portfolio.get("trade_count", 0) or 0),
+            "total_commission": _round_money(portfolio.get("total_commission", 0)),
             "latest_trade_symbol": latest_trade.get("symbol") or receipt.get("symbol") or intent.get("symbol"),
             "latest_trade_side": latest_trade.get("side") or receipt.get("side") or intent.get("side"),
             "latest_trade_quantity": latest_trade.get("quantity") or receipt.get("quantity") or intent.get("quantity"),
             "latest_trade_price": latest_trade.get("price") or receipt.get("average_fill_price") or intent.get("estimated_price"),
+            "latest_trade_reference_price": latest_trade.get("reference_price") or receipt.get("reference_price") or intent.get("estimated_price"),
+            "latest_trade_commission": latest_trade.get("commission") or receipt.get("commission") or 0,
+            "latest_trade_slippage_bps": latest_trade.get("slippage_bps") or receipt.get("slippage_bps") or 0,
+            "execution_model_id": latest_trade.get("execution_model_id") or receipt.get("execution_model_id"),
+            "execution_model_zh": receipt.get("execution_model_zh") or _execution_model_zh(latest_trade.get("execution_model_id")),
             "strategy_id": intent.get("strategy_id"),
             "broker_order_id": receipt.get("broker_order_id"),
             "paper_order_status": receipt.get("status"),
@@ -102,6 +108,7 @@ def summarize_paper_performance_history(
         "latest_cash": latest.get("cash") if latest else 0,
         "latest_positions_value": latest.get("positions_value") if latest else 0,
         "latest_trade_count": latest.get("trade_count") if latest else 0,
+        "latest_total_commission": latest.get("total_commission") if latest else 0,
         "latest_change": _round_money(latest_change),
         "latest_change_ratio": round(latest_change_ratio, 6),
         "latest_change_zh": _signed_money_zh(latest_change),
@@ -118,6 +125,8 @@ def summarize_paper_performance_history(
         "latest_strategy_id_zh": latest.get("strategy_id_zh") if latest else None,
         "latest_trade_symbol": latest.get("latest_trade_symbol") if latest else None,
         "latest_trade_side_zh": latest.get("latest_trade_side_zh") if latest else None,
+        "latest_execution_model_id": latest.get("execution_model_id") if latest else None,
+        "latest_execution_model_zh": latest.get("execution_model_zh") if latest else None,
         "recent": localized_recent,
     }
 
@@ -135,6 +144,7 @@ def _localized_record(record: dict | None, *, initial_equity: float) -> dict:
     localized["market_data_source_kind_zh"] = zh_market_data_source(localized.get("market_data_source_kind"))
     localized["market_data_quality_zh"] = zh_data_quality(localized.get("market_data_quality"))
     localized["real_market_data_zh"] = "是" if localized.get("real_market_data") else "否"
+    localized["execution_model_zh"] = localized.get("execution_model_zh") or _execution_model_zh(localized.get("execution_model_id"))
     return localized
 
 
@@ -183,3 +193,13 @@ def _percent_zh(value: float) -> str:
 def _signed_money_zh(value: float) -> str:
     prefix = "+" if value > 0 else ""
     return f"{prefix}{value:.2f}"
+
+
+def _execution_model_zh(value: object) -> str:
+    if value == "fixed_cost_slippage_v1":
+        return "固定佣金与滑点模型"
+    if value == "direct_fill_v0":
+        return "直接成交模型"
+    if value is None or value == "":
+        return "未知执行模型"
+    return str(value)

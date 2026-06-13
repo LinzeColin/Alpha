@@ -7,7 +7,15 @@ def test_paper_performance_records_equity_return_and_drawdown(tmp_path):
     intent = {"strategy_id": "momentum_QQQ_20d", "symbol": "QQQ", "side": "buy"}
 
     first = append_paper_performance_history(
-        {"cash": 5000, "positions_value": 5200, "total_equity": 10200, "trade_count": 1, "positions": [], "latest_trade": {"symbol": "QQQ", "side": "buy", "quantity": 1, "price": 131.7}},
+        {
+            "cash": 5000,
+            "positions_value": 5200,
+            "total_equity": 10200,
+            "trade_count": 1,
+            "total_commission": 1.0,
+            "positions": [],
+            "latest_trade": {"symbol": "QQQ", "side": "buy", "quantity": 1, "price": 131.7, "reference_price": 131.63, "commission": 1.0, "slippage_bps": 5.0, "execution_model_id": "fixed_cost_slippage_v1"},
+        },
         history_path=history_path,
         run_id="run_1",
         market_data=market_data,
@@ -15,7 +23,15 @@ def test_paper_performance_records_equity_return_and_drawdown(tmp_path):
         broker_receipt={"broker_order_id": "paper_1", "status": "filled"},
     )
     append_paper_performance_history(
-        {"cash": 5000, "positions_value": 4900, "total_equity": 9900, "trade_count": 2, "positions": [], "latest_trade": {"symbol": "QQQ", "side": "buy", "quantity": 1, "price": 129.0}},
+        {
+            "cash": 5000,
+            "positions_value": 4900,
+            "total_equity": 9900,
+            "trade_count": 2,
+            "total_commission": 2.0,
+            "positions": [],
+            "latest_trade": {"symbol": "QQQ", "side": "buy", "quantity": 1, "price": 129.0, "reference_price": 128.94, "commission": 1.0, "slippage_bps": 5.0, "execution_model_id": "fixed_cost_slippage_v1"},
+        },
         history_path=history_path,
         run_id="run_2",
         market_data=market_data,
@@ -36,6 +52,10 @@ def test_paper_performance_records_equity_return_and_drawdown(tmp_path):
     assert summary["current_drawdown_zh"] == "-2.94%"
     assert summary["latest_strategy_id_zh"] == "动量策略 QQQ 20日"
     assert summary["latest_trade_side_zh"] == "买入"
+    assert summary["latest_total_commission"] == 2.0
+    assert summary["latest_execution_model_zh"] == "固定佣金与滑点模型"
+    assert summary["recent"][-1]["latest_trade_commission"] == 1.0
+    assert summary["recent"][-1]["latest_trade_slippage_bps"] == 5.0
     assert summary["recent"][-1]["market_data_quality_zh"] == "样例"
 
 

@@ -13,6 +13,10 @@ class PaperOrder:
     side: str
     quantity: float
     price: float
+    reference_price: float | None = None
+    commission: float = 0.0
+    slippage_bps: float = 0.0
+    execution_model_id: str = "direct_fill_v0"
 
 
 @dataclass
@@ -45,18 +49,20 @@ class PaperBroker:
             return {"status": "rejected", "reason": "duplicate idempotency key"}
         if order.quantity <= 0 or order.price <= 0:
             return {"status": "rejected", "reason": "invalid quantity or price"}
-        notional = order.quantity * order.price
+        gross_notional = order.quantity * order.price
+        commission = max(float(order.commission or 0.0), 0.0)
         if order.side == "buy":
-            if notional > self.cash:
+            total_debit = gross_notional + commission
+            if total_debit > self.cash:
                 return {"status": "rejected", "reason": "insufficient paper cash"}
-            self.cash -= notional
+            self.cash -= total_debit
             self.positions[order.symbol] = self.positions.get(order.symbol, 0.0) + order.quantity
         elif order.side == "sell":
             current = self.positions.get(order.symbol, 0.0)
             if order.quantity > current:
                 return {"status": "rejected", "reason": "insufficient paper position"}
             self.positions[order.symbol] = current - order.quantity
-            self.cash += notional
+            self.cash += gross_notional - commission
         else:
             return {"status": "rejected", "reason": "invalid side"}
         self.seen_keys.add(order.idempotency_key)
@@ -66,7 +72,12 @@ class PaperBroker:
             "side": order.side,
             "quantity": order.quantity,
             "price": order.price,
-            "notional": round(notional, 2),
+            "reference_price": order.reference_price if order.reference_price is not None else order.price,
+            "gross_notional": round(gross_notional, 2),
+            "commission": round(commission, 2),
+            "notional": round(gross_notional + commission if order.side == "buy" else gross_notional - commission, 2),
+            "slippage_bps": round(float(order.slippage_bps or 0.0), 4),
+            "execution_model_id": order.execution_model_id,
         }
         self.trade_log.append(event)
         return {"status": "filled", **self.snapshot()}
@@ -78,6 +89,7 @@ class PaperBroker:
             "seen_keys": sorted(self.seen_keys),
             "trade_log": list(self.trade_log),
             "trade_count": len(self.trade_log),
+            "total_commission": round(sum(float(row.get("commission", 0.0) or 0.0) for row in self.trade_log), 2),
         }
 
     def portfolio_snapshot(self, mark_prices: Dict[str, float] | None = None) -> dict:
@@ -102,5 +114,6 @@ class PaperBroker:
             "positions_value": round(positions_value, 2),
             "total_equity": round(self.cash + positions_value, 2),
             "trade_count": len(self.trade_log),
+            "total_commission": round(sum(float(row.get("commission", 0.0) or 0.0) for row in self.trade_log), 2),
             "latest_trade": self.trade_log[-1] if self.trade_log else None,
         }

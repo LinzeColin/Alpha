@@ -118,8 +118,12 @@ class AutoPaperAgentRuntime:
             "broker_paper_order_status": broker_paper_order.get("status"),
             "broker_paper_order_status_zh": zh_status(broker_paper_order.get("status")),
             "broker_paper_order_id": broker_paper_order.get("broker_order_id"),
+            "broker_paper_execution_model_zh": broker_paper_order.get("execution_model_zh"),
+            "broker_paper_commission": broker_paper_order.get("commission"),
+            "broker_paper_slippage_bps": broker_paper_order.get("slippage_bps"),
             "paper_trade_count": portfolio.get("trade_count"),
             "paper_total_equity": portfolio.get("total_equity"),
+            "paper_total_commission": portfolio.get("total_commission"),
         }
 
     def snapshot(self) -> dict:

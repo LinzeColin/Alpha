@@ -35,6 +35,10 @@ def test_paper_loop_generates_ticket_and_fills_paper_order(tmp_path):
     assert result["broker_paper_order"]["broker_order_id"].startswith("paper_")
     assert result["broker_paper_order"]["client_order_id"] == result["intent"]["idempotency_key"]
     assert result["broker_paper_order"]["ticket_id"] == result["approval_queue"]["ticket"]["ticket_id"]
+    assert result["broker_paper_order"]["execution_model_zh"] == "固定佣金与滑点模型"
+    assert result["broker_paper_order"]["average_fill_price"] >= result["broker_paper_order"]["reference_price"]
+    assert result["broker_paper_order"]["commission"] == 1.0
+    assert result["broker_paper_order"]["slippage_bps"] == 5.0
     assert result["approval_queue"]["status"] == "queued"
     assert result["approval_queue"]["ticket"]["status"] == "pending_owner_approval"
     assert result["approval_queue"]["ticket"]["human_action_required"] is True
@@ -46,7 +50,9 @@ def test_paper_loop_generates_ticket_and_fills_paper_order(tmp_path):
     assert result["strategy_journal"]["latest_record"]["winner_strategy_id"] == result["strategy_tournament"]["winner"]["strategy_id"]
     assert result["paper_performance"]["status"] == "written"
     assert result["paper_performance"]["latest_record"]["total_equity"] == result["paper_portfolio"]["total_equity"]
-    assert result["paper_performance"]["summary"]["total_return_zh"] == "0.00%"
+    assert result["paper_performance"]["summary"]["total_return_zh"] == "-0.01%"
+    assert result["paper_performance"]["summary"]["latest_total_commission"] == 1.0
+    assert result["paper_performance"]["summary"]["latest_execution_model_zh"] == "固定佣金与滑点模型"
     assert state_path.exists()
     assert strategy_history_path.exists()
     assert performance_history_path.exists()

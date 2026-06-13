@@ -122,5 +122,12 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 ## 模拟绩效历史
 
 - `PaperTradingLoop` 每次自动模拟交易周期会把组合权益快照追加写入 `runtime/paper_performance_history.jsonl`。
-- `GET /paper/performance/history` 汇总记录次数、最新总权益、累计收益率、最新权益变化、权益高水位、最大回撤和当前回撤。
-- Dashboard 的“模拟绩效”面板显示权益历史、收益率、回撤、最新策略、标的、方向和交易次数，默认使用中文展示字段。
+- `GET /paper/performance/history` 汇总记录次数、最新总权益、累计收益率、最新权益变化、权益高水位、最大回撤、当前回撤、累计佣金和执行模型。
+- Dashboard 的“模拟绩效”面板显示权益历史、收益率、回撤、最新策略、标的、方向、佣金、执行模型和交易次数，默认使用中文展示字段。
+
+## 模拟执行成本
+
+- `LocalSandboxPaperBrokerAdapter` 默认使用“固定佣金与滑点模型”：买入按参考价上浮 5.00 bps 成交，并计入每笔 1.00 AUD 模拟佣金。
+- Paper broker 会把模拟成交价、参考价、佣金、滑点和累计佣金写入组合状态与绩效历史。
+- Dashboard 的“模拟交易执行层”和“模拟绩效”会显示执行模型、模拟滑点、单笔佣金、累计佣金和最近成交成本。
+- 该模型只影响本地 paper trading 绩效，不调用真实经纪商下单接口。

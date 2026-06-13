@@ -13,3 +13,5 @@ def test_paper_broker_persists_portfolio_state(tmp_path):
     assert reloaded.positions == {"TLT": 2}
     assert reloaded.seen_keys == {"k1"}
     assert reloaded.trade_log[0]["notional"] == 20
+    assert reloaded.trade_log[0]["commission"] == 0.0
+    assert reloaded.snapshot()["total_commission"] == 0.0

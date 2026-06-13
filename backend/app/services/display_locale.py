@@ -307,12 +307,16 @@ def format_paper_cycle_summary_zh(result: dict) -> str:
             f"累计收益 {performance_summary.get('total_return_zh', '0.00%')} / "
             f"最新权益变化 {performance_summary.get('latest_change_zh', '0.00')} / "
             f"当前回撤 {performance_summary.get('current_drawdown_zh', '0.00%')} / "
-            f"最大回撤 {performance_summary.get('max_drawdown_zh', '0.00%')}"
+            f"最大回撤 {performance_summary.get('max_drawdown_zh', '0.00%')} / "
+            f"累计佣金 {performance_summary.get('latest_total_commission', 0)}"
         ),
         (
             "执行层："
             f"{zh_adapter_id(adapter.get('adapter_id'))} / "
             f"模式 {zh_status(adapter.get('mode'))} / "
+            f"模型 {adapter.get('execution_model_zh', '未知执行模型')} / "
+            f"滑点 {float(adapter.get('slippage_bps') or 0):.2f} bps / "
+            f"单笔佣金 {float(adapter.get('commission_per_order') or 0):.2f} / "
             f"允许真实下单 {'是' if adapter.get('live_order_submission_enabled') else '否'}"
         ),
         "安全边界：本周期只执行模拟交易并生成待人工确认工单，不会提交真实资金订单。",
