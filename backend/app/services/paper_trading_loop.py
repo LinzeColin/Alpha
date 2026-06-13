@@ -204,6 +204,7 @@ def build_default_loop(
     paper_state_path: str | Path | None = None,
     strategy_history_path: str | Path | None = None,
     performance_history_path: str | Path | None = None,
+    market_data_gateway: MarketDataGateway | None = None,
     interval_seconds: int = DEFAULT_REFRESH_INTERVAL_SECONDS,
 ) -> PaperTradingLoop:
     root = Path(__file__).resolve().parents[3]
@@ -214,7 +215,7 @@ def build_default_loop(
         price_path=root / "data" / "sample_prices.csv",
         approval_queue=ApprovalQueue(queue_path or root / "runtime" / "approval_queue.sqlite3"),
         paper_state_path=state_path,
-        market_data_gateway=MarketDataGateway(root=root),
+        market_data_gateway=market_data_gateway or MarketDataGateway(root=root),
         strategy_history_path=strategy_history_path or root / "runtime" / "strategy_tournament_history.jsonl",
         performance_history_path=performance_history_path or root / "runtime" / "paper_performance_history.jsonl",
         refresh_interval_seconds=interval_seconds,

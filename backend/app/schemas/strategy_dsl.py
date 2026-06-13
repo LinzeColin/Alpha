@@ -40,13 +40,13 @@ class RiskRules(BaseModel):
     @model_validator(mode="after")
     def enforce_mvp_safety(self) -> "RiskRules":
         if not self.no_leverage:
-            raise ValueError("MVP prohibits leverage")
+            raise ValueError("MVP 禁止使用杠杆")
         if not self.no_short:
-            raise ValueError("MVP prohibits short selling")
+            raise ValueError("MVP 禁止卖空")
         if not self.no_options:
-            raise ValueError("MVP prohibits options")
+            raise ValueError("MVP 禁止期权")
         if not self.no_crypto_withdrawal:
-            raise ValueError("MVP prohibits crypto withdrawals")
+            raise ValueError("MVP 禁止加密货币提现")
         return self
 
 
@@ -64,9 +64,9 @@ class StrategyDSL(BaseModel):
     def validate_universe(self) -> "StrategyDSL":
         clean = [s.strip().upper() for s in self.universe if s.strip()]
         if len(clean) != len(set(clean)):
-            raise ValueError("Universe contains duplicates")
+            raise ValueError("标的列表不能重复")
         if self.asset_class == AssetClass.crypto_spot_paper and not self.risk.no_crypto_withdrawal:
-            raise ValueError("Crypto withdrawals are prohibited in MVP")
+            raise ValueError("MVP 禁止加密货币提现")
         self.universe = clean
         return self
 

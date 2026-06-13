@@ -22,19 +22,22 @@ def test_valid_etf_strategy_passes():
 def test_leverage_rejected():
     p = valid_payload()
     p["risk"]["no_leverage"] = False
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError) as exc_info:
         validate_strategy(p)
+    assert "MVP 禁止使用杠杆" in str(exc_info.value)
 
 
 def test_short_rejected():
     p = valid_payload()
     p["risk"]["no_short"] = False
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError) as exc_info:
         validate_strategy(p)
+    assert "MVP 禁止卖空" in str(exc_info.value)
 
 
 def test_options_rejected():
     p = valid_payload()
     p["risk"]["no_options"] = False
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError) as exc_info:
         validate_strategy(p)
+    assert "MVP 禁止期权" in str(exc_info.value)

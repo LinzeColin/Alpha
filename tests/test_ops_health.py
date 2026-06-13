@@ -80,7 +80,7 @@ def test_collect_ops_health_reports_e_safe_runtime_checks(tmp_path):
         moomoo_probe_status={
             "status": "ready_read_only",
             "status_zh": "只读探测就绪",
-            "message_zh": "Moomoo API 包和本机 OpenD 端口均可用；当前仅允许只读探测。",
+            "message_zh": "富途牛牛接口包和本机开放网关端口均可用；当前仅允许只读探测。",
             "read_only_ready": True,
             "live_order_submission_enabled": False,
             "trade_context_enabled": False,

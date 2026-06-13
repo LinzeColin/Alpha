@@ -63,6 +63,8 @@ def test_paper_readiness_passes_with_paper_cycle_loop_snapshot_and_app_entry(tmp
 
     assert report["status"] == "ready"
     assert report["overall_status_zh"] == "就绪"
+    assert report["deadline"] == "2026-06-15"
+    assert report["dashboard_app_deadline"] == "2026-06-17"
     assert report["pass_count"] == report["check_count"]
     assert report["fail_count"] == 0
     assert report["latest_fresh_ticket_id"]

@@ -76,25 +76,45 @@ def build_broker_ready_order_export(
 
 def format_broker_ready_order_csv(export_package: dict) -> str:
     buffer = StringIO()
-    fieldnames = [
-        "ticket_id",
-        "symbol",
-        "side",
-        "quantity",
-        "order_type",
-        "time_in_force",
-        "estimated_price",
-        "estimated_notional_aud",
-        "client_order_id",
-        "expires_at",
-        "manual_entry_allowed",
-        "blocked_reason",
-        "live_order_submission_enabled",
-        "submission_mode",
-    ]
-    writer = csv.DictWriter(buffer, fieldnames=fieldnames, extrasaction="ignore")
-    writer.writeheader()
-    writer.writerow(export_package.get("csv_row") or {})
+    row = export_package.get("csv_row") or {}
+    payload_zh = export_package.get("broker_payload_zh") or {}
+    writer = csv.writer(buffer)
+    writer.writerow(
+        [
+            "工单号",
+            "标的",
+            "方向",
+            "数量",
+            "订单类型",
+            "有效期",
+            "参考价格",
+            "参考名义金额",
+            "客户订单号",
+            "过期时间",
+            "允许人工录入",
+            "阻止原因",
+            "允许真实下单",
+            "提交方式",
+        ]
+    )
+    writer.writerow(
+        [
+            row.get("ticket_id"),
+            row.get("symbol"),
+            payload_zh.get("side_zh") or zh_side(row.get("side")),
+            row.get("quantity"),
+            payload_zh.get("order_type_zh") or zh_order_type(row.get("order_type")),
+            payload_zh.get("time_in_force_zh") or zh_time_in_force(row.get("time_in_force")),
+            row.get("estimated_price"),
+            row.get("estimated_notional_aud"),
+            row.get("client_order_id"),
+            row.get("expires_at"),
+            export_package.get("manual_entry_allowed_zh") or ("是" if row.get("manual_entry_allowed") else "否"),
+            export_package.get("blocked_reason_zh") or "无",
+            "是" if row.get("live_order_submission_enabled") else "否",
+            export_package.get("submission_mode_zh") or "仅供所有者在经纪商系统中人工确认录入",
+        ]
+    )
     return buffer.getvalue()
 
 

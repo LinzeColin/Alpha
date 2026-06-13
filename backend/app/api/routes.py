@@ -91,7 +91,13 @@ def owner_summary() -> dict:
 
 @router.post("/strategy/validate")
 def strategy_validate(payload: dict) -> dict:
-    strategy = validate_strategy(payload)
+    try:
+        strategy = validate_strategy(payload)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "strategy_validation_failed", "message_zh": _strategy_validation_message_zh(exc)},
+        ) from exc
     return {"valid": True, "normalized_strategy": strategy.model_dump(mode="json"), "warnings": []}
 
 
@@ -111,6 +117,7 @@ def paper_run_once() -> dict:
         paper_state_path=PAPER_STATE_PATH,
         strategy_history_path=STRATEGY_HISTORY_PATH,
         performance_history_path=PAPER_PERFORMANCE_PATH,
+        market_data_gateway=build_market_data_gateway(),
     )
     return loop.run_once()
 
@@ -198,6 +205,21 @@ def _http_error(status_code: int, code: str) -> HTTPException:
     return HTTPException(status_code=status_code, detail={"code": code, "message_zh": zh_reason(code)})
 
 
+def _strategy_validation_message_zh(exc: Exception) -> str:
+    text = str(exc)
+    if "MVP 禁止使用杠杆" in text:
+        return "策略定义校验失败：MVP 禁止使用杠杆。"
+    if "MVP 禁止卖空" in text:
+        return "策略定义校验失败：MVP 禁止卖空。"
+    if "MVP 禁止期权" in text:
+        return "策略定义校验失败：MVP 禁止期权。"
+    if "MVP 禁止加密货币提现" in text:
+        return "策略定义校验失败：MVP 禁止加密货币提现。"
+    if "标的列表不能重复" in text:
+        return "策略定义校验失败：标的列表不能重复。"
+    return "策略定义校验失败：请检查资产类别、调仓频率、信号、标的列表和安全约束。"
+
+
 @router.get("/agent/status")
 def agent_status() -> dict:
     queue = ApprovalQueue(QUEUE_PATH)
@@ -272,7 +294,7 @@ def market_data_status() -> dict:
 def market_data_refresh() -> dict:
     gateway = build_market_data_gateway()
     try:
-        return gateway.refresh_public_stooq_cache()
+        return gateway.refresh_cache()
     except Exception as exc:
         status = gateway.resolve_price_path(force_refresh=False).status
         status["refresh_attempted"] = True
@@ -417,7 +439,7 @@ def dashboard() -> str:
       <section><h2>模拟绩效</h2><div id="paperPerformance"></div></section>
       <section><h2>智能体运行状态</h2><div id="agent"></div></section>
       <section><h2>模拟交易状态（模拟交易执行层）</h2><div id="broker"></div></section>
-      <section><h2>Moomoo OpenD</h2><div id="moomooBroker"></div></section>
+      <section><h2>富途牛牛开放网关（只读）</h2><div id="moomooBroker"></div></section>
       <section><h2>行情数据</h2><div id="marketData"></div></section>
       <section><h2>运行健康</h2><div id="opsHealth"></div></section>
       <section><h2>交付就绪</h2><div id="paperReadiness"></div></section>
@@ -456,8 +478,9 @@ def dashboard() -> str:
       paper: '模拟交易',
       read_only_probe: '只读连接探测',
       ready_read_only: '只读探测就绪',
-      api_missing: 'API 包未安装',
-      opend_unreachable: 'OpenD 未连接',
+      api_missing: '接口包未安装',
+      api_import_error: '接口包导入失败',
+      opend_unreachable: '开放网关未连接',
       not_configured: '未就绪',
       probe_error: '探测异常',
       fresh: '有效',
@@ -503,10 +526,12 @@ def dashboard() -> str:
     const TIME_IN_FORCE_TEXT = { day: '当日有效' };
     const MARKET_DATA_PROVIDER_TEXT = {
       cache_or_fixture: '本地缓存优先',
+      moomoo_opend: '富途牛牛只读行情',
       stooq: 'Stooq 公共延迟行情',
       direct_file: '直接文件'
     };
     const MARKET_DATA_SOURCE_TEXT = {
+      broker_quote_cache: '经纪商只读行情缓存',
       public_cache: '公共延迟行情缓存',
       local_cache: '本地行情缓存',
       fixture: '样例数据',
@@ -626,8 +651,8 @@ def dashboard() -> str:
         metric('长运行预检', pill(soakReadiness.overall_status_zh || displayStatus(soakReadiness.overall_status, '未知'), soakReadiness.fail_count ? 'danger' : (soakReadiness.warn_count ? 'warn' : 'ok'))),
         metric('自动维护', pill(displayStatus(opsMaintenance.status, '未知'), opsMaintenance.error_count ? 'danger' : (opsMaintenance.task_running ? 'ok' : 'warn'))),
         metric('行情源', displayMarketDataSource(marketData.source_kind)),
-        metric('Moomoo OpenD', pill(moomoo.status_zh || displayStatus(moomoo.status, '未知'), moomoo.read_only_ready ? 'ok' : 'warn')),
-        metric('Moomoo 行情', pill(moomooQuote.status_zh || displayStatus(moomooQuote.status, '未知'), moomooQuote.status === 'ready' ? 'ok' : 'warn')),
+        metric('富途牛牛开放网关', pill(moomoo.status_zh || displayStatus(moomoo.status, '未知'), moomoo.read_only_ready ? 'ok' : 'warn')),
+        metric('富途行情', pill(moomooQuote.status_zh || displayStatus(moomooQuote.status, '未知'), moomooQuote.status === 'ready' ? 'ok' : 'warn')),
         metric('行情质量', pill(displayDataQuality(marketData.data_quality), marketData.real_market_data ? 'ok' : 'warn')),
         metric('最新行情日', displayValue(marketData.latest_date)),
         metric('模拟权益', Number(portfolio.total_equity || 0).toFixed(2)),
@@ -722,7 +747,8 @@ def dashboard() -> str:
         </div>
         <table>
           <tbody>
-            <tr><th>交付日期</th><td>${readiness.deadline_zh || '2026年6月20日'}</td></tr>
+            <tr><th>模拟交易交付日期</th><td>${readiness.deadline_zh || '2026年6月15日'}</td></tr>
+            <tr><th>网页与本地应用交付日期</th><td>${readiness.dashboard_app_deadline_zh || '2026年6月17日'}</td></tr>
             <tr><th>结论</th><td>${readiness.summary_zh || '无'}</td></tr>
             <tr><th>安全边界</th><td>${displayValue(readiness.safety_boundary && readiness.safety_boundary.message_zh)}</td></tr>
           </tbody>
@@ -780,7 +806,7 @@ def dashboard() -> str:
       const latestPrices = marketData.latest_prices || {};
       const priceRows = Object.entries(latestPrices).map(([symbol, price]) => `<tr><td>${symbol}</td><td>${price}</td></tr>`).join('');
       const refreshStatus = marketData.refresh_attempted
-        ? (marketData.refresh_succeeded ? '刷新成功' : '刷新失败：公共行情源不可用，已回退到本地数据。')
+        ? (marketData.refresh_succeeded ? '刷新成功' : `刷新失败：${marketData.refresh_error || '行情源不可用，已回退到本地数据。'}`)
         : '尚未尝试刷新';
       document.getElementById('marketData').innerHTML = `
         <table>
@@ -863,10 +889,10 @@ def dashboard() -> str:
             <tr><th>探测结果</th><td>${pill(status.status_zh || displayStatus(status.status, '未知'), kind)}</td></tr>
             <tr><th>说明</th><td>${status.message_zh || '暂无说明'}</td></tr>
             <tr><th>下一步</th><td>${status.next_step_zh || '暂无'}</td></tr>
-            <tr><th>OpenD 地址</th><td>${displayValue(status.host)}:${displayValue(status.port)}</td></tr>
-            <tr><th>OpenD 连接</th><td>${status.opend_connected_zh || displayBool(status.opend_connected)}</td></tr>
-            <tr><th>API 包</th><td>${status.package_installed_zh || displayBool(status.package_installed)} / ${displayValue(packageInfo.import_name, '未发现')} / ${displayValue(packageInfo.version, '未知版本')}</td></tr>
-            <tr><th>SDK 可导入</th><td>${status.package_importable_zh || displayBool(status.package_importable)}</td></tr>
+            <tr><th>开放网关地址</th><td>${displayValue(status.host)}:${displayValue(status.port)}</td></tr>
+            <tr><th>开放网关连接</th><td>${status.opend_connected_zh || displayBool(status.opend_connected)}</td></tr>
+            <tr><th>接口包</th><td>${status.package_installed_zh || displayBool(status.package_installed)} / ${displayValue(packageInfo.import_name, '未发现')} / ${displayValue(packageInfo.version, '未知版本')}</td></tr>
+            <tr><th>软件开发包可导入</th><td>${status.package_importable_zh || displayBool(status.package_importable)}</td></tr>
             <tr><th>只读就绪</th><td>${status.read_only_ready_zh || displayBool(status.read_only_ready)}</td></tr>
             <tr><th>探测需凭据</th><td>${status.credential_required_for_probe_zh || displayBool(status.credential_required_for_probe)}</td></tr>
             <tr><th>交易解锁</th><td>${status.trade_unlock_required_zh || displayBool(status.trade_unlock_required)}</td></tr>

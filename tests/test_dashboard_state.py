@@ -11,6 +11,7 @@ from backend.app.services.approval_queue import ApprovalQueue
 
 
 def _patch_fixture_market_data(monkeypatch, tmp_path):
+    monkeypatch.delenv("ALPHA_MARKET_DATA_PROVIDER", raising=False)
     config = tmp_path / "market_data.yaml"
     config.write_text(
         "\n".join(
@@ -38,7 +39,7 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
     state = routes.dashboard_state()
 
     assert run_result["status"] == "completed"
-    assert run_result["market_data"]["source_kind"] in {"fixture", "public_cache", "local_cache"}
+    assert run_result["market_data"]["source_kind"] in {"fixture", "public_cache", "local_cache", "broker_quote_cache"}
     assert state["health"]["refresh_interval_seconds"] == 300
     assert state["health"]["status_zh"] == "正常"
     assert state["health"]["mode_zh"] == "研究、模拟交易与候选订单人工复核模式"
@@ -48,7 +49,10 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
     assert state["ops_health"]["check_count"] >= 1
     assert state["ops_maintenance"]["status"] in {"stopped", "maintenance_sleeping", "running_maintenance", "starting"}
     assert state["ops_maintenance"]["backup_interval_seconds"] > 0
-    assert state["paper_readiness"]["deadline"] == "2026-06-20"
+    assert state["paper_readiness"]["deadline"] == "2026-06-15"
+    assert state["paper_readiness"]["deadline_zh"] == "2026年6月15日"
+    assert state["paper_readiness"]["dashboard_app_deadline"] == "2026-06-17"
+    assert state["paper_readiness"]["dashboard_app_deadline_zh"] == "2026年6月17日"
     assert state["paper_readiness"]["check_count"] == 10
     assert state["paper_readiness"]["safety_boundary"]["live_order_submission_enabled"] is False
     assert state["soak_readiness"]["target_days"] == 30
@@ -173,7 +177,8 @@ def test_approval_queue_review_actions_are_exposed_to_dashboard_state(tmp_path, 
     assert "仅供所有者在经纪商系统中人工确认录入" in broker_ticket_view
     assert "不会通过 Alpha 自动提交真实资金订单" in broker_ticket_view
     assert "manual_owner_broker_confirmation_only" not in broker_ticket_view
-    assert "ticket_id,symbol,side,quantity" in broker_ticket_csv
+    assert "工单号,标的,方向,数量" in broker_ticket_csv
+    assert "ticket_id,symbol,side,quantity" not in broker_ticket_csv
     assert exported["new_status"] == "broker_ticket_exported"
     assert state["approval_queue"]["summary"]["fresh_pending_count"] == 0
     assert state["approval_queue"]["summary"]["broker_ticket_exported_count"] == 1
@@ -209,20 +214,22 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "连续胜出次数" in html
     assert "审批队列" in html
     assert "模拟交易执行层" in html
-    assert "Moomoo OpenD" in html
-    assert "Moomoo 行情" in html
+    assert "富途牛牛开放网关（只读）" in html
+    assert "富途牛牛开放网关" in html
+    assert "富途行情" in html
     assert "只读连接探测" in html
     assert "只读行情快照" in html
-    assert "OpenD 连接" in html
-    assert "API 包" in html
-    assert "SDK 可导入" in html
+    assert "开放网关连接" in html
+    assert "接口包" in html
+    assert "软件开发包可导入" in html
     assert "下一步" in html
     assert "交易解锁" in html
     assert "禁止操作" in html
     assert "行情数据" in html
     assert "运行健康" in html
     assert "交付就绪" in html
-    assert "交付日期" in html
+    assert "模拟交易交付日期" in html
+    assert "网页与本地应用交付日期" in html
     assert "交付项" in html
     assert "长运行预检" in html
     assert "目标周期" in html
@@ -234,6 +241,8 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "健康历史" in html
     assert "备份保留数" in html
     assert "行情源" in html
+    assert "富途牛牛只读行情" in html
+    assert "经纪商只读行情缓存" in html
     assert "行情质量" in html
     assert "真实市场数据" in html
     assert "公共延迟行情缓存" in html
@@ -270,6 +279,9 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "Approval Queue" not in html
     assert "No pending tickets" not in html
     assert "<th>Adapter</th>" not in html
+    assert "Moomoo OpenD" not in html
+    assert "API 包" not in html
+    assert "SDK 可导入" not in html
     assert " bps" not in html
 
 
@@ -287,6 +299,27 @@ def test_owner_facing_http_errors_are_chinese():
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.detail == {"code": "ticket_not_found", "message_zh": "未找到工单"}
+
+
+def test_strategy_validation_error_is_chinese():
+    payload = {
+        "name": "ETF Momentum v0",
+        "asset_class": "etf",
+        "universe": ["SPY", "QQQ", "TLT"],
+        "rebalance_frequency": "monthly",
+        "signals": [{"type": "momentum", "lookback_days": 126}],
+        "risk": {"no_leverage": False, "no_short": True, "no_options": True, "no_crypto_withdrawal": True},
+    }
+
+    with pytest.raises(HTTPException) as exc_info:
+        routes.strategy_validate(payload)
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail == {
+        "code": "strategy_validation_failed",
+        "message_zh": "策略定义校验失败：MVP 禁止使用杠杆。",
+    }
+    assert "prohibits" not in exc_info.value.detail["message_zh"]
 
 
 def test_python_display_locale_covers_runtime_statuses_and_live_reasons():
@@ -317,7 +350,7 @@ def test_paper_cycle_summary_is_chinese_for_human_cli(tmp_path, monkeypatch):
     assert "模拟绩效：累计收益 -0.01%" in summary
     assert "累计佣金 1.0" in summary
     assert "行情数据：" in summary
-    assert "真实市场数据 否" in summary
+    assert f"真实市场数据 {'是' if result['market_data']['real_market_data'] else '否'}" in summary
     assert "风控：已通过风控，待人工确认（下单前风控检查通过）" in summary
     assert "执行层：本地沙盒模拟经纪商适配器" in summary
     assert "模型 固定佣金与滑点模型" in summary

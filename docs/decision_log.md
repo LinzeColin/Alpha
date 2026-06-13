@@ -1,209 +1,91 @@
-# Alpha Decision Log
+# Alpha 决策日志
 
-## 2026-06-13: GitHub Is Authoritative
+## 2026-06-13：GitHub 是权威连续性来源
 
-Decision: Use `https://github.com/LinzeColin/Alpha` as the authoritative project backup and continuity surface.
+- 决策：使用 `https://github.com/LinzeColin/Alpha` 作为 Alpha 的权威备份与连续开发来源。
+- 原因：后续任何 agent 接手时，需要稳定、可检查的代码、规则、文档、测试证据和交接状态。
+- 影响：每次有意义的 run 必须提交并推送，除非网络、认证或用户明确指示阻止。
 
-Reason: Future agents need a stable, inspectable state source for code, docs, tests, rules, and handoff.
+## 2026-06-13：真实资金执行边界
 
-Consequence: Every meaningful run must commit and push code/docs/test evidence unless blocked.
+- 决策：Alpha 可以自动运行研究、模拟交易、风险检查、审批队列和经纪商就绪订单工单，但不得自主提交真实资金经纪商订单。
+- 原因：交易系统必须把真实资金执行控制权留给所有者。
+- 影响：已提交默认配置保持 `live_trading.enabled: false`；真实交易候选只以 `OrderIntent -> 风控 -> 审批队列 -> BrokerReadyOrderTicket` 形式进入人工确认流程。
 
-## 2026-06-13: Execution Boundary
+## 2026-06-13：5 分钟候选单刷新
 
-Decision: Alpha will automate paper trading, risk checks, approval queues, and broker-ready order tickets. It will not autonomously submit real-money broker orders.
+- 决策：订单候选循环默认刷新间隔为 300 秒。
+- 原因：用户要求候选单及时更新，同时必须保留风控与复核门槛。
+- 影响：FastAPI 控制台生命周期启动应用托管自动模拟交易循环，启动后立即运行一次，然后按配置间隔休眠。
 
-Reason: Trading systems must preserve owner control at the real-money execution boundary.
+## 2026-06-13：候选单时效决定可操作性
 
-Consequence: Committed defaults keep `live_trading.enabled: false`; live candidates enter an approval queue as tickets.
+- 决策：只有未过期的 `pending_owner_approval` 工单才算所有者可操作候选。
+- 原因：经纪商就绪工单会过期；过期候选可以审计，但不应被当成可执行。
+- 影响：审批队列区分有效待确认、过期待确认、风控阻止和总数；控制台显示可操作性、时效性和剩余秒数。
 
-## 2026-06-13: Five-Minute Candidate Refresh
+## 2026-06-13：本地 App 入口
 
-Decision: The order-intent loop has a default refresh cadence of 300 seconds.
+- 决策：Alpha 交付 macOS `.app` 入口，背后复用同一控制台启动脚本。
+- 原因：用户需要稳定的本地网页工作台入口，而不是每次手动敲终端命令。
+- 影响：`outputs/applications/Alpha.applescript` 生成 `Alpha.app`，并安装到 Downloads、用户 Applications 和系统 `/Applications`。
 
-Reason: The user requires timely candidate updates while still keeping risk checks and review gates explicit.
+## 2026-06-13：策略迭代必须有样本外证据
 
-Consequence: `paper_trading_loop.run_forever()` remains available for CLI use, and the FastAPI dashboard lifecycle starts an app-managed automatic paper loop that runs immediately and then sleeps for the configured interval.
+- 决策：策略锦标赛候选必须提供 walk-forward 样本外收益、命中率和验证窗口数。
+- 原因：单窗口动量排序不足以支撑策略晋级。
+- 影响：`run_strategy_tournament()` 返回验证摘要，控制台显示样本外收益、命中率、验证窗口和策略稳定度。
 
-## 2026-06-13: Ticket Freshness Is Actionability
+## 2026-06-13：模拟执行层与成本模型
 
-Decision: Only unexpired `pending_owner_approval` tickets count as owner-actionable live candidates.
+- 决策：模拟交易必须通过可替换的本地沙盒经纪商适配器，并默认记录固定佣金与滑点模型。
+- 原因：成熟模拟交易不能用零成本成交高估策略表现。
+- 影响：`LocalSandboxPaperBrokerAdapter` 记录参考价、模拟成交价、5.00 基点滑点、每笔 1.00 AUD 模拟佣金、累计成本和中文执行模型。
 
-Reason: Broker-ready tickets can become stale; a candidate older than its TTL should remain auditable but should not be treated as executable.
+## 2026-06-13：审批队列可交互但不执行真实下单
 
-Consequence: `ApprovalQueue.summary()` separates fresh pending, expired pending, blocked, and total tickets. The dashboard shows actionability, freshness, and seconds until expiry.
+- 决策：控制台可以把工单标记为已人工复核、已拒绝或工单已导出，但这些动作只更新本地状态。
+- 原因：用户需要可用的复核工作流；真实资金执行仍必须在经纪商侧由所有者确认。
+- 影响：复核和导出动作记录审计元数据；导出包总是写入 `live_order_submission_enabled: false`。
 
-## 2026-06-13: App Bundle Entrypoints
+## 2026-06-13：审批队列默认 SQLite 持久化
 
-Decision: Alpha should ship a macOS `.app` entrypoint in Downloads and Applications, backed by the same dashboard start script.
+- 决策：运行时审批队列默认写入 `runtime/approval_queue.sqlite3`。
+- 原因：5 分钟自动循环会持续生成候选，队列必须能跨重启保留。
+- 影响：JSON 路径仅作为兼容；控制台和 API 暴露存储后端、持久化状态和路径。
 
-Reason: The user needs a stable local webpage workspace entry that behaves like a normal app instead of requiring terminal commands.
+## 2026-06-13：行情数据网关可观察且失败软回退
 
-Consequence: `outputs/applications/Alpha.applescript` generates `Alpha.app`, and copies were installed to Downloads, user Applications, and system `/Applications`.
+- 决策：模拟交易和控制台通过 `MarketDataGateway` 解析价格路径。
+- 原因：系统需要从样例数据逐步过渡到公共延迟行情和本机只读行情，同时外部失败不能阻塞本地模拟交易。
+- 影响：行情状态显示提供方、来源、质量、最新日期、缓存年龄和刷新状态；外部刷新失败时回退到旧缓存或样例数据，不启用真实下单。
 
-## 2026-06-13: Strategy Iteration Requires Walk-Forward Evidence
+## 2026-06-13：运行健康与自动维护
 
-Decision: Strategy tournament candidates must expose simple out-of-sample evidence: walk-forward return, hit rate, and validation window count.
+- 决策：Alpha 必须暴露本地运行健康检查、运行备份和应用托管维护循环。
+- 原因：30 天本地长运行需要连续证据、日志、备份和可恢复性。
+- 影响：`/ops/health`、`/ops/backup`、`/ops/maintenance/status`、`scripts/check_alpha_ops.sh` 和控制台“运行健康”显示循环、队列、组合、行情、进程、日志、备份和安全边界。
 
-Reason: Last-window momentum ranking is too weak for strategy promotion. Even fixture-level MVP strategy iteration should show whether a signal had repeated one-step-ahead confirmation.
+## 2026-06-13：中文显示是产品验收项
 
-Consequence: `run_strategy_tournament()` now returns `validation_summary`, and each candidate includes `oos_return`, `hit_rate`, and `validation_windows`. The dashboard tournament table displays these fields.
+- 决策：Alpha 的用户可见运行界面、App/脚本输出、控制台状态、风险原因、策略校验错误、富途牛牛提示和人工操作文案必须默认中文显示。
+- 原因：用户要求“整个系统彻底的全中文显示”，运行期间不应让所有者通过 raw enum 或英文技术词才能理解系统状态。
+- 影响：控制台、命令行摘要、工单 HTML、中文 CSV 表、FastAPI 元信息、HTTP 错误说明、所有者摘要、审批状态和富途牛牛下一步提示均提供中文展示；API 字段名、内部枚举、工单号、路径和股票代码保持机器稳定。
 
-## 2026-06-13: User-Facing Chinese Display
+## 2026-06-13：经纪商就绪工单默认中文视图
 
-Decision: Alpha runtime surfaces should display Chinese text for the owner-facing dashboard and local launcher messages.
+- 决策：控制台“查看工单”默认打开中文 HTML 工单视图，下载表格默认使用中文表头和中文值。
+- 原因：点击工单后直接看到原始 JSON 或英文 CSV 不符合全中文操作体验。
+- 影响：`/broker-ticket/view` 渲染中文详情；`.csv` 返回中文人工录入表；原始 JSON 端点保留给自动化和审计。
 
-Reason: The user requires the whole system to be readable in Chinese during operation.
+## 2026-06-13：富途牛牛开放网关只读阶段
 
-Consequence: `/dashboard` translates titles, buttons, metrics, tables, empty states, and status/actionability values into Chinese. API field names and machine-readable enum values remain stable for tests and automation.
+- 决策：富途牛牛开放网关第一阶段只做本机只读探测与只读行情快照，不创建交易上下文、不解锁交易、不提交真实订单。
+- 原因：用户本机已有相关环境，Alpha 需要把行情路径纳入可观测性，但不能越过人工经纪商确认边界。
+- 影响：`/broker/moomoo/status` 和 `/broker/moomoo/quote-snapshot` 返回中文状态、接口包可用性、开放网关连接、只读就绪、禁止操作和 `live_order_submission_enabled=false`。
 
-## 2026-06-13: Human Runtime Output Defaults To Chinese
+## 2026-06-13：模拟交易交付与长运行预检分离
 
-Decision: Owner-facing runtime output should default to Chinese, including dashboard display names and `paper_trading_loop --once` CLI summaries.
-
-Reason: The user requires the operating workspace to be readable without interpreting raw machine enum values.
-
-Consequence: Dashboard rendering maps agent IDs, adapter IDs, strategy IDs, order types, validity, risk reasons, capabilities, and unknown status fallbacks into Chinese. The CLI keeps a `--json` option for raw automation output.
-
-## 2026-06-13: Broker Paper Adapter Boundary
-
-Decision: Paper trading execution should flow through a replaceable broker paper adapter, starting with `LocalSandboxPaperBrokerAdapter`.
-
-Reason: The MVP needs a broker-like paper execution receipt and dashboard visibility before connecting any real broker paper API. This keeps the execution surface testable without accepting credentials or enabling real-money order submission.
-
-Consequence: `PaperTradingLoop` now returns `paper_broker_adapter` and `broker_paper_order` receipts. The dashboard exposes a Chinese "模拟交易执行层" section showing adapter, mode, connection, credential requirement, and whether real order submission is enabled.
-
-## 2026-06-13: Approval Queue Is Interactive But Non-Executing
-
-Decision: Owner-facing approval queue actions may update local ticket state to `owner_reviewed`, `owner_rejected`, or `broker_ticket_exported`, but must not submit broker orders.
-
-Reason: The workspace needs a usable dashboard workflow for reviewing timely broker-ready candidates. The real-money boundary still belongs to the owner inside the broker app/API session.
-
-Consequence: `/orders/approval-queue/{ticket_id}/owner-review`, `/reject`, and `/mark-exported` record status history and review/export metadata. Export requires prior owner review, risk-blocked tickets cannot be reviewed/exported, and exported tickets record `live_order_submission_enabled: false`.
-
-## 2026-06-13: Approval Queue Uses SQLite By Default
-
-Decision: The default runtime approval queue should persist to `runtime/approval_queue.sqlite3`.
-
-Reason: A five-minute autonomous paper loop will create repeated order candidates. The queue must survive dashboard restarts and support reliable owner actions without rewriting a whole JSON file on every transition.
-
-Consequence: `ApprovalQueue` chooses SQLite for `.sqlite`, `.sqlite3`, and `.db` paths, keeps JSON compatibility for `.json`, and exposes storage status to `/orders/approval-queue`, `/owner/summary`, `/agent/status`, and the dashboard.
-
-## 2026-06-13: Market Data Gateway Is Observable And Fail-Soft
-
-Decision: Paper trading and dashboard reads should resolve prices through `MarketDataGateway` instead of directly depending on the sample CSV.
-
-Reason: Strategy iteration and paper trading need a clear path from fixture data toward real public market data while staying reliable when the external source is unavailable.
-
-Consequence: Alpha now supports a cache-first market data gateway with optional Stooq public delayed CSV refresh. Dashboard/API surfaces show provider, source kind, quality, latest date, prices, cache age, and fallback status. External refresh failure falls back to local data and does not enable any live trading behavior.
-
-## 2026-06-13: 30-Day Ops Health Requires Local Evidence
-
-Decision: Alpha should expose a local ops health check and one-click runtime backup before claiming 30-day unattended paper-trading readiness.
-
-Reason: A five-minute automatic loop can appear healthy while the queue, process, logs, backups, or paper portfolio are stale or missing. The owner needs direct evidence that the system is still generating timely candidates and can be recovered after restart.
-
-Consequence: `/ops/health`, `/ops/backup`, `scripts/check_alpha_ops.sh`, and the dashboard "运行健康" panel now summarize automatic loop cadence, SQLite queue durability, paper portfolio state, market data quality, process/log status, latest backup, and the real-money execution boundary.
-
-## 2026-06-13: Ops Maintenance Is App-Managed
-
-Decision: The dashboard application should own scheduled health sampling, runtime backup creation, and backup rotation instead of relying only on manual terminal commands.
-
-Reason: A 30-day E-Safe paper-trading run needs continuous evidence and recoverability even when the owner does not manually trigger backups.
-
-Consequence: FastAPI lifespan starts `AutoOpsMaintenanceRuntime` beside the paper loop. It samples ops health every 300 seconds, writes `runtime/ops_health_history.jsonl`, creates a backup when the latest backup is older than the configured interval, prunes backups to the configured retention count, and exposes state through `/ops/maintenance/status` and the dashboard.
-
-## 2026-06-13: 中文显示是产品验收项
-
-Decision: Alpha 的用户可见运行界面、App/脚本输出、控制台状态、风险原因和人工操作文案必须默认中文显示。
-
-Reason: 用户要求“整个系统彻底的全中文显示”，运行期间不应让 owner 通过 raw enum 才能理解系统状态。
-
-Consequence: API 字段名、内部枚举、工单号、文件路径和股票代码继续保持机器可读格式；Dashboard、CLI 摘要和 owner-facing API 会提供中文映射或 `*_zh` 字段。新增界面或命令输出必须补对应中文展示测试。
-
-## 2026-06-13: Owner-Facing API Errors And Metadata Are Chinese
-
-Decision: OpenAPI 产品元信息、owner 摘要、审批队列时效性、存储状态、HTTP 错误说明和 broker 探测下一步提示必须提供中文展示值。
-
-Reason: “全中文显示”不能只停留在 dashboard HTML；用户从 `/dashboard/state`、`/orders/...` 错误响应或 `/broker/moomoo/status` 读取状态时也应能直接理解系统含义。
-
-Consequence: FastAPI app title/description 改为中文；队列状态、时效性、存储状态和转移结果补 `*_zh`；HTTP 错误 detail 返回 `code` 与 `message_zh`；Moomoo OpenD 探测返回 `next_step_zh`。Raw enum/API key 继续保留给自动化兼容。
-
-## 2026-06-13: Paper Trading Readiness Is A Separate Delivery Gate
-
-Decision: Alpha must expose a dedicated paper-trading delivery readiness report separate from operational health.
-
-Reason: `/ops/health` proves the app is operational; it does not directly answer whether the June 20 paper-trading delivery requirements are satisfied item by item. The owner needs a requirement-level proof surface for automatic paper trading, candidate order generation, risk checks, approval queue, broker-ready tickets, 5-minute freshness, dashboard/app entry, and real-order boundary.
-
-Consequence: `/readiness/paper-trading`, dashboard “交付就绪”, and `python -m backend.app.services.paper_readiness` now produce a Chinese readiness report with 10 checks, pass/warn/fail counts, evidence payloads, and a clear no-real-order safety boundary. Missing app-managed loop evidence or fresh tickets prevents claiming delivery readiness.
-
-## 2026-06-13: Broker-Ready Ticket Export Is Manual-Only
-
-Decision: 已人工复核且仍在有效期内的候选单可以导出为 JSON/CSV 人工录入工单包，但 Alpha 不调用真实经纪商下单接口。
-
-Reason: 用户需要可操作的 broker-ready order ticket；同时真实资金执行边界必须留在 owner 的经纪商确认侧。
-
-Consequence: `/orders/approval-queue/{ticket_id}/broker-ticket`、`/broker-ticket/view` 和 `.csv` 提供标准化工单包、中文 HTML 视图、CSV 行、安全提示和 `live_order_submission_enabled: false`。过期工单不能被复核或导出。
-
-## 2026-06-13: Strategy Tournament History Is Runtime Evidence
-
-Decision: 每次自动模拟交易周期都必须把策略锦标赛胜出结果追加到本地策略迭代历史，并向 dashboard/API 暴露策略稳定度。
-
-Reason: 单次策略锦标赛只能说明当前快照；成熟 paper trading 需要可恢复、可审计的策略迭代轨迹，用于观察胜出策略是否稳定漂移。
-
-Consequence: `PaperTradingLoop` 写入 `runtime/strategy_tournament_history.jsonl`；`GET /strategy/tournament/history` 和 dashboard “策略迭代历史”显示记录次数、最近胜出策略、连续胜出次数、稳定度、样本外收益、命中率、决策和行情质量。Owner-facing 字段提供 `*_zh` 中文展示值，raw enum 继续保留给自动化。
-
-## 2026-06-13: Paper Performance History Is Required Evidence
-
-Decision: 每次自动模拟交易周期都必须把模拟组合权益快照追加到本地绩效历史，并向 dashboard/API 暴露收益率与回撤。
-
-Reason: 成熟 paper trading 不能只证明“下过模拟单”；它必须持续显示组合权益、累计收益、最新权益变化、最大回撤和当前回撤，才能支持策略迭代和运行判断。
-
-Consequence: `PaperTradingLoop` 写入 `runtime/paper_performance_history.jsonl`；`GET /paper/performance/history` 和 dashboard “模拟绩效”显示记录次数、最新总权益、累计收益率、最新权益变化、权益高水位、最大回撤、当前回撤和最近权益历史。该功能只记录模拟交易结果，不改变真实资金执行边界。
-
-## 2026-06-13: Paper Execution Cost Model Is Required
-
-Decision: 本地模拟经纪商成交必须默认经过成本模型，记录参考价、模拟成交价、滑点、佣金和累计成本。
-
-Reason: 成熟 paper trading 不能用零成本成交证明策略可行；即使是 MVP，也要把交易摩擦反映到组合权益、绩效历史和 dashboard 中，避免高估策略收益。
-
-Consequence: `LocalSandboxPaperBrokerAdapter` 默认使用“固定佣金与滑点模型”，买入成交价按参考价上浮 5.00 基点，并收取每笔 1.00 AUD 模拟佣金。`PaperBroker` 把成本计入现金；`/paper/performance/history`、`/paper/broker/status`、dashboard 和 CLI 摘要显示中文成本字段。该模型只用于 paper trading，不改变真实下单禁用边界。
-
-## 2026-06-13: Broker Ticket Owner View Must Be Chinese
-
-Decision: Dashboard 默认“查看工单”必须打开中文 HTML 工单视图；原始 JSON 工单包继续作为 API 留给自动化和恢复审计。
-
-Reason: 用户要求系统彻底中文显示，而点击 dashboard 工单按钮直接打开原始 JSON 会暴露英文字段名和内部枚举，不适合作为 owner 默认界面。
-
-Consequence: `/orders/approval-queue/{ticket_id}/broker-ticket/view` 渲染中文工单详情、人工录入字段、风控结果和安全说明；dashboard 的“查看工单”指向该中文视图。JSON 与 CSV 端点保持不变，用于 broker-ready 导出、测试和 MCP/自动化流程。
-
-## 2026-06-13: Moomoo OpenD Starts As Read-Only Probe
-
-Decision: Moomoo OpenD 集成第一阶段只做本机只读探测，检查 Python API 包和 OpenD 端口状态，不创建交易上下文、不解锁交易、不提交真实订单。
-
-Reason: 用户已在本机安装 Moomoo、Moomoo OpenD 和 API；Alpha 需要把这个环境纳入 dashboard 可观测性。但在没有完成账户读取、paper API 边界、权限分离和长运行验证之前，不能把真实 broker 接入 agent 自动执行链路。
-
-Consequence: `/broker/moomoo/status` 和 dashboard “Moomoo OpenD”面板显示 API 包、OpenD 连接、只读就绪、交易解锁、真实下单禁用、安全操作和禁止操作。该探测层不读取交易凭据，不调用 `place_order`，也不改变 committed 默认真实下单禁用边界。
-
-## 2026-06-13: Moomoo Quote Snapshot Is Read-Only
-
-Decision: Moomoo SDK 接入可以使用 `OpenQuoteContext` 读取市场快照，但不得创建交易上下文、不得解锁交易、不得调用真实下单方法。
-
-Reason: 用户已安装 Moomoo OpenD 和 API，Alpha 需要验证本机 broker data path 是否可用；只读行情快照能提高 dashboard 真实性，同时不跨过人工 broker 确认边界。
-
-Consequence: `/broker/moomoo/quote-snapshot` 和 dashboard Moomoo 面板显示只读行情状态与最近价；SDK 日志 HOME 固定到项目 `runtime/moomoo_api_home`，避免写入用户真实主目录。返回结构显式包含 `trade_context_enabled=false` 和 `live_order_submission_enabled=false`。
-
-## 2026-06-13: Long-Run Soak Readiness Is A Start Gate
-
-Decision: Alpha must expose a dedicated local long-run soak preflight before claiming the system is ready to start a 30-day unattended paper-trading run.
-
-Reason: `/readiness/paper-trading` proves the paper-trading delivery chain, while `/ops/health` proves operational health. The owner still needs one launch-focused surface that answers whether the local App entry, automatic loop, fresh broker-ready ticket, maintenance task, backup/recovery evidence, and safety boundary are all ready to begin a long-running soak.
-
-Consequence: `/readiness/soak`, dashboard “长运行预检”, `scripts/check_alpha_soak.sh`, and `python -m backend.app.services.soak_readiness` now produce a Chinese 30-day soak preflight report. This report is a start gate only; it does not mean Alpha has already completed a 30-day run.
-
-## 2026-06-13: Moomoo Quote Snapshot Is Read-Only
-
-Decision: Moomoo OpenD market snapshots may be exposed only through a read-only quote context and must never create a trade context.
-
-Reason: The dashboard needs fresher local broker-adjacent market visibility, but broker integration must preserve the manual execution boundary and avoid credential or trade unlock paths.
-
-Consequence: `/broker/moomoo/quote-snapshot` and dashboard “只读行情快照” show market snapshot rows only after the read-only probe is ready. The response always records `trade_context_enabled: false` and `live_order_submission_enabled: false`, and forbidden operations include creating a trade context, unlocking trading, and submitting real-money orders.
+- 决策：`/readiness/paper-trading` 是模拟交易交付门槛，`/readiness/soak` 是 30 天本地长运行开始门槛。
+- 原因：运行健康不等于需求交付，就绪检查也不等于已经完成 30 天验证。
+- 影响：控制台“交付就绪”和“长运行预检”分别显示检查项、通过/关注/失败数和安全边界。

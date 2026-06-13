@@ -27,29 +27,29 @@ PACKAGE_CANDIDATES = (
 
 STATUS_ZH = {
     "ready_read_only": "只读探测就绪",
-    "api_missing": "API 包未安装",
-    "api_import_error": "API 包导入失败",
-    "opend_unreachable": "OpenD 未连接",
+    "api_missing": "接口包未安装",
+    "api_import_error": "接口包导入失败",
+    "opend_unreachable": "开放网关未连接",
     "not_configured": "未就绪",
     "probe_error": "探测异常",
 }
 
 MESSAGE_ZH = {
-    "ready_read_only": "Moomoo API 包和本机 OpenD 端口均可用；当前仅允许只读探测，不会解锁交易或提交真实资金订单。",
-    "api_missing": "检测到本机 OpenD 端口，但当前 Python 环境未安装可导入的 moomoo/futu API 包。",
-    "api_import_error": "检测到 Moomoo/Futu API 包，但 SDK 导入失败；系统不会继续打开行情或交易上下文。",
-    "opend_unreachable": "当前 Python 环境可导入 Moomoo API 包，但未能连接本机 OpenD 端口。",
-    "not_configured": "当前 Python 环境未发现 Moomoo API 包，也未能连接本机 OpenD 端口。",
-    "probe_error": "Moomoo OpenD 探测过程中发生异常；系统保持只读与真实下单禁用状态。",
+    "ready_read_only": "富途牛牛接口包和本机开放网关端口均可用；当前仅允许只读探测，不会解锁交易或提交真实资金订单。",
+    "api_missing": "检测到本机开放网关端口，但当前 Python 环境未安装可导入的富途牛牛接口包。",
+    "api_import_error": "检测到富途牛牛接口包，但软件开发包导入失败；系统不会继续打开行情或交易上下文。",
+    "opend_unreachable": "当前 Python 环境可导入富途牛牛接口包，但未能连接本机开放网关端口。",
+    "not_configured": "当前 Python 环境未发现富途牛牛接口包，也未能连接本机开放网关端口。",
+    "probe_error": "富途牛牛开放网关探测过程中发生异常；系统保持只读与真实下单禁用状态。",
 }
 
 NEXT_STEP_ZH = {
     "ready_read_only": "下一步：只接入只读行情和账户状态探测，继续保持真实下单禁用。",
-    "api_missing": "下一步：在项目虚拟环境中安装 Moomoo/Futu OpenAPI Python 包后重新探测。",
-    "api_import_error": "下一步：检查 Moomoo SDK 日志目录权限或运行环境 HOME；修复前保持只读和真实下单禁用。",
-    "opend_unreachable": "下一步：启动本机 Moomoo OpenD，并确认监听地址和端口配置。",
-    "not_configured": "下一步：安装 Moomoo/Futu OpenAPI Python 包并启动本机 OpenD。",
-    "probe_error": "下一步：查看探测异常和本机 OpenD 状态；修复前保持只读和真实下单禁用。",
+    "api_missing": "下一步：在项目虚拟环境中安装富途牛牛开放接口 Python 包后重新探测。",
+    "api_import_error": "下一步：检查富途牛牛软件开发包日志目录权限或运行环境 HOME；修复前保持只读和真实下单禁用。",
+    "opend_unreachable": "下一步：启动本机富途牛牛开放网关，并确认监听地址和端口配置。",
+    "not_configured": "下一步：安装富途牛牛开放接口 Python 包并启动本机开放网关。",
+    "probe_error": "下一步：查看探测异常和本机开放网关状态；修复前保持只读和真实下单禁用。",
 }
 
 
@@ -101,7 +101,7 @@ def probe_moomoo_opend(
             "import_name": None,
             "distribution_name": None,
             "version": None,
-            "message_zh": "Moomoo API 包检测失败。",
+            "message_zh": "富途牛牛接口包检测失败。",
         }
         connection = {"connected": False, "error": exc.__class__.__name__, "error_zh": _connection_error_zh(exc)}
         status = "probe_error"
@@ -125,7 +125,7 @@ def probe_moomoo_quote_snapshot(
             "mode_zh": "只读行情快照",
             "status": "blocked",
             "status_zh": "未执行",
-            "message_zh": "Moomoo 只读连接未就绪，未执行行情快照探测。",
+            "message_zh": "富途牛牛只读连接未就绪，未执行行情快照探测。",
             "readiness_status": readiness.get("status"),
             "readiness_status_zh": readiness.get("status_zh"),
             "symbols": list(cfg.symbols),
@@ -146,7 +146,7 @@ def probe_moomoo_quote_snapshot(
             "mode_zh": "只读行情快照",
             "status": "error",
             "status_zh": "探测异常",
-            "message_zh": f"Moomoo 只读行情快照失败：{_exception_zh(exc)}",
+            "message_zh": f"富途牛牛只读行情快照失败：{_exception_zh(exc)}",
             "error": exc.__class__.__name__,
             "symbols": list(cfg.symbols),
             "quotes": [],
@@ -186,8 +186,8 @@ def _probe_status(
 ) -> dict:
     return {
         "provider_id": "moomoo_opend",
-        "provider_name": "Moomoo OpenD",
-        "provider_name_zh": "Moomoo OpenD",
+        "provider_name": "富途牛牛开放网关",
+        "provider_name_zh": "富途牛牛开放网关",
         "mode": "read_only_probe",
         "mode_zh": "只读连接探测",
         "status": status,
@@ -220,7 +220,7 @@ def _probe_status(
         "live_order_submission_enabled_zh": "否",
         "supports_real_broker_place_order": False,
         "supports_real_broker_place_order_zh": "否",
-        "safe_operations_zh": ["检测 API 包", "检测本机 OpenD 端口", "读取连接就绪状态"],
+        "safe_operations_zh": ["检测接口包", "检测本机开放网关端口", "读取连接就绪状态"],
         "forbidden_operations_zh": ["解锁交易", "提交真实资金订单", "修改真实账户"],
     }
 
@@ -247,9 +247,9 @@ def detect_moomoo_api_package() -> dict:
             "import_error_zh": import_status["error_zh"],
             "api_home": str(api_home),
             "message_zh": (
-                "当前 Python 环境可导入 Moomoo API 包。"
+                "当前 Python 环境可导入富途牛牛接口包。"
                 if import_status["importable"]
-                else f"当前 Python 环境已安装 Moomoo API 包，但导入失败：{import_status['error_zh']}"
+                else f"当前 Python 环境已安装富途牛牛接口包，但导入失败：{import_status['error_zh']}"
             ),
         }
     return {
@@ -265,7 +265,7 @@ def detect_moomoo_api_package() -> dict:
         "import_error": None,
         "import_error_zh": None,
         "api_home": str(DEFAULT_MOOMOO_API_HOME),
-        "message_zh": "当前 Python 环境未发现可导入的 moomoo 或 futu API 包。",
+        "message_zh": "当前 Python 环境未发现可导入的富途牛牛接口包。",
     }
 
 
@@ -302,12 +302,12 @@ def _package_version(import_name: str, distribution_names: tuple[str, ...]) -> d
 
 def _connection_error_zh(exc: Exception) -> str:
     if isinstance(exc, ConnectionRefusedError):
-        return "本机 OpenD 端口拒绝连接。"
+        return "本机开放网关端口拒绝连接。"
     if isinstance(exc, TimeoutError):
-        return "连接本机 OpenD 端口超时。"
+        return "连接本机开放网关端口超时。"
     if isinstance(exc, PermissionError):
-        return "当前运行环境没有权限连接本机 OpenD 端口。"
-    return "无法连接本机 OpenD 端口。"
+        return "当前运行环境没有权限连接本机开放网关端口。"
+    return "无法连接本机开放网关端口。"
 
 
 def _fetch_moomoo_quote_snapshot(cfg: MoomooQuoteSnapshotConfig) -> dict:
@@ -321,7 +321,7 @@ def _fetch_moomoo_quote_snapshot(cfg: MoomooQuoteSnapshotConfig) -> dict:
     if ret != getattr(moomoo, "RET_OK", 0):
         return {
             "status": "error",
-            "message_zh": f"Moomoo OpenD 返回行情错误：{data}",
+            "message_zh": f"富途牛牛开放网关返回行情错误：{data}",
             "quotes": [],
             "row_count": 0,
         }
@@ -329,7 +329,7 @@ def _fetch_moomoo_quote_snapshot(cfg: MoomooQuoteSnapshotConfig) -> dict:
     quotes = [_sanitize_quote_record(record) for record in records]
     return {
         "status": "ready",
-        "message_zh": f"已通过 Moomoo OpenD 只读行情连接获取 {len(quotes)} 条市场快照。",
+        "message_zh": f"已通过富途牛牛开放网关只读行情连接获取 {len(quotes)} 条市场快照。",
         "quotes": quotes,
         "row_count": len(quotes),
     }
@@ -394,11 +394,11 @@ def _temporary_home(api_home: Path):
 
 def _exception_zh(exc: Exception) -> str:
     if isinstance(exc, PermissionError):
-        return "运行环境没有权限访问 Moomoo SDK 日志目录或本机端口。"
+        return "运行环境没有权限访问富途牛牛软件开发包日志目录或本机端口。"
     if isinstance(exc, TimeoutError):
-        return "连接 Moomoo OpenD 超时。"
+        return "连接富途牛牛开放网关超时。"
     if isinstance(exc, ConnectionRefusedError):
-        return "Moomoo OpenD 拒绝连接。"
+        return "富途牛牛开放网关拒绝连接。"
     return str(exc) or "未知异常"
 
 

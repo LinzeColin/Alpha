@@ -31,6 +31,15 @@ STATUS_TEXT_ZH = {
     "paper": "模拟交易",
     "fresh": "有效",
     "expired": "已过期",
+    "api_missing": "接口包未安装",
+    "api_import_error": "接口包导入失败",
+    "opend_unreachable": "开放网关未连接",
+    "ready_read_only": "只读探测就绪",
+    "read_only_probe": "只读连接探测",
+    "read_only_quote_snapshot": "只读行情快照",
+    "not_configured": "未就绪",
+    "probe_error": "探测异常",
+    "error": "异常",
     "invalid": "无效",
     "not_found": "未找到",
     "blocked": "已阻止",
@@ -141,6 +150,7 @@ REASON_TEXT_ZH = {
     "rejected_ticket_cannot_be_reopened_or_exported": "已拒绝工单不能重新打开或导出",
     "exported_ticket_cannot_transition_except_rejection": "已导出工单只能转为拒绝状态",
     "ticket_already_in_requested_state": "工单已处于目标状态",
+    "strategy_validation_failed": "策略定义校验失败，请检查资产类别、调仓频率、信号、标的列表和安全约束。",
 }
 
 WARNING_TEXT_ZH = {

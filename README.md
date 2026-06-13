@@ -11,7 +11,7 @@ python -m backend.app.services.paper_trading_loop --once
 uvicorn backend.app.main:app --reload
 ```
 
-如需启用 Moomoo OpenD 只读行情快照，可安装可选 broker 依赖：
+如需启用富途牛牛开放网关只读行情快照，可安装可选经纪商依赖：
 
 ```bash
 python -m pip install -e '.[broker]'
@@ -100,16 +100,16 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - 外部 API 不得触发真实资金下单。
 - Alpha 可以生成供用户审核的经纪商就绪订单工单，但不得自主提交真实资金订单。
 - 当前模拟交易执行层使用 `LocalSandboxPaperBrokerAdapter`；它返回类经纪商模拟回执，但不需要凭据，也不允许真实下单。
-- Moomoo OpenD 集成当前只做只读连接探测：检测当前 Python 环境是否可导入 `moomoo`/`futu` API 包，并检测本机 OpenD 端口；不会解锁交易、不会读取或提交交易凭据、不会调用真实下单接口。
+- 富途牛牛开放网关集成当前只做只读连接探测：检测当前 Python 环境是否可导入 `moomoo`/`futu` 接口包，并检测本机开放网关端口；不会解锁交易、不会读取或提交交易凭据、不会调用真实下单接口。
 - 审批队列默认使用 SQLite 持久化，支持在网页/API 中标记“已人工复核”“已拒绝”“工单已导出”；这些动作只更新本地审计状态，不会调用真实 broker 下单接口。
-- 已人工复核且仍在有效期内的工单可导出为 JSON 或 CSV 人工录入包；过期工单不能复核或导出。
+- 已人工复核且仍在有效期内的工单可导出为机器 JSON 包或中文 CSV 人工录入表；过期工单不能复核或导出。
 
 ## 运行健康与备份
 
-- `GET /ops/health` 汇总自动循环、SQLite 审批队列、模拟组合、模拟执行层边界、Moomoo OpenD 只读探测、行情数据、控制台进程、日志和最近备份状态。
+- `GET /ops/health` 汇总自动循环、SQLite 审批队列、模拟组合、模拟执行层边界、富途牛牛开放网关只读探测、行情数据、控制台进程、日志和最近备份状态。
 - `POST /ops/backup` 会在 `runtime/backups/` 下生成一次本地运行状态备份，包含审批队列快照、模拟组合、行情缓存、PID 和日志尾部。
 - `GET /ops/maintenance/status` 显示应用托管自动运行维护：健康采样次数、自动备份次数、下次维护时间、健康历史文件和备份轮转配置。
-- `GET /readiness/paper-trading` 输出 6月20日模拟交易交付就绪报告，逐项验证自动循环、策略迭代、模拟成交、OrderIntent、风控、审批队列、broker-ready 工单、5分钟时效、本地 App 入口和真实下单边界。
+- `GET /readiness/paper-trading` 输出 6月15日模拟交易交付就绪报告，并标注 6月17日网页与本地应用入口交付目标；逐项验证自动循环、策略迭代、模拟成交、OrderIntent、风控、审批队列、broker-ready 工单、5分钟时效、本地 App 入口和真实下单边界。
 - `GET /readiness/soak` 输出 30 天本地长运行预检报告，聚合 App 入口、模拟交易交付就绪、5分钟循环、有效 broker-ready 工单、运行健康、自动维护、恢复备份和真实下单边界。
 - `scripts/check_alpha_ops.sh` 输出中文健康检查摘要；加 `--json` 可输出机器 JSON。
 - `scripts/check_alpha_ops.sh --backup` 可在终端生成一次本地运行状态备份。
@@ -125,39 +125,41 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - 默认模式为 `cache_or_fixture`：优先读取本地行情缓存；缓存缺失时回退到 `data/sample_prices.csv`，并在控制台标记为“样例数据”。
 - `POST /market-data/refresh` 会尝试刷新 Stooq 公共延迟行情缓存；外部网络或数据源失败时不阻塞系统，会回退到本地数据并在控制台显示刷新失败。
 - Stooq 数据源用于研究和模拟交易，不是券商级实时行情源。
+- 如需让模拟交易使用本机富途牛牛开放网关只读行情，可设置 `ALPHA_MARKET_DATA_PROVIDER=moomoo_opend` 后刷新；系统会把 `get_market_snapshot` 结果写入本地 `runtime/market_data/latest_prices.csv`，失败时回退到旧缓存或样例数据，不会创建交易上下文。
 
 ## 中文显示
 
 - 控制台页面、按钮、表格、状态、风险原因、执行层名称、策略名称、行情状态、模拟绩效和本地命令摘要默认中文显示。
 - 策略迭代历史、模拟绩效历史、自动循环状态、运行健康、维护状态、风控原因和工单导出包会提供中文展示字段，例如 `status_zh`、`reason_zh`、`winner_strategy_id_zh`、`winner_decision_zh`。
-- FastAPI OpenAPI 元信息、owner 摘要、审批队列时效性、存储状态、人工操作、HTTP 错误说明和 Moomoo 下一步提示均提供中文展示字段。
-- API 字段名、内部枚举、工单号、文件路径和股票代码保持机器可读格式，供测试、MCP、后续券商适配器和自动化流程稳定使用；面向 owner 的界面必须优先展示中文字段。
+- FastAPI 元信息、所有者摘要、审批队列时效性、存储状态、人工操作、HTTP 错误说明和富途牛牛下一步提示均提供中文展示字段。
+- API 字段名、内部枚举、工单号、文件路径和股票代码保持机器可读格式，供测试、MCP、后续券商适配器和自动化流程稳定使用；面向所有者的界面必须优先展示中文字段。
 - 新增界面或命令输出时必须补充中文展示映射；如确需展示 raw enum，必须同时给出中文标签或中文解释。
 
 ## 策略迭代历史
 
 - `PaperTradingLoop` 每次自动模拟交易周期会把策略锦标赛结果追加写入 `runtime/strategy_tournament_history.jsonl`。
 - `GET /strategy/tournament/history` 汇总记录次数、最近胜出策略、连续胜出次数、最近稳定度和最近运行明细。
-- Dashboard 的“策略迭代历史”面板显示最近胜出策略、样本外收益、命中率、决策和行情质量，默认使用中文展示字段。
+- 控制台的“策略迭代历史”面板显示最近胜出策略、样本外收益、命中率、决策和行情质量，默认使用中文展示字段。
 
 ## 模拟绩效历史
 
 - `PaperTradingLoop` 每次自动模拟交易周期会把组合权益快照追加写入 `runtime/paper_performance_history.jsonl`。
 - `GET /paper/performance/history` 汇总记录次数、最新总权益、累计收益率、最新权益变化、权益高水位、最大回撤、当前回撤、累计佣金和执行模型。
-- Dashboard 的“模拟绩效”面板显示权益历史、收益率、回撤、最新策略、标的、方向、佣金、执行模型和交易次数，默认使用中文展示字段。
+- 控制台的“模拟绩效”面板显示权益历史、收益率、回撤、最新策略、标的、方向、佣金、执行模型和交易次数，默认使用中文展示字段。
 
 ## 模拟执行成本
 
 - `LocalSandboxPaperBrokerAdapter` 默认使用“固定佣金与滑点模型”：买入按参考价上浮 5.00 基点成交，并计入每笔 1.00 AUD 模拟佣金。
 - Paper broker 会把模拟成交价、参考价、佣金、滑点和累计佣金写入组合状态与绩效历史。
-- Dashboard 的“模拟交易执行层”和“模拟绩效”会显示执行模型、模拟滑点、单笔佣金、累计佣金和最近成交成本。
-- 该模型只影响本地 paper trading 绩效，不调用真实经纪商下单接口。
+- 控制台的“模拟交易执行层”和“模拟绩效”会显示执行模型、模拟滑点、单笔佣金、累计佣金和最近成交成本。
+- 该模型只影响本地模拟交易绩效，不调用真实经纪商下单接口。
 
-## Moomoo OpenD 只读探测
+## 富途牛牛开放网关只读探测
 
-- `GET /broker/moomoo/status` 显示 Moomoo OpenD 只读探测状态。
-- `GET /broker/moomoo/quote-snapshot` 在只读连接就绪时读取 Moomoo OpenD 市场快照；未就绪时返回中文阻止原因。
-- `broker` 可选依赖安装官方 `moomoo-api` Python SDK；当前本机验证版本为 `10.7.6708`。
+- `GET /broker/moomoo/status` 显示富途牛牛开放网关只读探测状态。
+- `GET /broker/moomoo/quote-snapshot` 在只读连接就绪时读取富途牛牛开放网关市场快照；未就绪时返回中文阻止原因。
+- `broker` 可选依赖安装官方 `moomoo-api` Python 软件开发包；当前本机验证版本为 `10.7.6708`。
 - 默认连接地址为 `127.0.0.1:11111`；可用 `MOOMOO_OPEND_HOST`、`MOOMOO_OPEND_PORT`、`MOOMOO_OPEND_TIMEOUT_SECONDS` 调整。
-- Dashboard 的“Moomoo OpenD”面板会显示 API 包、SDK 可导入、OpenD 连接、只读就绪、只读行情快照、交易解锁、允许真实下单和禁止操作。
+- `ALPHA_MARKET_DATA_PROVIDER=moomoo_opend` 时，行情数据网关会把只读快照转换成本地价格缓存，用于模拟交易的价格路径。
+- 控制台的“富途牛牛开放网关（只读）”面板会显示接口包、软件开发包可导入、开放网关连接、只读就绪、只读行情快照、交易解锁、允许真实下单和禁止操作。
 - 该探测层只用于确认本机环境和只读行情是否可用；当前不会创建交易上下文、不会解锁交易、不会提交真实资金订单。

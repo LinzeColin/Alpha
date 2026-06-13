@@ -46,12 +46,13 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - Approval queue now uses SQLite by default at `runtime/approval_queue.sqlite3`; `.json` paths remain supported for compatibility and one-time sibling migration.
 - `/orders/approval-queue`, `/owner/summary`, `/agent/status`, and dashboard state expose approval queue storage status.
 - Market data now flows through `MarketDataGateway`: cache-first, fixture fallback, optional Stooq public delayed CSV refresh, and visible dashboard/API source quality.
+- Market data can now optionally use `ALPHA_MARKET_DATA_PROVIDER=moomoo_opend` to write Moomoo OpenD read-only market snapshots into the local price cache for paper trading; it fails soft to old cache or fixture data and does not create a trade context.
 - `/market-data/status`, `/market-data/refresh`, and dashboard "行情数据" expose provider, source kind, data quality, latest date, latest prices, cache age, and refresh status.
 - `/ops/health`, `/ops/backup`, `scripts/check_alpha_ops.sh`, and dashboard "运行健康" now expose 30-day E-Safe operational evidence: loop cadence, SQLite queue durability, paper portfolio state, Moomoo OpenD read-only probe status, market data quality, process/log status, latest backup, and live-order safety boundary.
 - Runtime backups are written locally under `runtime/backups/alpha_state_*/` and include a SQLite approval queue snapshot, paper portfolio, available market-data cache, PID, log tail, and manifest.
 - Dashboard startup now also starts the app-managed `AutoOpsMaintenanceRuntime`: health sampling every 300 seconds, stale-backup creation, backup rotation, and JSONL health history.
 - `/ops/maintenance/status` exposes automatic maintenance state, run count, backup count, next maintenance time, history file, retention config, and Chinese display fields.
-- `/readiness/paper-trading`, dashboard "交付就绪", and `python -m backend.app.services.paper_readiness` now expose a 6月20日 paper-trading delivery readiness report covering automatic loop, strategy iteration, paper execution, OrderIntent, risk checks, approval queue, broker-ready ticket, five-minute freshness, local App entry, and real-order boundary.
+- `/readiness/paper-trading`, dashboard "交付就绪", and `python -m backend.app.services.paper_readiness` now expose a 6月15日 paper-trading delivery readiness report, plus a 6月17日网页与本地应用入口 target, covering automatic loop, strategy iteration, paper execution, OrderIntent, risk checks, approval queue, broker-ready ticket, five-minute freshness, local App entry, and real-order boundary.
 - `/readiness/soak`, dashboard "长运行预检", `scripts/check_alpha_soak.sh`, and `python -m backend.app.services.soak_readiness` now expose a 30-day local soak start-gate report covering App entries, paper readiness, 5-minute loop, fresh broker-ready tickets, ops health, automatic maintenance, recovery backup, and live-order boundary.
 - Owner-facing API/status surfaces now include non-breaking Chinese display fields such as `status_zh`, `reason_zh`, `enabled_zh`, and `task_running_zh`; raw machine fields remain stable.
 - Chinese display coverage includes FastAPI/OpenAPI metadata, owner summary actions, approval queue storage/freshness/actionability, HTTP error detail, and Moomoo OpenD next-step guidance.
@@ -70,7 +71,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - Use one app-managed paper loop; do not start a second external agent process beside the dashboard.
 - User-visible runtime surfaces must display Chinese; API field names, enum values, ticket IDs, paths, and symbols stay machine-readable and stable.
 - Owner-facing API errors must return a stable machine `code` plus Chinese `message_zh`.
-- Paper-trading delivery readiness is a separate gate from ops health; do not claim June 20 readiness unless `/readiness/paper-trading` has no failing items under the app-managed runtime.
+- Paper-trading delivery readiness is a separate gate from ops health; do not claim June 15 readiness unless `/readiness/paper-trading` has no failing items under the app-managed runtime.
 - Long-run soak readiness is a start gate, not proof that Alpha has already completed a 30-day run.
 - If a raw machine value must be shown to the owner, show it with a Chinese label or adjacent Chinese explanation.
 - Paper execution adapters may be broker-like, but committed defaults must stay local sandbox or broker paper/read-only only.
@@ -79,6 +80,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - Raw JSON/CSV broker-ticket outputs remain available for automation and manual broker import, but the default dashboard owner view must be Chinese HTML.
 - Moomoo OpenD integration starts as a read-only environment probe only; it must not create an unlocked trade context or call any real order method.
 - Moomoo quote snapshot may use a read-only quote context only; no trade context, trade unlock, credentials, or real order method may be introduced on that path.
+- Moomoo quote cache may feed paper-trading market data only through read-only quote snapshots; it must not create a trade context, unlock trading, or submit real or paper broker orders.
 
 ## Files To Read First
 
@@ -255,6 +257,13 @@ Current full regression -> `.venv/bin/python -m pytest tests -q` -> 61 passed
 Current diff hygiene -> `git diff --check` -> passed
 Current runtime readiness -> `/readiness/paper-trading` returned overall_status_zh=就绪 pass/warn/fail=10/0/0; `/readiness/soak` and `scripts/check_alpha_soak.sh --json` returned overall_status_zh=可观察运行 pass/warn/fail=7/1/0
 Current dashboard marker verification -> `/dashboard` contains 智能体运行状态, 模拟交易状态（模拟交易执行层）, Moomoo 行情, SDK 可导入, 只读行情快照, 长运行预检, 目标周期, and 预检项
+Moomoo quote cache target tests -> `.venv/bin/python -m pytest tests/test_market_data_gateway.py tests/test_moomoo_broker_probe.py tests/test_dashboard_state.py tests/test_paper_readiness.py -q` -> 23 passed
+Moomoo quote cache full regression -> `.venv/bin/python -m pytest tests -q` -> 64 passed
+Moomoo quote cache direct runtime verification -> `ALPHA_MARKET_DATA_PROVIDER=moomoo_opend .venv/bin/python ... MarketDataGateway.resolve_price_path(force_refresh=True)` returned provider=moomoo_opend, source_kind=broker_quote_cache, data_quality=fresh, real_market_data=True, latest_prices for SPY/QQQ/TLT, refresh_succeeded=True
+Moomoo quote cache safety scan -> no new `place_order`, `Open*TradeContext`, trade unlock, or live-order enabled path; only docs/tests/false-boundary fields matched
+Current Moomoo local verification -> sandboxed socket checks returned PermissionError, but escalated read-only probe returned status=ready_read_only, package moomoo-api=10.7.6708, opend_connected=true, read_only_ready=true, trade_context_enabled=false, live_order_submission_enabled=false
+Current Moomoo quote refresh verification -> escalated read-only `MarketDataGateway.resolve_price_path(force_refresh=True)` returned provider=moomoo_opend, source_kind=broker_quote_cache, data_quality=fresh, real_market_data=True, quote_row_count=3, refresh_succeeded=true, trade_context_enabled=false, live_order_submission_enabled=false
+Current dashboard startup verification -> escalated `ALPHA_MARKET_DATA_PROVIDER=moomoo_opend scripts/start_alpha_dashboard.sh` reported `/health` success, but the background uvicorn PID was gone before follow-up curl; current Codex tool environment appears to reclaim background servers, so long-run `.app` verification must be run from a normal macOS session
 ```
 
 ## Unresolved Risks
@@ -263,6 +272,7 @@ Current dashboard marker verification -> `/dashboard` contains 智能体运行�
 - This machine's current Python SSL trust chain blocked live Stooq refresh during validation; do not disable SSL verification by default.
 - External broker paper API integration is not connected yet; local sandbox paper adapter abstraction, Moomoo OpenD read-only probe, and manual broker-ready JSON/CSV/Chinese HTML ticket export now exist.
 - Moomoo OpenD is installed and listening on `127.0.0.1:11111`; Codex's sandboxed socket checks may be blocked. Project `.venv` now has official `moomoo-api` 10.7.6708 installed and Alpha can fetch read-only quote snapshots, but account/trade/paper broker contexts are still intentionally not integrated.
+- Moomoo quote cache is optional via `ALPHA_MARKET_DATA_PROVIDER=moomoo_opend`; default config still uses cache/fixture fallback for portability.
 - `/readiness/paper-trading` and `python -m backend.app.services.paper_readiness` now exist; direct CLI evidence can still be `不可交付` without an app-managed loop snapshot, while the foreground FastAPI runtime verified 10/10 readiness with fresh loop evidence.
 - `/readiness/soak` now exists; direct CLI without a running app fails closed, while the running FastAPI app reports `可观察运行` with no failing soak items and one ops-health关注项. This is a start gate, not proof of a completed 30-day run.
 - Dashboard is local MVP only.
@@ -274,4 +284,4 @@ Current dashboard marker verification -> `/dashboard` contains 智能体运行�
 
 ## Next Step
 
-Authenticate GitHub CLI/HTTPS push or continue connector-based sync, then decide whether read-only Moomoo quote snapshots should feed `MarketDataGateway`, run a normal macOS `.app` long-run soak using `/readiness/soak` as the start gate, and only consider account read-only probes after explicit owner approval.
+Push the current Moomoo quote-cache and Chinese dashboard changes, then run a normal macOS `.app` long-run soak outside the Codex tool sandbox using `/readiness/soak` as the start gate; only consider account read-only probes after explicit owner approval.

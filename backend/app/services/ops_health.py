@@ -311,14 +311,14 @@ def _check_paper_broker_boundary(paper_state_path: Path) -> dict:
 
 def _check_moomoo_read_only_probe(status: dict) -> dict:
     if status.get("live_order_submission_enabled") or status.get("trade_context_enabled") or status.get("supports_real_broker_place_order"):
-        return _check("moomoo_read_only_probe", "Moomoo OpenD 只读探测", "fail", "Moomoo 探测层出现真实交易能力，必须立即停用。", status)
+        return _check("moomoo_read_only_probe", "富途牛牛开放网关只读探测", "fail", "富途牛牛探测层出现真实交易能力，必须立即停用。", status)
     if status.get("read_only_ready"):
-        return _check("moomoo_read_only_probe", "Moomoo OpenD 只读探测", "pass", "Moomoo API 包和本机 OpenD 端口可用，且保持只读。", status)
+        return _check("moomoo_read_only_probe", "富途牛牛开放网关只读探测", "pass", "富途牛牛接口包和本机开放网关端口可用，且保持只读。", status)
     return _check(
         "moomoo_read_only_probe",
-        "Moomoo OpenD 只读探测",
+        "富途牛牛开放网关只读探测",
         "warn",
-        status.get("message_zh") or "Moomoo OpenD 只读探测未就绪；本地模拟交易仍可继续。",
+        status.get("message_zh") or "富途牛牛开放网关只读探测未就绪；本地模拟交易仍可继续。",
         status,
     )
 

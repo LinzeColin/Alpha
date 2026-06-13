@@ -1,83 +1,84 @@
-# Alpha Development Rules
+# Alpha 开发规则
 
-## Core Goal
+## 核心目标
 
-Build Alpha as a local-first personal quant agent workspace. The system may automate research, backtesting, paper trading, risk checks, approval queues, broker-ready order tickets, audit logging, and dashboard status.
+Alpha 是本地优先的个人量化智能体工作台。系统可以自动完成研究、回测、模拟交易、风险检查、审批队列、经纪商就绪订单工单、审计日志和控制台状态展示。
 
-Committed code must not implement or enable unattended real-money order submission. Real-money execution must remain outside the autonomous agent path and require owner-side broker confirmation.
+提交到仓库的代码不得实现或启用无人值守真实资金下单。真实资金执行必须停留在自主智能体路径之外，并且需要所有者在经纪商侧确认。
 
-## GitHub Continuity Rule
+## GitHub 连续性规则
 
-The authoritative project repository is:
+权威项目仓库是：
 
 ```text
 https://github.com/LinzeColin/Alpha
 ```
 
-All source code, project rules, docs, Task Packs, handoff notes, decision logs, test evidence, and delivery manifests must be committed and pushed to GitHub after every meaningful run.
+每次有意义的开发 run 结束后，源代码、项目规则、文档、Task Pack、交接说明、决策日志、测试证据和交付清单都必须提交并推送到 GitHub。
 
-Local-only state is not authoritative except:
+以下本地状态不作为权威交付来源：
 
-- uncommitted secrets and `.env` files
-- broker credentials and account identifiers
-- machine-specific cache files
-- runtime queues, logs, and local databases
+- 未提交的 secrets 和 `.env` 文件
+- 经纪商凭据和账户标识
+- 机器专属缓存文件
+- 运行时队列、日志和本地数据库
 
-## Safety Boundaries
+## 安全边界
 
-- `live_trading.enabled` must remain `false` in committed default config.
-- No committed code may directly call a real broker `place_order` endpoint.
-- No agent may receive raw broker trading credentials.
-- Real broker integration work is limited to read-only probes, broker paper APIs, or owner-confirmed order tickets.
-- All live order candidates must be represented as `OrderIntent` and `BrokerReadyOrderTicket`.
-- All live candidates must pass policy, risk, audit, kill-switch, idempotency, and freshness gates before entering the approval queue.
-- If any policy or audit dependency fails, the system must reject or pause, not continue.
+- 已提交默认配置中的 `live_trading.enabled` 必须保持 `false`。
+- 已提交代码不得直接调用真实经纪商 `place_order` 端点。
+- 智能体不得接收原始经纪商交易凭据。
+- 真实经纪商集成只允许只读探测、经纪商模拟接口或所有者确认的订单工单。
+- 所有真实交易候选必须表示为 `OrderIntent` 和 `BrokerReadyOrderTicket`。
+- 所有真实交易候选进入审批队列前，必须通过策略、风控、审计、总开关、幂等性和时效性检查。
+- 任一策略或审计依赖失败时，系统必须拒绝或暂停，不能继续执行。
 
 ## 中文显示规则
 
 - 用户可见的网页控制台、按钮、表格、状态、错误提示、本地命令摘要和 App 启动/停止输出必须默认中文显示。
-- API 字段名、内部枚举、工单号、文件路径、股票代码和协议型机器值可以保持英文/ASCII，以保证测试、MCP、后续券商适配器和自动化流程稳定。
-- 新增用户界面或 CLI 输出时，必须为状态、风险原因、执行层名称、策略名称、行情状态和审批操作提供中文展示映射。
-- 若必须暴露机器字段给用户，界面应同时显示中文标签或中文解释，不得只展示 raw enum。
+- 用户可见的富途牛牛开放网关、行情、审批、工单和策略校验提示必须使用中文展示；技术包名、环境变量、路径和代码标识可保留原文。
+- API 字段名、内部枚举、工单号、文件路径、股票代码和协议型机器值可以保持英文/ASCII，以保证测试、MCP、后续经纪商适配器和自动化流程稳定。
+- 新增用户界面或命令行输出时，必须为状态、风险原因、执行层名称、策略名称、行情状态和审批操作提供中文展示映射。
+- 若必须向用户暴露机器字段，界面必须同时显示中文标签或中文解释，不得只展示 raw enum。
 
-## Required Handoff Discipline
+## 交接纪律
 
-Update `HANDOFF.md` when goals, state, decisions, validation, or next steps change. Update `docs/decision_log.md` for durable product or safety decisions.
+目标、状态、决策、验证结果或下一步发生变化时，更新 `HANDOFF.md`。产品或安全类持久决策更新 `docs/decision_log.md`。
 
-Every implementation run should report:
+每次实现 run 结束时报告：
 
-- changed files
-- commands run
-- test results
-- remaining risks
-- recommended next step
+- 修改文件
+- 运行命令
+- 测试结果
+- 剩余风险
+- 推荐下一步
 
-## Default Verification
+## 默认验证
 
-Use the smallest useful checks first:
+优先运行最小有用检查：
 
 ```bash
 python -m pytest tests -q
 python -m backend.app.services.paper_trading_loop --once
 ```
 
-Run the API locally when touching routes or dashboard behavior:
+修改路由或控制台行为时，本地运行 API：
 
 ```bash
 uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Then inspect:
+然后检查：
 
 ```text
 http://127.0.0.1:8000/dashboard
 http://127.0.0.1:8000/health
 ```
 
-## Out Of Scope Unless Explicitly Re-approved
+## 除非重新明确批准，否则不在范围内
 
-- autonomous real-money broker order submission
-- leverage, margin, CFDs, options, short selling
-- crypto withdrawals or cross-exchange transfers
-- third-party financial advice or public buy/sell signals
-- managing external capital
+- 自主真实资金经纪商下单
+- 杠杆、保证金、差价合约、期权、卖空
+- 加密货币提现或跨交易所转账
+- 第三方金融建议或公开买卖信号
+- 管理外部资金

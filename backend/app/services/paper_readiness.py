@@ -15,6 +15,10 @@ from backend.app.services.strategy_journal import summarize_strategy_tournament_
 
 DEFAULT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_REFRESH_INTERVAL_SECONDS = 300
+PAPER_DELIVERY_DEADLINE = "2026-06-15"
+PAPER_DELIVERY_DEADLINE_ZH = "2026年6月15日"
+DASHBOARD_APP_DEADLINE = "2026-06-17"
+DASHBOARD_APP_DEADLINE_ZH = "2026年6月17日"
 
 
 def utc_now() -> datetime:
@@ -80,8 +84,10 @@ def collect_paper_trading_readiness(
         "overall_status": overall_status,
         "overall_status_zh": _overall_status_zh(overall_status),
         "generated_at": utc_now_iso(),
-        "deadline": "2026-06-20",
-        "deadline_zh": "2026年6月20日",
+        "deadline": PAPER_DELIVERY_DEADLINE,
+        "deadline_zh": PAPER_DELIVERY_DEADLINE_ZH,
+        "dashboard_app_deadline": DASHBOARD_APP_DEADLINE,
+        "dashboard_app_deadline_zh": DASHBOARD_APP_DEADLINE_ZH,
         "check_count": len(checks),
         "pass_count": sum(1 for item in checks if item["status"] == "pass"),
         "warn_count": sum(1 for item in checks if item["status"] == "warn"),
@@ -328,7 +334,7 @@ def _summary_zh(checks: list[dict]) -> str:
     fail_count = sum(1 for item in checks if item["status"] == "fail")
     warn_count = sum(1 for item in checks if item["status"] == "warn")
     if fail_count:
-        return f"仍有 {fail_count} 个失败项，不能声明 6月20日模拟交易交付就绪。"
+        return f"仍有 {fail_count} 个失败项，不能声明 6月15日模拟交易交付就绪。"
     if warn_count:
         return f"核心自动链路可运行，但仍有 {warn_count} 个关注项需要补强后再声明成熟交付。"
     return "自动模拟交易、候选订单、风控、审批队列、工单、5分钟时效和本地 App 入口均通过就绪检查。"
