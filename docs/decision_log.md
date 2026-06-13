@@ -23,3 +23,11 @@ Decision: The order-intent loop has a default refresh cadence of 300 seconds.
 Reason: The user requires timely candidate updates while still keeping risk checks and review gates explicit.
 
 Consequence: `paper_trading_loop.run_forever()` remains available for CLI use, and the FastAPI dashboard lifecycle starts an app-managed automatic paper loop that runs immediately and then sleeps for the configured interval.
+
+## 2026-06-13: Ticket Freshness Is Actionability
+
+Decision: Only unexpired `pending_owner_approval` tickets count as owner-actionable live candidates.
+
+Reason: Broker-ready tickets can become stale; a candidate older than its TTL should remain auditable but should not be treated as executable.
+
+Consequence: `ApprovalQueue.summary()` separates fresh pending, expired pending, blocked, and total tickets. The dashboard shows actionability, freshness, and seconds until expiry.
