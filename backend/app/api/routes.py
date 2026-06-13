@@ -36,12 +36,13 @@ def health() -> dict:
 @router.get("/owner/summary")
 def owner_summary() -> dict:
     queue = ApprovalQueue(QUEUE_PATH)
-    pending = [item for item in queue.list_tickets() if item.get("status") == "pending_owner_approval"]
+    queue_summary = queue.summary()
     return {
         "system_mode": "research_paper_order_intent_review",
-        "strategies": {"research": 1, "paper": 1, "live_order_review": len(pending)},
-        "required_owner_actions": ["review_order_tickets"] if pending else [],
-        "pending_order_tickets": len(pending),
+        "strategies": {"research": 1, "paper": 1, "live_order_review": queue_summary["fresh_pending_count"]},
+        "required_owner_actions": ["review_order_tickets"] if queue_summary["fresh_pending_count"] else [],
+        "pending_order_tickets": queue_summary["fresh_pending_count"],
+        "expired_order_tickets": queue_summary["expired_pending_count"],
     }
 
 
@@ -67,15 +68,18 @@ def paper_run_once() -> dict:
 @router.get("/orders/approval-queue")
 def approval_queue() -> dict:
     queue = ApprovalQueue(QUEUE_PATH)
-    return {"tickets": queue.latest(), "count": len(queue.list_tickets())}
+    summary = queue.summary()
+    return {
+        "tickets": queue.latest_with_freshness(),
+        "count": summary["fresh_pending_count"],
+        "summary": summary,
+    }
 
 
 @router.get("/agent/status")
 def agent_status() -> dict:
     queue = ApprovalQueue(QUEUE_PATH)
-    tickets = queue.list_tickets()
-    pending = [item for item in tickets if item.get("status") == "pending_owner_approval"]
-    latest_ticket = tickets[-1] if tickets else None
+    queue_summary = queue.summary()
     return {
         "agent_id": "paper_trading_loop",
         "status": "ready",
@@ -86,8 +90,10 @@ def agent_status() -> dict:
             "approval_queue",
             "broker_ready_order_ticket",
         ],
-        "pending_tickets": len(pending),
-        "latest_ticket_created_at": latest_ticket.get("created_at") if latest_ticket else None,
+        "pending_tickets": queue_summary["fresh_pending_count"],
+        "expired_tickets": queue_summary["expired_pending_count"],
+        "latest_ticket_created_at": queue_summary["latest_ticket_created_at"],
+        "latest_fresh_ticket_created_at": queue_summary["latest_fresh_ticket_created_at"],
         "loop": AUTO_PAPER_AGENT.snapshot(),
     }
 
@@ -188,6 +194,7 @@ def dashboard() -> str:
     function renderMetrics(data) {
       const portfolio = data.paper_portfolio || {};
       const queue = data.approval_queue || {};
+      const queueSummary = queue.summary || {};
       const health = data.health || {};
       const loop = (data.agent_status && data.agent_status.loop) || {};
       document.getElementById('metrics').innerHTML = [
@@ -195,7 +202,8 @@ def dashboard() -> str:
         metric('Loop', pill(loop.status || 'unknown', loop.error_count ? 'danger' : 'ok')),
         metric('Paper Equity', Number(portfolio.total_equity || 0).toFixed(2)),
         metric('Paper Trades', portfolio.trade_count || 0),
-        metric('Pending Tickets', queue.count || 0),
+        metric('Fresh Tickets', queueSummary.fresh_pending_count || queue.count || 0),
+        metric('Expired Tickets', queueSummary.expired_pending_count || 0),
         metric('Refresh', `${health.refresh_interval_seconds || 300}s`)
       ].join('');
     }
@@ -226,6 +234,8 @@ def dashboard() -> str:
             <tr><th>Last Run</th><td>${loop.last_run_completed_at || 'Not yet'}</td></tr>
             <tr><th>Next Run</th><td>${loop.next_run_at || 'Pending'}</td></tr>
             <tr><th>Latest Ticket</th><td>${agent.latest_ticket_created_at || 'None'}</td></tr>
+            <tr><th>Latest Fresh Ticket</th><td>${agent.latest_fresh_ticket_created_at || 'None'}</td></tr>
+            <tr><th>Expired Tickets</th><td>${agent.expired_tickets || 0}</td></tr>
             <tr><th>Last Result</th><td>${summary.intent_symbol || 'None'} / ${summary.ticket_status || 'None'} / ${summary.paper_order_status || 'None'}</td></tr>
             <tr><th>Errors</th><td>${loop.error_count || 0}${loop.last_error ? ': ' + loop.last_error : ''}</td></tr>
             <tr><th>Capabilities</th><td>${(agent.capabilities || []).join(', ')}</td></tr>
@@ -248,11 +258,13 @@ def dashboard() -> str:
     function renderQueue(queue) {
       const rows = (queue.tickets || []).map(ticket => `
         <tr>
-          <td>${ticket.ticket_id}</td><td>${ticket.status}</td><td>${ticket.broker_payload.symbol}</td>
+          <td>${ticket.ticket_id}</td><td>${ticket.actionability || ticket.status}</td><td>${ticket.broker_payload.symbol}</td>
           <td>${ticket.broker_payload.side}</td><td>${ticket.broker_payload.quantity}</td>
           <td>${ticket.broker_payload.estimated_price}</td><td>${ticket.risk_check.status}</td>
+          <td>${(ticket.freshness && ticket.freshness.status) || 'unknown'}</td>
+          <td>${(ticket.freshness && ticket.freshness.seconds_until_expiry) ?? 'n/a'}</td>
         </tr>`).join('');
-      document.getElementById('queue').innerHTML = `<table><thead><tr><th>Ticket</th><th>Status</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Price</th><th>Risk</th></tr></thead><tbody>${rows || '<tr><td colspan="7" class="muted">No pending tickets</td></tr>'}</tbody></table>`;
+      document.getElementById('queue').innerHTML = `<table><thead><tr><th>Ticket</th><th>Actionability</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Price</th><th>Risk</th><th>Freshness</th><th>Seconds Left</th></tr></thead><tbody>${rows || '<tr><td colspan="9" class="muted">No pending tickets</td></tr>'}</tbody></table>`;
     }
     async function loadState() {
       const response = await fetch('/dashboard/state');
