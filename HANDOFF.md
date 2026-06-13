@@ -218,6 +218,9 @@ Owner-facing Chinese API reinforcement target tests -> .venv/bin/python -m pytes
 Owner-facing Chinese API reinforcement full regression -> .venv/bin/python -m pytest tests -q -> 53 passed
 Owner-facing Chinese API reinforcement diff hygiene -> git diff --check -> passed
 Owner-facing Chinese API reinforcement safety scan -> no new real broker place_order/unlock_trade path; live-order submission remains disabled
+Moomoo local environment recheck -> lsof shows `moomoo_Op` listening on 127.0.0.1:11111; escalated read-only `nc -zv 127.0.0.1 11111` succeeded; sandboxed socket checks may return Operation not permitted
+Moomoo API package recheck -> system `python3 -m pip show moomoo futu-api futu` and `.venv/bin/python -m pip show moomoo futu-api futu` both reported package not found
+Alpha Moomoo probe recheck -> escalated `.venv/bin/python` probe returned status=api_missing, status_zh=API 包未安装, opend_connected=true, package_available=false
 ```
 
 ## Unresolved Risks
@@ -225,7 +228,7 @@ Owner-facing Chinese API reinforcement safety scan -> no new real broker place_o
 - Market data gateway exists, but default mode remains cache/fixture fallback; Stooq refresh is public delayed data and not broker-grade real-time market data.
 - This machine's current Python SSL trust chain blocked live Stooq refresh during validation; do not disable SSL verification by default.
 - External broker paper API integration is not connected yet; local sandbox paper adapter abstraction, Moomoo OpenD read-only probe, and manual broker-ready JSON/CSV/Chinese HTML ticket export now exist.
-- Moomoo OpenD local port is reachable on this machine, but the project `.venv` currently cannot import `moomoo` or `futu`; install the correct API package into `.venv` before building quote/account read-only calls.
+- Moomoo OpenD is installed and listening on `127.0.0.1:11111`; Codex's sandboxed socket checks may be blocked, but an escalated read-only port check succeeded. The project `.venv` still cannot import `moomoo` or `futu`; install the correct API package into `.venv` before building quote/account read-only calls.
 - Dashboard is local MVP only.
 - Approval queue is SQLite-backed locally and automatic backup/rotation now exists; it still needs a normal macOS `.app` long-run soak and multi-process contention hardening before claiming unattended 30-day robustness.
 - The current execution environment may reclaim `nohup` background servers between tool calls; foreground uvicorn verified the app runtime, and the start script now detects post-health-check instability, but final `.app` long-run verification should be done from the user's normal macOS session.
