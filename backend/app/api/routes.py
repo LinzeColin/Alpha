@@ -20,6 +20,7 @@ from backend.app.services.market_data_gateway import MarketDataGateway, MarketDa
 from backend.app.services.moomoo_broker_probe import probe_moomoo_opend
 from backend.app.services.ops_health import collect_ops_health, create_runtime_backup
 from backend.app.services.ops_runtime import AUTO_OPS_MAINTENANCE
+from backend.app.services.paper_readiness import collect_paper_trading_readiness
 from backend.app.services.paper_trading_loop import DEFAULT_REFRESH_INTERVAL_SECONDS, build_default_loop, latest_mark_prices
 from backend.app.services.paper_broker import PaperBroker
 from backend.app.services.paper_performance import summarize_paper_performance_history
@@ -307,6 +308,18 @@ def ops_maintenance_status() -> dict:
     return AUTO_OPS_MAINTENANCE.snapshot()
 
 
+@router.get("/readiness/paper-trading")
+def paper_trading_readiness() -> dict:
+    return collect_paper_trading_readiness(
+        root=ROOT,
+        queue_path=QUEUE_PATH,
+        paper_state_path=PAPER_STATE_PATH,
+        strategy_history_path=STRATEGY_HISTORY_PATH,
+        performance_history_path=PAPER_PERFORMANCE_PATH,
+        loop_snapshot=AUTO_PAPER_AGENT.snapshot(),
+    )
+
+
 @router.get("/dashboard/state")
 def dashboard_state() -> dict:
     return {
@@ -314,6 +327,7 @@ def dashboard_state() -> dict:
         "market_data": market_data_status(),
         "ops_health": ops_health(),
         "ops_maintenance": ops_maintenance_status(),
+        "paper_readiness": paper_trading_readiness(),
         "owner_summary": owner_summary(),
         "agent_status": agent_status(),
         "paper_portfolio": paper_portfolio(),
@@ -388,6 +402,7 @@ def dashboard() -> str:
       <section><h2>Moomoo OpenD</h2><div id="moomooBroker"></div></section>
       <section><h2>行情数据</h2><div id="marketData"></div></section>
       <section><h2>运行健康</h2><div id="opsHealth"></div></section>
+      <section><h2>交付就绪</h2><div id="paperReadiness"></div></section>
     </div>
     <section><h2>策略锦标赛</h2><div id="tournament"></div></section>
     <section><h2>审批队列</h2><div id="queue"></div></section>
@@ -395,6 +410,7 @@ def dashboard() -> str:
   <script>
     const STATUS_TEXT = {
       ready: '就绪',
+      not_ready: '未完全就绪',
       sleeping: '等待下次运行',
       running_cycle: '正在运行周期',
       error_sleeping: '错误后等待',
@@ -578,12 +594,14 @@ def dashboard() -> str:
       const moomoo = data.moomoo_broker_status || {};
       const opsHealth = data.ops_health || {};
       const opsMaintenance = data.ops_maintenance || {};
+      const paperReadiness = data.paper_readiness || {};
       const strategyJournal = data.strategy_journal || {};
       const paperPerformance = data.paper_performance || {};
       document.getElementById('metrics').innerHTML = [
         metric('智能体', pill(displayStatus(agent.status), 'ok')),
         metric('循环', pill(displayStatus(loop.status, '未知'), loop.error_count ? 'danger' : 'ok')),
         metric('运行健康', pill(displayStatus(opsHealth.overall_status, '未知'), opsHealth.fail_count ? 'danger' : (opsHealth.warn_count ? 'warn' : 'ok'))),
+        metric('交付就绪', pill(paperReadiness.overall_status_zh || displayStatus(paperReadiness.overall_status, '未知'), paperReadiness.fail_count ? 'danger' : (paperReadiness.warn_count ? 'warn' : 'ok'))),
         metric('自动维护', pill(displayStatus(opsMaintenance.status, '未知'), opsMaintenance.error_count ? 'danger' : (opsMaintenance.task_running ? 'ok' : 'warn'))),
         metric('行情源', displayMarketDataSource(marketData.source_kind)),
         metric('Moomoo OpenD', pill(moomoo.status_zh || displayStatus(moomoo.status, '未知'), moomoo.read_only_ready ? 'ok' : 'warn')),
@@ -664,6 +682,29 @@ def dashboard() -> str:
           </tbody>
         </table>
         <table><thead><tr><th>检查项</th><th>状态</th><th>说明</th></tr></thead><tbody>${rows || '<tr><td colspan="3" class="muted">暂无健康检查结果</td></tr>'}</tbody></table>
+      `;
+    }
+    function renderPaperReadiness(readiness) {
+      const checks = readiness.checks || [];
+      const rows = checks.map(check => {
+        const kind = check.status === 'fail' ? 'danger' : (check.status === 'warn' ? 'warn' : 'ok');
+        return `<tr><td>${check.title_zh || '未知检查'}</td><td>${pill(check.status_zh || displayStatus(check.status), kind)}</td><td>${check.message_zh || ''}</td></tr>`;
+      }).join('');
+      document.getElementById('paperReadiness').innerHTML = `
+        <div class="metric-grid">
+          ${metric('总体状态', pill(readiness.overall_status_zh || displayStatus(readiness.overall_status), readiness.fail_count ? 'danger' : (readiness.warn_count ? 'warn' : 'ok')))}
+          ${metric('通过', readiness.pass_count || 0)}
+          ${metric('需关注', readiness.warn_count || 0)}
+          ${metric('失败', readiness.fail_count || 0)}
+        </div>
+        <table>
+          <tbody>
+            <tr><th>交付日期</th><td>${readiness.deadline_zh || '2026年6月20日'}</td></tr>
+            <tr><th>结论</th><td>${readiness.summary_zh || '无'}</td></tr>
+            <tr><th>安全边界</th><td>${displayValue(readiness.safety_boundary && readiness.safety_boundary.message_zh)}</td></tr>
+          </tbody>
+        </table>
+        <table><thead><tr><th>交付项</th><th>状态</th><th>证据说明</th></tr></thead><tbody>${rows || '<tr><td colspan="3" class="muted">暂无就绪检查结果</td></tr>'}</tbody></table>
       `;
     }
     function renderOpsMaintenance(opsMaintenance) {
@@ -872,6 +913,7 @@ def dashboard() -> str:
         renderMoomooBroker(data.moomoo_broker_status || {});
         renderMarketData(data.market_data || {});
         renderOpsHealth(data.ops_health || {});
+        renderPaperReadiness(data.paper_readiness || {});
         document.getElementById('opsHealth').insertAdjacentHTML('beforeend', renderOpsMaintenance(data.ops_maintenance || {}));
         renderTournament(data.strategy_tournament || {});
         document.getElementById('tournament').insertAdjacentHTML('beforeend', renderStrategyJournal(data.strategy_journal || {}));

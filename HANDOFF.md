@@ -50,6 +50,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - Runtime backups are written locally under `runtime/backups/alpha_state_*/` and include a SQLite approval queue snapshot, paper portfolio, available market-data cache, PID, log tail, and manifest.
 - Dashboard startup now also starts the app-managed `AutoOpsMaintenanceRuntime`: health sampling every 300 seconds, stale-backup creation, backup rotation, and JSONL health history.
 - `/ops/maintenance/status` exposes automatic maintenance state, run count, backup count, next maintenance time, history file, retention config, and Chinese display fields.
+- `/readiness/paper-trading`, dashboard "交付就绪", and `python -m backend.app.services.paper_readiness` now expose a 6月20日 paper-trading delivery readiness report covering automatic loop, strategy iteration, paper execution, OrderIntent, risk checks, approval queue, broker-ready ticket, five-minute freshness, local App entry, and real-order boundary.
 - Owner-facing API/status surfaces now include non-breaking Chinese display fields such as `status_zh`, `reason_zh`, `enabled_zh`, and `task_running_zh`; raw machine fields remain stable.
 - Chinese display coverage includes FastAPI/OpenAPI metadata, owner summary actions, approval queue storage/freshness/actionability, HTTP error detail, and Moomoo OpenD next-step guidance.
 - `AGENTS.md` now records the product rule: user-visible dashboard, App/script output, statuses, risk reasons, and owner-facing messages must default to Chinese.
@@ -67,6 +68,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - Use one app-managed paper loop; do not start a second external agent process beside the dashboard.
 - User-visible runtime surfaces must display Chinese; API field names, enum values, ticket IDs, paths, and symbols stay machine-readable and stable.
 - Owner-facing API errors must return a stable machine `code` plus Chinese `message_zh`.
+- Paper-trading delivery readiness is a separate gate from ops health; do not claim June 20 readiness unless `/readiness/paper-trading` has no failing items under the app-managed runtime.
 - If a raw machine value must be shown to the owner, show it with a Chinese label or adjacent Chinese explanation.
 - Paper execution adapters may be broker-like, but committed defaults must stay local sandbox or broker paper/read-only only.
 - Dashboard approval actions update local ticket state only; they do not call any real broker order endpoint.
@@ -112,10 +114,12 @@ curl http://127.0.0.1:8000/broker/moomoo/status
 curl http://127.0.0.1:8000/strategy/tournament/history
 curl http://127.0.0.1:8000/ops/health
 curl http://127.0.0.1:8000/ops/maintenance/status
+curl http://127.0.0.1:8000/readiness/paper-trading
 curl http://127.0.0.1:8000/orders/approval-queue/{ticket_id}/broker-ticket
 curl http://127.0.0.1:8000/orders/approval-queue/{ticket_id}/broker-ticket/view
 curl http://127.0.0.1:8000/orders/approval-queue/{ticket_id}/broker-ticket.csv
 scripts/check_alpha_ops.sh --backup
+python -m backend.app.services.paper_readiness
 ```
 
 Latest validation:
@@ -221,6 +225,10 @@ Owner-facing Chinese API reinforcement safety scan -> no new real broker place_o
 Moomoo local environment recheck -> lsof shows `moomoo_Op` listening on 127.0.0.1:11111; escalated read-only `nc -zv 127.0.0.1 11111` succeeded; sandboxed socket checks may return Operation not permitted
 Moomoo API package recheck -> system `python3 -m pip show moomoo futu-api futu` and `.venv/bin/python -m pip show moomoo futu-api futu` both reported package not found
 Alpha Moomoo probe recheck -> escalated `.venv/bin/python` probe returned status=api_missing, status_zh=API 包未安装, opend_connected=true, package_available=false
+Paper readiness target tests -> .venv/bin/python -m pytest tests/test_paper_readiness.py tests/test_dashboard_state.py -q -> 11 passed
+Paper readiness full regression -> .venv/bin/python -m pytest tests -q -> 55 passed
+Paper readiness CLI verification -> .venv/bin/python -m backend.app.services.paper_readiness returned overall_status_zh=不可交付, pass/warn/fail=7/1/2 because no live loop snapshot and no fresh pending ticket in the current runtime state
+Paper readiness safety scan -> no new real broker place_order/unlock_trade path; readiness report states it does not submit real-money orders
 ```
 
 ## Unresolved Risks
@@ -229,6 +237,7 @@ Alpha Moomoo probe recheck -> escalated `.venv/bin/python` probe returned status
 - This machine's current Python SSL trust chain blocked live Stooq refresh during validation; do not disable SSL verification by default.
 - External broker paper API integration is not connected yet; local sandbox paper adapter abstraction, Moomoo OpenD read-only probe, and manual broker-ready JSON/CSV/Chinese HTML ticket export now exist.
 - Moomoo OpenD is installed and listening on `127.0.0.1:11111`; Codex's sandboxed socket checks may be blocked, but an escalated read-only port check succeeded. The project `.venv` still cannot import `moomoo` or `futu`; install the correct API package into `.venv` before building quote/account read-only calls.
+- `/readiness/paper-trading` and `python -m backend.app.services.paper_readiness` now exist; current CLI evidence is `不可交付` until the app-managed loop is running and a fresh pending candidate ticket exists.
 - Dashboard is local MVP only.
 - Approval queue is SQLite-backed locally and automatic backup/rotation now exists; it still needs a normal macOS `.app` long-run soak and multi-process contention hardening before claiming unattended 30-day robustness.
 - The current execution environment may reclaim `nohup` background servers between tool calls; foreground uvicorn verified the app runtime, and the start script now detects post-health-check instability, but final `.app` long-run verification should be done from the user's normal macOS session.

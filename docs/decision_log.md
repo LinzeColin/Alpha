@@ -128,6 +128,14 @@ Reason: “全中文显示”不能只停留在 dashboard HTML；用户从 `/das
 
 Consequence: FastAPI app title/description 改为中文；队列状态、时效性、存储状态和转移结果补 `*_zh`；HTTP 错误 detail 返回 `code` 与 `message_zh`；Moomoo OpenD 探测返回 `next_step_zh`。Raw enum/API key 继续保留给自动化兼容。
 
+## 2026-06-13: Paper Trading Readiness Is A Separate Delivery Gate
+
+Decision: Alpha must expose a dedicated paper-trading delivery readiness report separate from operational health.
+
+Reason: `/ops/health` proves the app is operational; it does not directly answer whether the June 20 paper-trading delivery requirements are satisfied item by item. The owner needs a requirement-level proof surface for automatic paper trading, candidate order generation, risk checks, approval queue, broker-ready tickets, 5-minute freshness, dashboard/app entry, and real-order boundary.
+
+Consequence: `/readiness/paper-trading`, dashboard “交付就绪”, and `python -m backend.app.services.paper_readiness` now produce a Chinese readiness report with 10 checks, pass/warn/fail counts, evidence payloads, and a clear no-real-order safety boundary. Missing app-managed loop evidence or fresh tickets prevents claiming delivery readiness.
+
 ## 2026-06-13: Broker-Ready Ticket Export Is Manual-Only
 
 Decision: 已人工复核且仍在有效期内的候选单可以导出为 JSON/CSV 人工录入工单包，但 Alpha 不调用真实经纪商下单接口。

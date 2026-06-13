@@ -24,6 +24,7 @@ scripts/start_alpha_dashboard.sh
 scripts/stop_alpha_dashboard.sh
 scripts/check_alpha_ops.sh
 scripts/check_alpha_ops.sh --backup
+python -m backend.app.services.paper_readiness
 ```
 
 控制台启动后，FastAPI 应用生命周期会启动自动模拟交易智能体运行时：立即运行一次模拟交易周期，然后每 300 秒刷新一次。
@@ -71,6 +72,7 @@ POST /market-data/refresh
 GET  /ops/health
 POST /ops/backup
 GET  /ops/maintenance/status
+GET  /readiness/paper-trading
 GET  /orders/approval-queue
 GET  /orders/approval-queue/{ticket_id}/broker-ticket
 GET  /orders/approval-queue/{ticket_id}/broker-ticket/view
@@ -97,8 +99,10 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - `GET /ops/health` 汇总自动循环、SQLite 审批队列、模拟组合、模拟执行层边界、Moomoo OpenD 只读探测、行情数据、控制台进程、日志和最近备份状态。
 - `POST /ops/backup` 会在 `runtime/backups/` 下生成一次本地运行状态备份，包含审批队列快照、模拟组合、行情缓存、PID 和日志尾部。
 - `GET /ops/maintenance/status` 显示应用托管自动运行维护：健康采样次数、自动备份次数、下次维护时间、健康历史文件和备份轮转配置。
+- `GET /readiness/paper-trading` 输出 6月20日模拟交易交付就绪报告，逐项验证自动循环、策略迭代、模拟成交、OrderIntent、风控、审批队列、broker-ready 工单、5分钟时效、本地 App 入口和真实下单边界。
 - `scripts/check_alpha_ops.sh` 输出中文健康检查摘要；加 `--json` 可输出机器 JSON。
 - `scripts/check_alpha_ops.sh --backup` 可在终端生成一次本地运行状态备份。
+- `python -m backend.app.services.paper_readiness` 输出中文交付就绪摘要；加 `--json` 可查看完整机器证据。
 - 控制台启动后会自动启动运行维护：默认每 300 秒采样一次健康状态，默认每天自动备份一次，并保留最近 30 份备份。
 - 健康检查和备份只覆盖模拟交易与工单状态，不会提交真实资金订单。
 

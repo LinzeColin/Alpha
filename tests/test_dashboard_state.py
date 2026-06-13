@@ -48,6 +48,9 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
     assert state["ops_health"]["check_count"] >= 1
     assert state["ops_maintenance"]["status"] in {"stopped", "maintenance_sleeping", "running_maintenance", "starting"}
     assert state["ops_maintenance"]["backup_interval_seconds"] > 0
+    assert state["paper_readiness"]["deadline"] == "2026-06-20"
+    assert state["paper_readiness"]["check_count"] == 10
+    assert state["paper_readiness"]["safety_boundary"]["live_order_submission_enabled"] is False
     assert state["agent_status"]["status"] == "ready"
     assert state["paper_portfolio"]["trade_count"] == 1
     assert state["paper_performance"]["status"] == "ready"
@@ -207,6 +210,9 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "禁止操作" in html
     assert "行情数据" in html
     assert "运行健康" in html
+    assert "交付就绪" in html
+    assert "交付日期" in html
+    assert "交付项" in html
     assert "刷新公共行情" in html
     assert "生成运行备份" in html
     assert "自动维护" in html
