@@ -1,0 +1,26 @@
+diff --git a/tests/test_agent_runtime.py b/tests/test_agent_runtime.py
+index 48843d2..fbe53e0 100644
+--- a/tests/test_agent_runtime.py
++++ b/tests/test_agent_runtime.py
+@@ -12,8 +12,8 @@ class FakePaperLoop:
+             "risk_check": {"status": "approved_for_owner_review"},
+             "approval_queue": {"ticket": {"status": "pending_owner_approval"}},
+             "paper_order": {"status": "filled"},
+-            "broker_paper_order": {"status": "filled", "broker_order_id": "paper_123"},
+-            "paper_portfolio": {"trade_count": 1, "total_equity": 10000.0},
++            "broker_paper_order": {"status": "filled", "broker_order_id": "paper_123", "execution_model_zh": "固定佣金与滑点模型", "commission": 1.0, "slippage_bps": 5.0},
++            "paper_portfolio": {"trade_count": 1, "total_equity": 9998.95, "total_commission": 1.0},
+         }
+ 
+ 
+@@ -44,6 +44,10 @@ def test_auto_paper_agent_runtime_runs_immediate_cycle_and_stops():
+     assert running["last_result_summary"]["broker_paper_order_status_zh"] == "模拟成交"
+     assert running["last_result_summary"]["ticket_status_zh"] == "待人工确认"
+     assert running["last_result_summary"]["broker_paper_order_id"] == "paper_123"
++    assert running["last_result_summary"]["broker_paper_execution_model_zh"] == "固定佣金与滑点模型"
++    assert running["last_result_summary"]["broker_paper_commission"] == 1.0
++    assert running["last_result_summary"]["broker_paper_slippage_bps"] == 5.0
++    assert running["last_result_summary"]["paper_total_commission"] == 1.0
+     assert stopped["status"] == "stopped"
+     assert stopped["status_zh"] == "已停止"
+     assert stopped["task_running"] is False
