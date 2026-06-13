@@ -12,6 +12,7 @@ from backend.app.services.policy import GovernorPolicy
 from backend.app.services.live_broker import FailClosedLiveBroker, LiveOrderIntent
 from backend.app.services.market_data_gateway import MarketDataGateway, MarketDataSnapshot
 from backend.app.services.ops_health import collect_ops_health, create_runtime_backup
+from backend.app.services.ops_runtime import AUTO_OPS_MAINTENANCE
 from backend.app.services.paper_trading_loop import DEFAULT_REFRESH_INTERVAL_SECONDS, build_default_loop, latest_mark_prices
 from backend.app.services.paper_broker import PaperBroker
 from backend.app.services.strategy_iteration import run_strategy_tournament
@@ -32,9 +33,13 @@ LOG_PATH = ROOT / "runtime" / "alpha_dashboard.log"
 def health() -> dict:
     return {
         "status": "ok",
+        "status_zh": "正常",
         "mode": "research_paper_order_intent_review",
+        "mode_zh": "研究、模拟交易与候选订单人工复核模式",
         "live_trading_enabled": False,
+        "live_trading_enabled_zh": "否",
         "kill_switch_active": False,
+        "kill_switch_active_zh": "否",
         "refresh_interval_seconds": DEFAULT_REFRESH_INTERVAL_SECONDS,
     }
 
@@ -222,7 +227,13 @@ def ops_backup() -> dict:
         log_path=LOG_PATH,
     )
     backup["health_after_backup"] = ops_health()
+    backup["maintenance"] = AUTO_OPS_MAINTENANCE.snapshot()
     return backup
+
+
+@router.get("/ops/maintenance/status")
+def ops_maintenance_status() -> dict:
+    return AUTO_OPS_MAINTENANCE.snapshot()
 
 
 @router.get("/dashboard/state")
@@ -231,6 +242,7 @@ def dashboard_state() -> dict:
         "health": health(),
         "market_data": market_data_status(),
         "ops_health": ops_health(),
+        "ops_maintenance": ops_maintenance_status(),
         "owner_summary": owner_summary(),
         "agent_status": agent_status(),
         "paper_portfolio": paper_portfolio(),
@@ -261,7 +273,7 @@ def dashboard() -> str:
     button.secondary { background: #fff; color: #1d1f21; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th, td { padding: 9px 8px; border-bottom: 1px solid #eceee8; text-align: left; vertical-align: top; }
-    th { color: #5c6258; font-size: 12px; text-transform: uppercase; letter-spacing: 0; }
+    th { color: #5c6258; font-size: 12px; letter-spacing: 0; }
     pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.45; margin: 0; }
     .status { font-size: 13px; color: #555; }
     .metric-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
@@ -342,6 +354,10 @@ def dashboard() -> str:
       pass: '通过',
       warn: '需关注',
       fail: '失败',
+      pruned: '已轮转',
+      running_maintenance: '正在维护',
+      maintenance_sleeping: '等待下次维护',
+      maintenance_error_sleeping: '维护错误后等待',
       unknown: '未知'
     };
     const CAPABILITY_TEXT = {
@@ -473,10 +489,12 @@ def dashboard() -> str:
       const loop = agent.loop || {};
       const marketData = data.market_data || {};
       const opsHealth = data.ops_health || {};
+      const opsMaintenance = data.ops_maintenance || {};
       document.getElementById('metrics').innerHTML = [
         metric('智能体', pill(displayStatus(agent.status), 'ok')),
         metric('循环', pill(displayStatus(loop.status, '未知'), loop.error_count ? 'danger' : 'ok')),
         metric('运行健康', pill(displayStatus(opsHealth.overall_status, '未知'), opsHealth.fail_count ? 'danger' : (opsHealth.warn_count ? 'warn' : 'ok'))),
+        metric('自动维护', pill(displayStatus(opsMaintenance.status, '未知'), opsMaintenance.error_count ? 'danger' : (opsMaintenance.task_running ? 'ok' : 'warn'))),
         metric('行情源', displayMarketDataSource(marketData.source_kind)),
         metric('行情质量', pill(displayDataQuality(marketData.data_quality), marketData.real_market_data ? 'ok' : 'warn')),
         metric('最新行情日', displayValue(marketData.latest_date)),
@@ -524,6 +542,29 @@ def dashboard() -> str:
           </tbody>
         </table>
         <table><thead><tr><th>检查项</th><th>状态</th><th>说明</th></tr></thead><tbody>${rows || '<tr><td colspan="3" class="muted">暂无健康检查结果</td></tr>'}</tbody></table>
+      `;
+    }
+    function renderOpsMaintenance(opsMaintenance) {
+      const summary = opsMaintenance.last_result_summary || {};
+      const kind = opsMaintenance.error_count ? 'danger' : (opsMaintenance.task_running ? 'ok' : 'warn');
+      return `
+        <table>
+          <tbody>
+            <tr><th>自动维护</th><td>${pill(displayStatus(opsMaintenance.status, '未知'), kind)}</td></tr>
+            <tr><th>运行次数</th><td>${opsMaintenance.run_count || 0}</td></tr>
+            <tr><th>自动备份次数</th><td>${opsMaintenance.backup_count || 0}</td></tr>
+            <tr><th>健康采样间隔</th><td>${opsMaintenance.interval_seconds || 0} 秒</td></tr>
+            <tr><th>备份间隔</th><td>${opsMaintenance.backup_interval_seconds || 0} 秒</td></tr>
+            <tr><th>备份保留数</th><td>${opsMaintenance.max_backup_count || 0}</td></tr>
+            <tr><th>上次维护</th><td>${displayValue(opsMaintenance.last_run_completed_at)}</td></tr>
+            <tr><th>下次维护</th><td>${displayValue(opsMaintenance.next_run_at)}</td></tr>
+            <tr><th>健康历史</th><td>${displayValue(opsMaintenance.history_path)}</td></tr>
+            <tr><th>备份目录</th><td>${displayValue(opsMaintenance.backup_dir)}</td></tr>
+            <tr><th>最近自动备份</th><td>${displayValue(summary.backup_path)}</td></tr>
+            <tr><th>轮转状态</th><td>${displayStatus(summary.rotation_status, '无')}</td></tr>
+            <tr><th>维护错误</th><td>${opsMaintenance.error_count || 0}${opsMaintenance.last_error ? '：' + displayReason(opsMaintenance.last_error) : ''}</td></tr>
+          </tbody>
+        </table>
       `;
     }
     function renderMarketData(marketData) {
@@ -650,6 +691,7 @@ def dashboard() -> str:
         renderBroker(data.paper_broker_status || {});
         renderMarketData(data.market_data || {});
         renderOpsHealth(data.ops_health || {});
+        document.getElementById('opsHealth').insertAdjacentHTML('beforeend', renderOpsMaintenance(data.ops_maintenance || {}));
         renderTournament(data.strategy_tournament || {});
         renderQueue(data.approval_queue || {});
         document.getElementById('lastUpdated').textContent = '最近更新：' + new Date().toLocaleString('zh-CN');

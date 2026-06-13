@@ -18,6 +18,8 @@ from backend.app.services.paper_broker import PaperBroker
 DEFAULT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_MAX_LOOP_LAG_SECONDS = 420
 DEFAULT_MAX_BACKUP_AGE_SECONDS = 86_400
+DEFAULT_MAX_BACKUP_COUNT = 30
+DEFAULT_MAX_HISTORY_ROWS = 10_000
 
 
 def utc_now() -> datetime:
@@ -102,7 +104,7 @@ def create_runtime_backup(
     log_path = Path(log_path) if log_path else root / "runtime" / "alpha_dashboard.log"
     backup_root = Path(output_dir) if output_dir else root / "runtime" / "backups"
     stamp = utc_now().strftime("%Y%m%dT%H%M%SZ")
-    backup_dir = backup_root / f"alpha_state_{stamp}"
+    backup_dir = _unique_backup_dir(backup_root / f"alpha_state_{stamp}")
     backup_dir.mkdir(parents=True, exist_ok=False)
 
     copied_files: list[dict] = []
@@ -137,6 +139,74 @@ def create_runtime_backup(
     manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False, sort_keys=True), encoding="utf-8")
     manifest["manifest_path"] = str(manifest_path)
     return manifest
+
+
+def append_ops_health_history(
+    health: dict,
+    *,
+    history_path: str | Path,
+    maintenance: dict | None = None,
+    max_rows: int = DEFAULT_MAX_HISTORY_ROWS,
+) -> dict:
+    path = Path(history_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        "generated_at": health.get("generated_at") or utc_now_iso(),
+        "overall_status": health.get("overall_status"),
+        "overall_status_zh": health.get("overall_status_zh"),
+        "pass_count": health.get("pass_count", 0),
+        "warn_count": health.get("warn_count", 0),
+        "fail_count": health.get("fail_count", 0),
+        "checks": {
+            check.get("id", "unknown"): check.get("status", "unknown")
+            for check in health.get("checks", [])
+        },
+        "latest_backup_path": (health.get("latest_backup") or {}).get("backup_path"),
+        "maintenance": maintenance or {},
+    }
+    rows = []
+    if path.exists():
+        rows = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    rows.append(json.dumps(record, ensure_ascii=False, sort_keys=True))
+    if max_rows > 0:
+        rows = rows[-max_rows:]
+    path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    return {
+        "status": "written",
+        "path": str(path),
+        "row_count": len(rows),
+        "latest_record": record,
+    }
+
+
+def prune_runtime_backups(
+    *,
+    backup_root: str | Path,
+    max_backup_count: int = DEFAULT_MAX_BACKUP_COUNT,
+) -> dict:
+    root = Path(backup_root)
+    if max_backup_count <= 0:
+        max_backup_count = DEFAULT_MAX_BACKUP_COUNT
+    if not root.exists():
+        return {"status": "unchanged", "backup_root": str(root), "kept_count": 0, "deleted_count": 0, "deleted_paths": []}
+    backups = sorted(
+        [path for path in root.glob("alpha_state_*") if path.is_dir()],
+        key=lambda item: item.stat().st_mtime,
+        reverse=True,
+    )
+    stale = backups[max_backup_count:]
+    deleted_paths = []
+    for path in stale:
+        shutil.rmtree(path)
+        deleted_paths.append(str(path))
+    return {
+        "status": "pruned" if deleted_paths else "unchanged",
+        "backup_root": str(root),
+        "kept_count": min(len(backups), max_backup_count),
+        "deleted_count": len(deleted_paths),
+        "deleted_paths": deleted_paths,
+        "max_backup_count": max_backup_count,
+    }
 
 
 def format_ops_health_summary_zh(health: dict) -> str:
@@ -307,6 +377,16 @@ def _copy_runtime_file(source: Path, target: Path, *, copied_files: list[dict], 
     else:
         shutil.copy2(source, target)
     copied_files.append({"source": str(source), "target": str(target), "size_bytes": target.stat().st_size})
+
+
+def _unique_backup_dir(base: Path) -> Path:
+    if not base.exists():
+        return base
+    for index in range(1, 1000):
+        candidate = base.with_name(f"{base.name}_{index:03d}")
+        if not candidate.exists():
+            return candidate
+    raise FileExistsError(f"could not allocate unique backup directory under {base.parent}")
 
 
 def _write_log_tail(source: Path, target: Path, *, copied_files: list[dict], missing_files: list[str], max_lines: int = 500) -> None:

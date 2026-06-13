@@ -37,8 +37,13 @@ def test_auto_paper_agent_runtime_runs_immediate_cycle_and_stops():
     assert running["run_count"] == 1
     assert running["error_count"] == 0
     assert running["status"] == "sleeping"
+    assert running["status_zh"] == "等待下次运行"
+    assert running["task_running_zh"] == "是"
     assert running["last_result_summary"]["intent_symbol"] == "TLT"
     assert running["last_result_summary"]["broker_paper_order_status"] == "filled"
+    assert running["last_result_summary"]["broker_paper_order_status_zh"] == "模拟成交"
+    assert running["last_result_summary"]["ticket_status_zh"] == "待人工确认"
     assert running["last_result_summary"]["broker_paper_order_id"] == "paper_123"
     assert stopped["status"] == "stopped"
+    assert stopped["status_zh"] == "已停止"
     assert stopped["task_running"] is False

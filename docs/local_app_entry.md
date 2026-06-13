@@ -31,7 +31,11 @@ http://127.0.0.1:8000/dashboard
 该 App 是由 `outputs/applications/Alpha.applescript` 生成的 AppleScript `.app`。
 它会调用 `scripts/start_alpha_dashboard.sh`，在缺少 `.venv` 时创建虚拟环境，
 启动 `uvicorn`，在 FastAPI 应用生命周期内启动 300 秒刷新一次的模拟交易智能体循环，
+同时启动 300 秒采样一次的自动运行维护，
 将控制台日志写入 `runtime/alpha_dashboard.log`，并在 macOS 上打开控制台 URL。
+
+控制台用户可见页面、按钮、状态、风险原因和本地命令摘要默认中文显示；API 字段名、
+内部枚举、工单号、文件路径和股票代码保持机器可读格式。
 
 控制台自动循环状态可通过以下地址查看：
 

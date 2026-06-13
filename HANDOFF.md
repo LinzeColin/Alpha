@@ -38,6 +38,10 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - `/market-data/status`, `/market-data/refresh`, and dashboard "行情数据" expose provider, source kind, data quality, latest date, latest prices, cache age, and refresh status.
 - `/ops/health`, `/ops/backup`, `scripts/check_alpha_ops.sh`, and dashboard "运行健康" now expose 30-day E-Safe operational evidence: loop cadence, SQLite queue durability, paper portfolio state, market data quality, process/log status, latest backup, and live-order safety boundary.
 - Runtime backups are written locally under `runtime/backups/alpha_state_*/` and include a SQLite approval queue snapshot, paper portfolio, available market-data cache, PID, log tail, and manifest.
+- Dashboard startup now also starts the app-managed `AutoOpsMaintenanceRuntime`: health sampling every 300 seconds, stale-backup creation, backup rotation, and JSONL health history.
+- `/ops/maintenance/status` exposes automatic maintenance state, run count, backup count, next maintenance time, history file, retention config, and Chinese display fields.
+- Owner-facing API/status surfaces now include non-breaking Chinese display fields such as `status_zh`, `reason_zh`, `enabled_zh`, and `task_running_zh`; raw machine fields remain stable.
+- `AGENTS.md` now records the product rule: user-visible dashboard, App/script output, statuses, risk reasons, and owner-facing messages must default to Chinese.
 - `scripts/start_alpha_dashboard.sh` now performs a post-health-check stability confirmation before reporting startup success.
 - AppleScript `Alpha.app` is installed at `/Users/linzezhang/Downloads/Alpha.app`, `/Users/linzezhang/Applications/Alpha.app`, and `/Applications/Alpha.app`.
 - GitHub connector backup now contains the core runtime/dashboard/code/test changes from this run.
@@ -50,7 +54,8 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - Broker-ready real-money candidates flow through `OrderIntent -> risk check -> approval queue -> BrokerReadyOrderTicket`.
 - Refresh cadence target is 300 seconds by default.
 - Use one app-managed paper loop; do not start a second external agent process beside the dashboard.
-- User-visible runtime surfaces should display Chinese; API field names and enum values stay machine-readable and stable.
+- User-visible runtime surfaces must display Chinese; API field names, enum values, ticket IDs, paths, and symbols stay machine-readable and stable.
+- If a raw machine value must be shown to the owner, show it with a Chinese label or adjacent Chinese explanation.
 - Paper execution adapters may be broker-like, but committed defaults must stay local sandbox or broker paper/read-only only.
 - Dashboard approval actions update local ticket state only; they do not call any real broker order endpoint.
 - Default durable runtime state is local-first: SQLite approval queue plus JSON paper portfolio.
@@ -65,6 +70,9 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - `backend/app/services/paper_trading_loop.py`
 - `backend/app/services/market_data_gateway.py`
 - `backend/app/services/ops_health.py`
+- `backend/app/services/ops_runtime.py`
+- `backend/app/services/display_locale.py`
+- `backend/app/services/live_broker.py`
 - `backend/app/services/strategy_iteration.py`
 - `backend/app/services/paper_broker.py`
 - `backend/app/services/agent_runtime.py`
@@ -81,6 +89,7 @@ python -m backend.app.services.paper_trading_loop --once
 python -m backend.app.services.paper_trading_loop --once --json
 curl http://127.0.0.1:8000/market-data/status
 curl http://127.0.0.1:8000/ops/health
+curl http://127.0.0.1:8000/ops/maintenance/status
 scripts/check_alpha_ops.sh --backup
 ```
 
@@ -130,6 +139,16 @@ Dashboard Browser verification -> title Alpha 控制台, lang zh-CN, 运行健�
 Start script hardening -> scripts/start_alpha_dashboard.sh now rechecks PID and /health one second after initial readiness before reporting success
 Diff hygiene -> git diff --check -> passed
 Safety scan -> no new real broker place_order path; committed live-order defaults and runtime boundary remain disabled
+Ops maintenance target tests -> .venv/bin/python -m pytest tests/test_ops_runtime.py tests/test_ops_health.py tests/test_dashboard_state.py -q -> 10 passed
+Automatic maintenance full regression -> .venv/bin/python -m pytest tests -q -> 37 passed
+Full Chinese display target tests -> .venv/bin/python -m pytest tests/test_dashboard_state.py tests/test_agent_runtime.py tests/test_ops_runtime.py tests/test_live_broker_fail_closed.py -q -> 10 passed
+Full Chinese display full regression -> .venv/bin/python -m pytest tests -q -> 38 passed
+Runtime Chinese API verification -> /health returned status_zh=正常 and mode_zh=研究、模拟交易与候选订单人工复核模式
+Runtime Chinese loop verification -> /agent/loop/status returned status_zh=等待下次运行, task_running_zh=是, ticket_status_zh=待人工确认, broker_paper_order_status_zh=模拟成交
+Runtime Chinese maintenance verification -> /ops/maintenance/status returned status_zh=等待下次维护, task_running_zh=是, rotation_status_zh=未变化, history_row_count=5
+Fail-closed live intent Chinese verification -> POST /live/order-intent returned status_zh=已拒绝, reason_zh=策略已禁用真实资金交易, message_zh=真实资金下单被拒绝
+Dashboard HTML Chinese verification -> /dashboard contains Alpha 控制台, 运行模拟交易周期, 自动维护, 等待下次维护; forbidden English phrases checked in source query were absent
+Diff hygiene after Chinese display changes -> git diff --check -> passed
 ```
 
 ## Unresolved Risks
@@ -138,7 +157,7 @@ Safety scan -> no new real broker place_order path; committed live-order default
 - This machine's current Python SSL trust chain blocked live Stooq refresh during validation; do not disable SSL verification by default.
 - External broker paper API integration is not connected yet; local sandbox paper adapter abstraction now exists.
 - Dashboard is local MVP only.
-- Approval queue is SQLite-backed locally and now has manual backup, but still needs scheduled backup rotation and multi-process contention hardening before long unattended runs.
+- Approval queue is SQLite-backed locally and automatic backup/rotation now exists; it still needs a normal macOS `.app` long-run soak and multi-process contention hardening before claiming unattended 30-day robustness.
 - The current execution environment may reclaim `nohup` background servers between tool calls; foreground uvicorn verified the app runtime, and the start script now detects post-health-check instability, but final `.app` long-run verification should be done from the user's normal macOS session.
 - Real broker live order submission remains intentionally out of scope.
 - Strategy tournament is still fixture-level; it now has simple walk-forward/OOS metrics, but not multi-year OOS, cost-model, slippage-model, or walk-forward portfolio validation.
@@ -146,4 +165,4 @@ Safety scan -> no new real broker place_order path; committed live-order default
 
 ## Next Step
 
-Authenticate GitHub CLI/HTTPS push or continue connector-based sync, then implement scheduled ops backup/rotation plus a concrete broker paper/read-only adapter for the user's chosen broker.
+Authenticate GitHub CLI/HTTPS push or continue connector-based sync, then implement a concrete broker paper/read-only adapter for the user's chosen broker and run a normal macOS `.app` long-run soak.

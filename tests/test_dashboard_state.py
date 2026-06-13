@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from backend.app.api import routes
-from backend.app.services.display_locale import format_paper_cycle_summary_zh
+from backend.app.services.display_locale import format_paper_cycle_summary_zh, zh_reason, zh_status
 from backend.app.services.approval_queue import ApprovalQueue
 
 
@@ -34,10 +34,14 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
     assert run_result["status"] == "completed"
     assert run_result["market_data"]["source_kind"] in {"fixture", "public_cache", "local_cache"}
     assert state["health"]["refresh_interval_seconds"] == 300
+    assert state["health"]["status_zh"] == "正常"
+    assert state["health"]["mode_zh"] == "研究、模拟交易与候选订单人工复核模式"
     assert state["market_data"]["latest_date"] is not None
     assert state["market_data"]["real_market_data"] is False
     assert state["ops_health"]["safety_boundary"]["live_order_submission_enabled"] is False
     assert state["ops_health"]["check_count"] >= 1
+    assert state["ops_maintenance"]["status"] in {"stopped", "maintenance_sleeping", "running_maintenance", "starting"}
+    assert state["ops_maintenance"]["backup_interval_seconds"] > 0
     assert state["agent_status"]["status"] == "ready"
     assert state["paper_portfolio"]["trade_count"] == 1
     assert state["paper_broker_status"]["adapter_id"] == "local_sandbox_paper_broker"
@@ -137,6 +141,10 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "运行健康" in html
     assert "刷新公共行情" in html
     assert "生成运行备份" in html
+    assert "自动维护" in html
+    assert "自动备份次数" in html
+    assert "健康历史" in html
+    assert "备份保留数" in html
     assert "行情源" in html
     assert "行情质量" in html
     assert "真实市场数据" in html
@@ -161,6 +169,10 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "总体状态" in html
     assert "安全边界" in html
     assert "检查项" in html
+    assert "maintenance_sleeping: '等待下次维护'" in html
+    assert "running_maintenance: '正在维护'" in html
+    assert "degraded: '需关注'" in html
+    assert "'pre-trade risk checks passed': '下单前风控检查通过'" in html
 
     assert "Alpha Dashboard" not in html
     assert "Run Paper Cycle" not in html
@@ -168,6 +180,15 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "Approval Queue" not in html
     assert "No pending tickets" not in html
     assert "<th>Adapter</th>" not in html
+
+
+def test_python_display_locale_covers_runtime_statuses_and_live_reasons():
+    assert zh_status("maintenance_sleeping") == "等待下次维护"
+    assert zh_status("running_maintenance") == "正在维护"
+    assert zh_status("degraded") == "需关注"
+    assert zh_status("pass") == "通过"
+    assert zh_reason("live trading disabled by policy") == "策略已禁用真实资金交易"
+    assert zh_reason("FailClosedLiveBroker never submits real orders") == "失败即关闭真实经纪商适配器不会提交真实订单"
 
 
 def test_paper_cycle_summary_is_chinese_for_human_cli(tmp_path, monkeypatch):

@@ -12,3 +12,13 @@ dashboard:
   refresh_interval_seconds: 300
   pid_path: "runtime/alpha_dashboard.pid"
   log_path: "runtime/alpha_dashboard.log"
+
+ops_maintenance:
+  enabled: true
+  interval_seconds: 300
+  backup_interval_seconds: 86400
+  max_backup_count: 30
+  max_history_rows: 10000
+  history_path: "runtime/ops_health_history.jsonl"
+  backup_dir: "runtime/backups"
+  managed_by: "fastapi_lifespan_runtime"

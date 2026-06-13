@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from .display_locale import zh_reason, zh_status
 from .policy import GovernorPolicy, PolicyDecision
 
 
@@ -25,5 +26,16 @@ class FailClosedLiveBroker:
             idempotency_key=intent.idempotency_key,
         )
         if not decision.allowed:
-            return {"status": "rejected", "reason": decision.reason, "policy_version": decision.policy_version}
-        return {"status": "rejected", "reason": "FailClosedLiveBroker never submits real orders", "policy_version": decision.policy_version}
+            return _localized_rejection(decision.reason, decision.policy_version)
+        return _localized_rejection("FailClosedLiveBroker never submits real orders", decision.policy_version)
+
+
+def _localized_rejection(reason: str, policy_version: str | None) -> dict:
+    return {
+        "status": "rejected",
+        "status_zh": zh_status("rejected"),
+        "reason": reason,
+        "reason_zh": zh_reason(reason),
+        "policy_version": policy_version,
+        "message_zh": "真实资金下单被拒绝；Alpha 当前只允许模拟交易和人工确认工单。",
+    }

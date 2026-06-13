@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from backend.app.services.approval_queue import ApprovalQueue
-from backend.app.services.ops_health import collect_ops_health, create_runtime_backup, format_ops_health_summary_zh
+from backend.app.services.ops_health import collect_ops_health, create_runtime_backup, format_ops_health_summary_zh, prune_runtime_backups
 from backend.app.services.paper_broker import PaperBroker, PaperOrder
 
 
@@ -132,3 +132,16 @@ def test_create_runtime_backup_copies_durable_state(tmp_path):
     assert ApprovalQueue(backup_dir / "approval_queue.sqlite3").summary()["total_count"] == 1
     assert manifest["live_order_submission_enabled"] is False
     assert manifest["missing_files"] == []
+
+
+def test_prune_runtime_backups_keeps_latest_count(tmp_path):
+    backup_root = tmp_path / "runtime" / "backups"
+    for _ in range(4):
+        create_runtime_backup(root=tmp_path, output_dir=backup_root)
+
+    result = prune_runtime_backups(backup_root=backup_root, max_backup_count=2)
+    remaining = list(backup_root.glob("alpha_state_*"))
+
+    assert result["status"] == "pruned"
+    assert result["deleted_count"] == 2
+    assert len(remaining) == 2

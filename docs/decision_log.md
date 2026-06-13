@@ -103,3 +103,19 @@ Decision: Alpha should expose a local ops health check and one-click runtime bac
 Reason: A five-minute automatic loop can appear healthy while the queue, process, logs, backups, or paper portfolio are stale or missing. The owner needs direct evidence that the system is still generating timely candidates and can be recovered after restart.
 
 Consequence: `/ops/health`, `/ops/backup`, `scripts/check_alpha_ops.sh`, and the dashboard "运行健康" panel now summarize automatic loop cadence, SQLite queue durability, paper portfolio state, market data quality, process/log status, latest backup, and the real-money execution boundary.
+
+## 2026-06-13: Ops Maintenance Is App-Managed
+
+Decision: The dashboard application should own scheduled health sampling, runtime backup creation, and backup rotation instead of relying only on manual terminal commands.
+
+Reason: A 30-day E-Safe paper-trading run needs continuous evidence and recoverability even when the owner does not manually trigger backups.
+
+Consequence: FastAPI lifespan starts `AutoOpsMaintenanceRuntime` beside the paper loop. It samples ops health every 300 seconds, writes `runtime/ops_health_history.jsonl`, creates a backup when the latest backup is older than the configured interval, prunes backups to the configured retention count, and exposes state through `/ops/maintenance/status` and the dashboard.
+
+## 2026-06-13: 中文显示是产品验收项
+
+Decision: Alpha 的用户可见运行界面、App/脚本输出、控制台状态、风险原因和人工操作文案必须默认中文显示。
+
+Reason: 用户要求“整个系统彻底的全中文显示”，运行期间不应让 owner 通过 raw enum 才能理解系统状态。
+
+Consequence: API 字段名、内部枚举、工单号、文件路径和股票代码继续保持机器可读格式；Dashboard、CLI 摘要和 owner-facing API 会提供中文映射或 `*_zh` 字段。新增界面或命令输出必须补对应中文展示测试。

@@ -5,6 +5,8 @@ from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from backend.app.services.display_locale import zh_status
+
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc).replace(microsecond=0)
@@ -104,12 +106,17 @@ class AutoPaperAgentRuntime:
         return {
             "run_id": result.get("run_id"),
             "status": result.get("status"),
+            "status_zh": zh_status(result.get("status")),
             "intent_symbol": intent.get("symbol"),
             "intent_strategy_id": intent.get("strategy_id"),
             "risk_status": result.get("risk_check", {}).get("status"),
+            "risk_status_zh": zh_status(result.get("risk_check", {}).get("status")),
             "ticket_status": ticket.get("status"),
+            "ticket_status_zh": zh_status(ticket.get("status")),
             "paper_order_status": result.get("paper_order", {}).get("status"),
+            "paper_order_status_zh": zh_status(result.get("paper_order", {}).get("status")),
             "broker_paper_order_status": broker_paper_order.get("status"),
+            "broker_paper_order_status_zh": zh_status(broker_paper_order.get("status")),
             "broker_paper_order_id": broker_paper_order.get("broker_order_id"),
             "paper_trade_count": portfolio.get("trade_count"),
             "paper_total_equity": portfolio.get("total_equity"),
@@ -119,8 +126,11 @@ class AutoPaperAgentRuntime:
         task_running = bool(self._task and not self._task.done())
         return {
             "enabled": self._enabled,
+            "enabled_zh": "是" if self._enabled else "否",
             "status": self._status,
+            "status_zh": zh_status(self._status),
             "task_running": task_running,
+            "task_running_zh": "是" if task_running else "否",
             "interval_seconds": self._interval_seconds,
             "started_at": _iso(self._started_at),
             "last_run_started_at": _iso(self._last_run_started_at),
