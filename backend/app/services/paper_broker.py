@@ -79,3 +79,28 @@ class PaperBroker:
             "trade_log": list(self.trade_log),
             "trade_count": len(self.trade_log),
         }
+
+    def portfolio_snapshot(self, mark_prices: Dict[str, float] | None = None) -> dict:
+        mark_prices = mark_prices or {}
+        position_rows = []
+        positions_value = 0.0
+        for symbol, quantity in sorted(self.positions.items()):
+            mark_price = float(mark_prices.get(symbol, 0.0))
+            market_value = quantity * mark_price
+            positions_value += market_value
+            position_rows.append(
+                {
+                    "symbol": symbol,
+                    "quantity": quantity,
+                    "mark_price": round(mark_price, 4),
+                    "market_value": round(market_value, 2),
+                }
+            )
+        return {
+            "cash": round(self.cash, 2),
+            "positions": position_rows,
+            "positions_value": round(positions_value, 2),
+            "total_equity": round(self.cash + positions_value, 2),
+            "trade_count": len(self.trade_log),
+            "latest_trade": self.trade_log[-1] if self.trade_log else None,
+        }
