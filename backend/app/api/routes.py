@@ -555,6 +555,9 @@ def dashboard() -> str:
       sample: '样例',
       missing: '缺失'
     };
+    const SIGNAL_TEXT = {
+      momentum: '动量'
+    };
     const REASON_TEXT = {
       'pre-trade risk checks passed': '下单前风控检查通过',
       'kill switch active': '总开关已触发',
@@ -613,6 +616,9 @@ def dashboard() -> str:
     function displayDataQuality(value) {
       return DATA_QUALITY_TEXT[value] || '未知质量';
     }
+    function displaySignalType(value) {
+      return SIGNAL_TEXT[value] || '未知信号';
+    }
     function displayRefreshError(valueZh, value) {
       if (valueZh && valueZh !== '无') return valueZh;
       if (!value) return '行情源不可用，已回退到本地数据。';
@@ -634,6 +640,12 @@ def dashboard() -> str:
     }
     function displayValue(value, fallback = '无') {
       return value === null || value === undefined || value === '' ? fallback : value;
+    }
+    function displayTime(value, fallback = '无') {
+      if (value === null || value === undefined || value === '') return fallback;
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) return displayValue(value, fallback);
+      return parsed.toLocaleString('zh-CN');
     }
     function displayBool(value) {
       return value ? '是' : '否';
@@ -709,7 +721,7 @@ def dashboard() -> str:
     function renderPaperPerformance(performance) {
       const rows = (performance.recent || []).slice(-8).reverse().map(row => `
         <tr>
-          <td>${displayValue(row.generated_at)}</td>
+          <td>${displayTime(row.generated_at)}</td>
           <td>${Number(row.total_equity || 0).toFixed(2)}</td>
           <td>${row.total_return_zh || '0.00%'}</td>
           <td>${displayStrategyId(row.strategy_id)}</td>
@@ -751,7 +763,7 @@ def dashboard() -> str:
         <table>
           <tbody>
             <tr><th>最近备份</th><td>${displayValue(latestBackup.backup_path)}</td></tr>
-            <tr><th>备份时间</th><td>${displayValue(latestBackup.created_at)}</td></tr>
+            <tr><th>备份时间</th><td>${displayTime(latestBackup.created_at)}</td></tr>
             <tr><th>安全边界</th><td>${displayValue(opsHealth.safety_boundary && opsHealth.safety_boundary.message_zh)}</td></tr>
           </tbody>
         </table>
@@ -790,7 +802,7 @@ def dashboard() -> str:
       }).join('');
       const recentRows = ((history || {}).recent || []).slice(0, 8).map(row => `
         <tr>
-          <td>${displayValue(row.generated_at)}</td>
+          <td>${displayTime(row.generated_at)}</td>
           <td>${row.overall_status_zh || displayStatus(row.overall_status, '未知')}</td>
           <td>${row.pass_count || 0} / ${row.warn_count || 0} / ${row.fail_count || 0}</td>
           <td>${displayValue(row.latest_fresh_ticket_id)}</td>
@@ -814,8 +826,8 @@ def dashboard() -> str:
             <tr><th>结论</th><td>${readiness.summary_zh || '无'}</td></tr>
             <tr><th>历史结论</th><td>${(history || {}).summary_zh || '尚无长运行采样历史'}</td></tr>
             <tr><th>历史文件</th><td>${displayValue((history || {}).path)}</td></tr>
-            <tr><th>最近采样</th><td>${displayValue((history || {}).latest_generated_at)}</td></tr>
-            <tr><th>最近失败时间</th><td>${displayValue((history || {}).last_failure_at, '无')}</td></tr>
+            <tr><th>最近采样</th><td>${displayTime((history || {}).latest_generated_at)}</td></tr>
+            <tr><th>最近失败时间</th><td>${displayTime((history || {}).last_failure_at, '无')}</td></tr>
             <tr><th>已覆盖天数</th><td>${(history || {}).observed_days_zh || '0.00 天'}</td></tr>
             <tr><th>安全边界</th><td>${displayValue(readiness.safety_boundary && readiness.safety_boundary.message_zh)}</td></tr>
           </tbody>
@@ -827,7 +839,7 @@ def dashboard() -> str:
     function renderSoakHistory(history) {
       const recentRows = (history.recent || []).slice(0, 12).map(row => `
         <tr>
-          <td>${displayValue(row.generated_at)}</td>
+          <td>${displayTime(row.generated_at)}</td>
           <td>${row.overall_status_zh || displayStatus(row.overall_status, '未知')}</td>
           <td>${row.pass_count || 0} / ${row.warn_count || 0} / ${row.fail_count || 0}</td>
           <td>${displayValue(row.latest_fresh_ticket_id)}</td>
@@ -847,9 +859,9 @@ def dashboard() -> str:
         <table>
           <tbody>
             <tr><th>历史文件</th><td>${displayValue(history.path)}</td></tr>
-            <tr><th>首次采样</th><td>${displayValue(history.first_generated_at)}</td></tr>
-            <tr><th>最近采样</th><td>${displayValue(history.latest_generated_at)}</td></tr>
-            <tr><th>最近失败时间</th><td>${displayValue(history.last_failure_at, '无')}</td></tr>
+            <tr><th>首次采样</th><td>${displayTime(history.first_generated_at)}</td></tr>
+            <tr><th>最近采样</th><td>${displayTime(history.latest_generated_at)}</td></tr>
+            <tr><th>最近失败时间</th><td>${displayTime(history.last_failure_at, '无')}</td></tr>
             <tr><th>历史结论</th><td>${history.summary_zh || '尚无长运行采样历史'}</td></tr>
             <tr><th>安全边界</th><td>${displayValue(history.safety_boundary && history.safety_boundary.message_zh)}</td></tr>
           </tbody>
@@ -869,8 +881,8 @@ def dashboard() -> str:
             <tr><th>健康采样间隔</th><td>${opsMaintenance.interval_seconds || 0} 秒</td></tr>
             <tr><th>备份间隔</th><td>${opsMaintenance.backup_interval_seconds || 0} 秒</td></tr>
             <tr><th>备份保留数</th><td>${opsMaintenance.max_backup_count || 0}</td></tr>
-            <tr><th>上次维护</th><td>${displayValue(opsMaintenance.last_run_completed_at)}</td></tr>
-            <tr><th>下次维护</th><td>${displayValue(opsMaintenance.next_run_at)}</td></tr>
+            <tr><th>上次维护</th><td>${displayTime(opsMaintenance.last_run_completed_at)}</td></tr>
+            <tr><th>下次维护</th><td>${displayTime(opsMaintenance.next_run_at)}</td></tr>
             <tr><th>健康历史</th><td>${displayValue(opsMaintenance.history_path)}</td></tr>
             <tr><th>备份目录</th><td>${displayValue(opsMaintenance.backup_dir)}</td></tr>
             <tr><th>最近自动备份</th><td>${displayValue(summary.backup_path)}</td></tr>
@@ -915,10 +927,10 @@ def dashboard() -> str:
             <tr><th>循环</th><td>${pill(displayStatus(loop.status, '未知'), loopKind)}</td></tr>
             <tr><th>运行次数</th><td>${loop.run_count || 0}</td></tr>
             <tr><th>刷新间隔</th><td>${agent.refresh_interval_seconds} 秒</td></tr>
-            <tr><th>上次运行</th><td>${loop.last_run_completed_at || '尚未运行'}</td></tr>
-            <tr><th>下次运行</th><td>${loop.next_run_at || '等待中'}</td></tr>
-            <tr><th>最新候选单</th><td>${agent.latest_ticket_created_at || '无'}</td></tr>
-            <tr><th>最新有效候选单</th><td>${agent.latest_fresh_ticket_created_at || '无'}</td></tr>
+            <tr><th>上次运行</th><td>${displayTime(loop.last_run_completed_at, '尚未运行')}</td></tr>
+            <tr><th>下次运行</th><td>${displayTime(loop.next_run_at, '等待中')}</td></tr>
+            <tr><th>最新候选单</th><td>${displayTime(agent.latest_ticket_created_at)}</td></tr>
+            <tr><th>最新有效候选单</th><td>${displayTime(agent.latest_fresh_ticket_created_at)}</td></tr>
             <tr><th>过期候选单</th><td>${agent.expired_tickets || 0}</td></tr>
             <tr><th>最新结果</th><td>${displayValue(summary.intent_symbol)} / ${displayStrategyId(summary.intent_strategy_id)} / ${displayStatus(summary.ticket_status)} / ${displayStatus(summary.paper_order_status)} / ${displayStatus(summary.broker_paper_order_status)}</td></tr>
             <tr><th>最新模拟经纪商订单</th><td>${displayValue(summary.broker_paper_order_id)}</td></tr>
@@ -935,13 +947,13 @@ def dashboard() -> str:
       document.getElementById('broker').innerHTML = `
         <table>
           <tbody>
-            <tr><th>适配器</th><td>${displayAdapterId(broker.adapter_id)}</td></tr>
-            <tr><th>名称</th><td>${displayBrokerName(broker.broker_name)}</td></tr>
-            <tr><th>账户</th><td>${displayAccount(broker.account_ref)}</td></tr>
-            <tr><th>模式</th><td>${displayStatus(broker.mode)}</td></tr>
-            <tr><th>连接</th><td>${displayBool(broker.connected)}</td></tr>
-            <tr><th>需要凭据</th><td>${displayBool(broker.credential_required)}</td></tr>
-            <tr><th>允许真实下单</th><td>${displayBool(broker.live_order_submission_enabled)}</td></tr>
+            <tr><th>适配器</th><td>${broker.adapter_id_zh || displayAdapterId(broker.adapter_id)}</td></tr>
+            <tr><th>名称</th><td>${broker.broker_name_zh || displayBrokerName(broker.broker_name)}</td></tr>
+            <tr><th>账户</th><td>${broker.account_ref_zh || displayAccount(broker.account_ref)}</td></tr>
+            <tr><th>模式</th><td>${broker.mode_zh || displayStatus(broker.mode)}</td></tr>
+            <tr><th>连接</th><td>${broker.connected_zh || displayBool(broker.connected)}</td></tr>
+            <tr><th>需要凭据</th><td>${broker.credential_required_zh || displayBool(broker.credential_required)}</td></tr>
+            <tr><th>允许真实下单</th><td>${broker.live_order_submission_enabled_zh || displayBool(broker.live_order_submission_enabled)}</td></tr>
             <tr><th>执行模型</th><td>${broker.execution_model_zh || '未知执行模型'}</td></tr>
             <tr><th>模拟滑点</th><td>${Number(broker.slippage_bps || 0).toFixed(2)} 基点</td></tr>
             <tr><th>单笔佣金</th><td>${Number(broker.commission_per_order || 0).toFixed(2)}</td></tr>
@@ -989,20 +1001,20 @@ def dashboard() -> str:
     function renderTournament(tournament) {
       const rows = (tournament.candidates || []).slice(0, 8).map(row => `
         <tr>
-          <td>${displayStrategyId(row.strategy_id)}</td><td>${row.symbol}</td><td>${row.lookback_days}</td>
+          <td>${row.strategy_id_zh || displayStrategyId(row.strategy_id)}</td><td>${row.symbol}</td><td>${row.signal_type_zh || displaySignalType(row.signal_type)}</td><td>${row.lookback_days}</td>
           <td>${Number((row.total_return || 0) * 100).toFixed(2)}%</td><td>${Number((row.oos_return || 0) * 100).toFixed(2)}%</td>
           <td>${Number((row.hit_rate || 0) * 100).toFixed(2)}%</td><td>${row.validation_windows || 0}</td>
-          <td>${Number((row.max_drawdown || 0) * 100).toFixed(2)}%</td><td>${Number(row.score || 0).toFixed(4)}</td><td>${displayStatus(row.decision)}</td>
+          <td>${Number((row.max_drawdown || 0) * 100).toFixed(2)}%</td><td>${Number(row.score || 0).toFixed(4)}</td><td>${row.decision_zh || displayStatus(row.decision)}</td>
         </tr>`).join('');
       document.getElementById('tournament').innerHTML = `
         <div class="status">当前胜出：${displayStrategyId(tournament.winner && tournament.winner.strategy_id)}</div>
-        <table><thead><tr><th>策略</th><th>标的</th><th>回看天数</th><th>收益</th><th>样本外收益</th><th>命中率</th><th>验证窗口</th><th>回撤</th><th>分数</th><th>决策</th></tr></thead><tbody>${rows}</tbody></table>
+        <table><thead><tr><th>策略</th><th>标的</th><th>信号</th><th>回看天数</th><th>收益</th><th>样本外收益</th><th>命中率</th><th>验证窗口</th><th>回撤</th><th>分数</th><th>决策</th></tr></thead><tbody>${rows}</tbody></table>
       `;
     }
     function renderStrategyJournal(journal) {
       const rows = (journal.recent || []).slice(-8).reverse().map(row => `
         <tr>
-          <td>${displayValue(row.generated_at)}</td>
+          <td>${displayTime(row.generated_at)}</td>
           <td>${row.winner_strategy_id_zh || displayStrategyId(row.winner_strategy_id)}</td>
           <td>${displayValue(row.winner_symbol)}</td>
           <td>${Number((row.winner_oos_return || 0) * 100).toFixed(2)}%</td>
@@ -1028,11 +1040,11 @@ def dashboard() -> str:
         const payload = ticket.broker_payload || {};
         const risk = ticket.risk_check || {};
         return `<tr>
-          <td>${ticket.ticket_id}</td><td>${displayStatus(ticket.actionability || ticket.status)}</td><td>${payload.symbol || ''}</td>
-          <td>${displaySide(payload.side)}</td><td>${payload.quantity || ''}</td>
+          <td>${ticket.ticket_id}</td><td>${ticket.actionability_zh || ticket.status_zh || displayStatus(ticket.actionability || ticket.status)}</td><td>${payload.symbol || ''}</td>
+          <td>${payload.side_zh || displaySide(payload.side)}</td><td>${payload.quantity || ''}</td>
           <td>${payload.estimated_price || ''}<br><span class="muted">${displayOrderType(payload.order_type)} / ${displayTimeInForce(payload.time_in_force)}</span></td>
-          <td>${displayStatus(risk.status, '未知')}<br><span class="muted">${displayReason(risk.reason)}</span></td>
-          <td>${displayStatus(ticket.freshness && ticket.freshness.status, '未知')}</td>
+          <td>${risk.status_zh || displayStatus(risk.status, '未知')}<br><span class="muted">${risk.reason_zh || displayReason(risk.reason)}</span></td>
+          <td>${(ticket.freshness && ticket.freshness.status_zh) || displayStatus(ticket.freshness && ticket.freshness.status, '未知')}</td>
           <td>${(ticket.freshness && ticket.freshness.seconds_until_expiry) ?? '不适用'}</td>
           <td>${renderTicketActions(ticket)}</td>
         </tr>`;

@@ -74,8 +74,11 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
     assert state["paper_performance"]["latest_total_commission"] == 1.0
     assert state["paper_performance"]["latest_execution_model_zh"] == "固定佣金与滑点模型"
     assert state["paper_broker_status"]["adapter_id"] == "local_sandbox_paper_broker"
+    assert state["paper_broker_status"]["adapter_id_zh"] == "本地沙盒模拟经纪商适配器"
     assert state["paper_broker_status"]["mode"] == "paper"
+    assert state["paper_broker_status"]["mode_zh"] == "模拟交易"
     assert state["paper_broker_status"]["live_order_submission_enabled"] is False
+    assert state["paper_broker_status"]["live_order_submission_enabled_zh"] == "否"
     assert state["paper_broker_status"]["execution_model_zh"] == "固定佣金与滑点模型"
     assert state["paper_broker_status"]["commission_per_order"] == 1.0
     assert state["paper_broker_status"]["slippage_bps"] == 5.0
@@ -92,6 +95,9 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
     assert state["strategy_tournament"]["candidate_count"] > 0
     assert state["strategy_tournament"]["validation_summary"]["validated_count"] > 0
     assert "hit_rate" in state["strategy_tournament"]["winner"]
+    assert state["strategy_tournament"]["winner"]["strategy_id_zh"].startswith("动量策略 ")
+    assert state["strategy_tournament"]["winner"]["signal_type_zh"] == "动量"
+    assert state["strategy_tournament"]["winner"]["decision_zh"] == "可进入模拟交易"
     assert state["strategy_journal"]["status"] == "ready"
     assert state["strategy_journal"]["run_count"] == 1
     assert state["strategy_journal"]["latest_winner_strategy_id"] == run_result["strategy_tournament"]["winner"]["strategy_id"]
@@ -216,6 +222,7 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "最近成交成本" in html
     assert "/broker-ticket/view" in html
     assert "策略锦标赛" in html
+    assert "信号" in html
     assert "策略迭代历史" in html
     assert "策略稳定度" in html
     assert "连续胜出次数" in html
@@ -278,6 +285,7 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "下载工单表格" in html
     assert "待人工确认" in html
     assert "最近更新：" in html
+    assert "function displayTime" in html
     assert "总体状态" in html
     assert "安全边界" in html
     assert "检查项" in html

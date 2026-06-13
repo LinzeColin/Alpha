@@ -39,11 +39,14 @@
 - `backend/app/services/ops_runtime.py`
 - `backend/app/services/paper_readiness.py`
 - `backend/app/services/soak_readiness.py`
+- `backend/app/services/soak_history.py`
 - `backend/app/services/runtime_status.py`
 - `backend/app/services/broker_ticket_export.py`
+- `backend/app/services/strategy_iteration.py`
 - `backend/app/schemas/strategy_dsl.py`
 - `scripts/start_alpha_dashboard.sh`
 - `scripts/stop_alpha_dashboard.sh`
+- `scripts/verify_chinese_display.py`
 - `tests/test_dashboard_state.py`
 - `tests/test_broker_ticket_export.py`
 - `tests/test_moomoo_broker_probe.py`
@@ -71,6 +74,9 @@
 
 .venv/bin/python -m pytest tests -q
 # 73 passed
+
+.venv/bin/python scripts/verify_chinese_display.py
+# status_zh=通过, error_count=0
 
 git diff --check
 # passed

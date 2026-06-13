@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from backend.app.services.backtest import load_price_fixture
+from backend.app.services.display_locale import zh_status, zh_strategy_id
 from backend.app.services.risk import risk_score
 
 
@@ -22,7 +23,11 @@ class StrategyCandidate:
     decision: str
 
     def as_dict(self) -> dict:
-        return asdict(self)
+        payload = asdict(self)
+        payload["strategy_id_zh"] = zh_strategy_id(self.strategy_id)
+        payload["signal_type_zh"] = "动量" if self.signal_type == "momentum" else "未知信号"
+        payload["decision_zh"] = zh_status(self.decision)
+        return payload
 
 
 def run_strategy_tournament(price_path: str | Path, *, lookbacks: tuple[int, ...] = (5, 10, 20)) -> dict:
