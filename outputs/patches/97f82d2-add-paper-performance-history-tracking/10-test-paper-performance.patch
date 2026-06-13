@@ -1,0 +1,55 @@
+diff --git a/tests/test_paper_performance.py b/tests/test_paper_performance.py
+new file mode 100644
+index 0000000..3f80d1c
+--- /dev/null
++++ b/tests/test_paper_performance.py
+@@ -0,0 +1,49 @@
++from backend.app.services.paper_performance import append_paper_performance_history, summarize_paper_performance_history
++
++
++def test_paper_performance_records_equity_return_and_drawdown(tmp_path):
++    history_path = tmp_path / "runtime" / "paper_performance_history.jsonl"
++    market_data = {"source_kind": "fixture", "data_quality": "sample", "latest_date": "2024-02-09", "real_market_data": False}
++    intent = {"strategy_id": "momentum_QQQ_20d", "symbol": "QQQ", "side": "buy"}
++
++    first = append_paper_performance_history(
++        {"cash": 5000, "positions_value": 5200, "total_equity": 10200, "trade_count": 1, "positions": [], "latest_trade": {"symbol": "QQQ", "side": "buy", "quantity": 1, "price": 131.7}},
++        history_path=history_path,
++        run_id="run_1",
++        market_data=market_data,
++        intent=intent,
++        broker_receipt={"broker_order_id": "paper_1", "status": "filled"},
++    )
++    append_paper_performance_history(
++        {"cash": 5000, "positions_value": 4900, "total_equity": 9900, "trade_count": 2, "positions": [], "latest_trade": {"symbol": "QQQ", "side": "buy", "quantity": 1, "price": 129.0}},
++        history_path=history_path,
++        run_id="run_2",
++        market_data=market_data,
++        intent=intent,
++        broker_receipt={"broker_order_id": "paper_2", "status": "filled"},
++    )
++    summary = summarize_paper_performance_history(history_path)
++
++    assert first["status"] == "written"
++    assert summary["status"] == "ready"
++    assert summary["status_zh"] == "就绪"
++    assert summary["run_count"] == 2
++    assert summary["latest_total_equity"] == 9900.0
++    assert summary["total_return"] == -0.01
++    assert summary["total_return_zh"] == "-1.00%"
++    assert summary["latest_change_zh"] == "-300.00"
++    assert summary["max_drawdown_zh"] == "-2.94%"
++    assert summary["current_drawdown_zh"] == "-2.94%"
++    assert summary["latest_strategy_id_zh"] == "动量策略 QQQ 20日"
++    assert summary["latest_trade_side_zh"] == "买入"
++    assert summary["recent"][-1]["market_data_quality_zh"] == "样例"
++
++
++def test_paper_performance_empty_summary_is_chinese_readable(tmp_path):
++    summary = summarize_paper_performance_history(tmp_path / "missing.jsonl")
++
++    assert summary["status"] == "empty"
++    assert summary["status_zh"] == "暂无记录"
++    assert summary["run_count"] == 0
++    assert summary["total_return_zh"] == "0.00%"
++    assert summary["current_drawdown_zh"] == "0.00%"
