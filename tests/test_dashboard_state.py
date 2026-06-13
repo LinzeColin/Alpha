@@ -322,6 +322,8 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "running_maintenance: '正在维护'" in html
     assert "degraded: '需关注'" in html
     assert "'pre-trade risk checks passed': '下单前风控检查通过'" in html
+    assert "现金回收减仓" in html
+    assert "目标仓位再平衡" in html
 
     assert "Alpha Dashboard" not in html
     assert "Run Paper Cycle" not in html

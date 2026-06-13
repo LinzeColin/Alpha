@@ -38,6 +38,8 @@ REQUIRED_STATIC_TEXT = [
     "刷新公共行情",
     "标记已复核",
     "下载工单表格",
+    "现金回收减仓",
+    "目标仓位再平衡",
 ]
 
 BANNED_UI_PHRASES = [

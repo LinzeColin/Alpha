@@ -57,6 +57,8 @@ BANNED_VISIBLE_TEXT = [
     "broker-ready",
     "Moomoo OpenD",
     " bps",
+    "cash_rebalance_",
+    "target_rebalance_",
 ]
 
 

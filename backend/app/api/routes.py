@@ -669,6 +669,8 @@ def dashboard() -> str:
       const match = raw.match(/^momentum_([^_]+)_(\\d+)d$/);
       if (match) return `动量策略 ${match[1]} ${match[2]}日`;
       if (raw.startsWith('fixture_momentum_')) return `样例动量策略 ${raw.replace('fixture_momentum_', '')}`;
+      if (raw.startsWith('cash_rebalance_')) return `现金回收减仓 ${raw.replace('cash_rebalance_', '')}`;
+      if (raw.startsWith('target_rebalance_')) return `目标仓位再平衡 ${raw.replace('target_rebalance_', '')}`;
       return raw;
     }
     function displayValue(value, fallback = '无') {
