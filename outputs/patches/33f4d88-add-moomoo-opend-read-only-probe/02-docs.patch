@@ -1,0 +1,107 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+index 899de24..2028f97 100644
+--- a/HANDOFF.md
++++ b/HANDOFF.md
+@@ -36,6 +36,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
+ - Local launcher scripts now print Chinese startup/shutdown messages.
+ - Paper trading execution now flows through `LocalSandboxPaperBrokerAdapter`, which returns broker-like paper receipts without credentials or real order submission.
+ - `/paper/broker/status` and the dashboard "模拟交易执行层" section expose paper adapter status, mode, connection, credential requirement, live-order disabled state, trade count, and latest simulated fill.
++- `/broker/moomoo/status` and the dashboard "Moomoo OpenD" section now expose local Moomoo OpenD read-only probe status: Python API package availability, local OpenD port, read-only readiness, trade unlock disabled state, and real-order submission disabled state.
+@@ -45,7 +46,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
+ - `/orders/approval-queue`, `/owner/summary`, `/agent/status`, and dashboard state expose approval queue storage status.
+ - Market data now flows through `MarketDataGateway`: cache-first, fixture fallback, optional Stooq public delayed CSV refresh, and visible dashboard/API source quality.
+ - `/market-data/status`, `/market-data/refresh`, and dashboard "行情数据" expose provider, source kind, data quality, latest date, latest prices, cache age, and refresh status.
+-- `/ops/health`, `/ops/backup`, `scripts/check_alpha_ops.sh`, and dashboard "运行健康" now expose 30-day E-Safe operational evidence: loop cadence, SQLite queue durability, paper portfolio state, market data quality, process/log status, latest backup, and live-order safety boundary.
++- `/ops/health`, `/ops/backup`, `scripts/check_alpha_ops.sh`, and dashboard "运行健康" now expose 30-day E-Safe operational evidence: loop cadence, SQLite queue durability, paper portfolio state, Moomoo OpenD read-only probe status, market data quality, process/log status, latest backup, and live-order safety boundary.
+@@ -69,6 +70,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
+ - Dashboard approval actions update local ticket state only; they do not call any real broker order endpoint.
+ - Default durable runtime state is local-first: SQLite approval queue plus JSON paper portfolio.
+ - Raw JSON/CSV broker-ticket outputs remain available for automation and manual broker import, but the default dashboard owner view must be Chinese HTML.
++- Moomoo OpenD integration starts as a read-only environment probe only; it must not create an unlocked trade context or call any real order method.
+@@ -79,6 +81,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
+ - `configs/trading_governor_policy.yaml`
+ - `backend/app/services/paper_trading_loop.py`
+ - `backend/app/services/market_data_gateway.py`
++- `backend/app/services/moomoo_broker_probe.py`
+@@ -103,6 +106,7 @@ python -m backend.app.services.paper_trading_loop --once
+ python -m backend.app.services.paper_trading_loop --once --json
+ curl http://127.0.0.1:8000/market-data/status
+ curl http://127.0.0.1:8000/paper/performance/history
++curl http://127.0.0.1:8000/broker/moomoo/status
+@@ -201,13 +205,21 @@ Chinese broker-ticket view safety scan -> no new real broker place_order path; l
+ Chinese unit display scan -> owner-facing `bps` text removed from dashboard/CLI/cost receipt; raw `slippage_bps` machine fields remain for API stability
+ Runtime broker-ticket view verification -> generated ticket_fcd7cb8153f4, owner_reviewed, `/broker-ticket/view` returned Alpha 经纪商就绪工单, 仅供所有者在经纪商系统中人工确认录入, no raw manual_owner_broker_confirmation_only
+ Dashboard runtime view-path verification -> `/dashboard` lang zh-CN, contains `/broker-ticket/view`, 未出现英文滑点单位；Browser DOM check also confirmed the ticket button onclick target before Browser connection interrupted
++Moomoo read-only probe target tests -> .venv/bin/python -m pytest tests/test_moomoo_broker_probe.py tests/test_dashboard_state.py tests/test_ops_health.py tests/test_broker_ticket_export.py tests/test_broker_paper_adapter.py -q -> 20 passed
++Moomoo read-only probe full regression -> .venv/bin/python -m pytest tests -q -> 51 passed
++Moomoo read-only probe diff hygiene -> git diff --check -> passed
++Moomoo read-only probe safety scan -> no new real broker place_order/unlock_trade path; live-order submission remains disabled
++Runtime Moomoo probe verification -> GET /broker/moomoo/status returned status_zh=API 包未安装, opend_connected=true, package_available=false, read_only_ready=false, live_order_submission_enabled=false, trade_unlock_required=false
++Runtime dashboard Moomoo verification -> GET /dashboard/state exposed Moomoo OpenD mode_zh=只读连接探测 and forbidden_operations_zh includes 解锁交易/提交真实资金订单/修改真实账户
++Runtime ops health Moomoo verification -> GET /ops/health included Moomoo OpenD 只读探测 as warn because OpenD port is reachable but current .venv cannot import moomoo/futu API package; real-order submission false
+@@
+-- External broker paper API integration is not connected yet; local sandbox paper adapter abstraction and manual broker-ready JSON/CSV ticket export now exist.
++- External broker paper API integration is not connected yet; local sandbox paper adapter abstraction, Moomoo OpenD read-only probe, and manual broker-ready JSON/CSV/Chinese HTML ticket export now exist.
++- Moomoo OpenD local port is reachable on this machine, but the project `.venv` currently cannot import `moomoo` or `futu`; install the correct API package into `.venv` before building quote/account read-only calls.
+@@
+-Authenticate GitHub CLI/HTTPS push or continue connector-based sync, then implement a concrete broker paper/read-only adapter for the user's chosen broker and run a normal macOS `.app` long-run soak.
++Authenticate GitHub CLI/HTTPS push or continue connector-based sync, then install the Moomoo/Futu Python API into the project `.venv`, implement read-only quote/account probes, and run a normal macOS `.app` long-run soak.
+
+diff --git a/README.md b/README.md
+index ad009ea..b4109ba 100644
+--- a/README.md
++++ b/README.md
+@@ -62,6 +62,7 @@ POST /paper/run-once
+ GET  /paper/portfolio
+ GET  /paper/performance/history
+ GET  /paper/broker/status
++GET  /broker/moomoo/status
+@@ -87,12 +88,13 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
+ - 外部 API 不得触发真实资金下单。
+ - Alpha 可以生成供用户审核的经纪商就绪订单工单，但不得自主提交真实资金订单。
+ - 当前模拟交易执行层使用 `LocalSandboxPaperBrokerAdapter`；它返回类经纪商模拟回执，但不需要凭据，也不允许真实下单。
++- Moomoo OpenD 集成当前只做只读连接探测：检测当前 Python 环境是否可导入 `moomoo`/`futu` API 包，并检测本机 OpenD 端口；不会解锁交易、不会读取或提交交易凭据、不会调用真实下单接口。
+@@
+-- `GET /ops/health` 汇总自动循环、SQLite 审批队列、模拟组合、模拟执行层边界、行情数据、控制台进程、日志和最近备份状态。
++- `GET /ops/health` 汇总自动循环、SQLite 审批队列、模拟组合、模拟执行层边界、Moomoo OpenD 只读探测、行情数据、控制台进程、日志和最近备份状态。
+@@ -132,3 +134,10 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
+ - Paper broker 会把模拟成交价、参考价、佣金、滑点和累计佣金写入组合状态与绩效历史。
+ - Dashboard 的“模拟交易执行层”和“模拟绩效”会显示执行模型、模拟滑点、单笔佣金、累计佣金和最近成交成本。
+ - 该模型只影响本地 paper trading 绩效，不调用真实经纪商下单接口。
++
++## Moomoo OpenD 只读探测
++
++- `GET /broker/moomoo/status` 显示 Moomoo OpenD 只读探测状态。
++- 默认连接地址为 `127.0.0.1:11111`；可用 `MOOMOO_OPEND_HOST`、`MOOMOO_OPEND_PORT`、`MOOMOO_OPEND_TIMEOUT_SECONDS` 调整。
++- Dashboard 的“Moomoo OpenD”面板会显示 API 包、OpenD 连接、只读就绪、交易解锁、允许真实下单和禁止操作。
++- 该探测层只用于确认本机环境是否准备好接入后续 read-only quote/account 能力；当前不会提交真实资金订单。
+
+diff --git a/docs/decision_log.md b/docs/decision_log.md
+index d5b8dff..13466d6 100644
+--- a/docs/decision_log.md
++++ b/docs/decision_log.md
+@@ -159,3 +159,11 @@ Decision: Dashboard 默认“查看工单”必须打开中文 HTML 工单视图
+ Reason: 用户要求系统彻底中文显示，而点击 dashboard 工单按钮直接打开原始 JSON 会暴露英文字段名和内部枚举，不适合作为 owner 默认界面。
+ 
+ Consequence: `/orders/approval-queue/{ticket_id}/broker-ticket/view` 渲染中文工单详情、人工录入字段、风控结果和安全说明；dashboard 的“查看工单”指向该中文视图。JSON 与 CSV 端点保持不变，用于 broker-ready 导出、测试和 MCP/自动化流程。
++
++## 2026-06-13: Moomoo OpenD Starts As Read-Only Probe
++
++Decision: Moomoo OpenD 集成第一阶段只做本机只读探测，检查 Python API 包和 OpenD 端口状态，不创建交易上下文、不解锁交易、不提交真实订单。
++
++Reason: 用户已在本机安装 Moomoo、Moomoo OpenD 和 API；Alpha 需要把这个环境纳入 dashboard 可观测性。但在没有完成账户读取、paper API 边界、权限分离和长运行验证之前，不能把真实 broker 接入 agent 自动执行链路。
++
++Consequence: `/broker/moomoo/status` 和 dashboard “Moomoo OpenD”面板显示 API 包、OpenD 连接、只读就绪、交易解锁、真实下单禁用、安全操作和禁止操作。该探测层不读取交易凭据，不调用 `place_order`，也不改变 committed 默认真实下单禁用边界。
+
+diff --git a/docs/requirements_alignment.md b/docs/requirements_alignment.md
+index ed3166d..f75f398 100644
+--- a/docs/requirements_alignment.md
++++ b/docs/requirements_alignment.md
+@@ -11,8 +11,9 @@
+ | 每 5 分钟更新一次 | 已实现增强 MVP | 服务、`configs/agent_loop.yaml`、应用运行时、控制台 JS 刷新和候选单 TTL 均使用 `refresh_interval_seconds: 300` |
+ | Web dashboard | 已实现增强 MVP | `/dashboard`、`/dashboard/state`、`/agent/loop/status`、`/paper/portfolio`、`/paper/performance/history`、`/strategy/tournament/run`；队列表显示可操作性/时效性/剩余秒数、SQLite 存储状态，并提供中文复核、拒绝、导出操作；策略表显示样本外收益/命中率/验证窗口；模拟绩效面板显示收益率、权益变化、回撤、执行模型和累计佣金 |
+ | Market data gateway | 已实现 MVP | `MarketDataGateway` 默认缓存优先，缺失时回退到样例数据；`/market-data/status` 和 dashboard 显示行情来源、质量、最新日期、最新价格；`/market-data/refresh` 可尝试刷新 Stooq 公共延迟行情缓存 |
+-| 30 天运行健康与备份 | 已实现增强 MVP | `/ops/health`、`/ops/backup`、`/ops/maintenance/status`、`scripts/check_alpha_ops.sh` 和 dashboard "运行健康" 显示自动循环、SQLite 审批队列、模拟组合、行情质量、进程/日志、最近备份、自动维护状态和真实下单边界；应用托管 ops maintenance 默认每 300 秒采样健康状态、每天自动备份一次并保留最近 30 份 |
++| 30 天运行健康与备份 | 已实现增强 MVP | `/ops/health`、`/ops/backup`、`/ops/maintenance/status`、`scripts/check_alpha_ops.sh` 和 dashboard "运行健康" 显示自动循环、SQLite 审批队列、模拟组合、Moomoo OpenD 只读探测、行情质量、进程/日志、最近备份、自动维护状态和真实下单边界；应用托管 ops maintenance 默认每 300 秒采样健康状态、每天自动备份一次并保留最近 30 份 |
+ | Paper broker visibility | 已实现增强 MVP | `/paper/broker/status` 和 dashboard "模拟交易执行层" 显示 adapter、模式、连接、凭据要求、是否允许真实下单、执行模型、模拟滑点、单笔佣金、累计佣金、最新模拟成交和最近成交成本 |
++| Moomoo OpenD 本机集成 | 已实现只读探测 MVP | `/broker/moomoo/status` 和 dashboard "Moomoo OpenD" 显示 Python API 包、OpenD 本机端口、只读就绪、交易解锁、真实下单禁用和禁止操作；当前不读取交易凭据、不解锁交易、不调用真实下单 |
