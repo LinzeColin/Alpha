@@ -142,5 +142,27 @@ def test_paper_loop_sells_existing_position_when_buy_cash_is_insufficient(tmp_pa
     assert result["broker_paper_order"]["side_zh"] == "卖出"
     assert result["paper_portfolio"]["cash"] > 1.0
     assert result["paper_portfolio"]["positions"][0]["symbol"] == "TLT"
-    assert result["paper_portfolio"]["positions"][0]["quantity"] == 1.0
+    assert result["paper_portfolio"]["positions"][0]["quantity"] < 2.0
     assert state_path.exists()
+
+
+def test_paper_loop_reduces_overweight_position_even_when_cash_can_buy(tmp_path):
+    policy = GovernorPolicy.load(Path("configs/trading_governor_policy.yaml"))
+    broker = PaperBroker(cash=5000.0, positions={"TLT": 50.0})
+    loop = PaperTradingLoop(
+        policy=policy,
+        price_path=Path("data/sample_prices.csv"),
+        approval_queue=ApprovalQueue(tmp_path / "queue.json"),
+        paper_broker=broker,
+        paper_state_path=tmp_path / "portfolio.json",
+    )
+
+    result = loop.run_once()
+
+    assert result["intent"]["side"] == "sell"
+    assert result["intent"]["side_zh"] == "卖出"
+    assert result["intent"]["symbol"] == "TLT"
+    assert result["intent"]["strategy_id_zh"] == "目标仓位再平衡 TLT"
+    assert result["intent"]["estimated_notional_aud"] <= policy.data["risk_limits"]["max_order_value_aud"]
+    assert result["paper_order"]["status"] == "filled"
+    assert result["paper_portfolio"]["positions"][0]["quantity"] < 50.0

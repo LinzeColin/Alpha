@@ -33,6 +33,7 @@ scripts/check_alpha_ops.sh --backup
 scripts/check_alpha_soak.sh
 python -m backend.app.services.paper_readiness
 python -m backend.app.services.soak_readiness
+python scripts/verify_paper_trading_maturity.py --cycles 3
 python scripts/verify_chinese_display.py
 python scripts/verify_dashboard_http_smoke.py --base-url http://127.0.0.1:8000 --exercise-actions
 python scripts/verify_dashboard_chrome_visual.py --base-url http://127.0.0.1:8000
@@ -52,6 +53,7 @@ runtime/soak_readiness_history.jsonl
 runtime/market_data/latest_prices.csv
 runtime/strategy_tournament_history.jsonl
 runtime/backups/
+outputs/paper_maturity/paper_trading_maturity_latest.json
 ```
 
 纸面交易经纪商适配配置在：
@@ -138,6 +140,7 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - `scripts/check_alpha_soak.sh` 输出中文长运行预检摘要；加 `--json` 可输出机器 JSON。
 - `python -m backend.app.services.paper_readiness` 输出中文交付就绪摘要；加 `--json` 可查看完整机器证据。
 - `python -m backend.app.services.soak_readiness` 输出中文长运行预检摘要；该报告证明是否可以开始本地 soak，不等于已经完成 30 天验证。
+- `python scripts/verify_paper_trading_maturity.py --cycles 3` 使用临时运行态连续跑多轮模拟交易，并额外验证目标仓位再平衡卖单、现金回收减仓、风控、审批队列、经纪商就绪工单、5 分钟 TTL 和真实下单禁用边界；默认输出证据到 `outputs/paper_maturity/paper_trading_maturity_latest.json`。
 - `python scripts/verify_dashboard_http_smoke.py --base-url http://127.0.0.1:8000 --exercise-actions` 会通过 HTTP 检查 `/health`、`/dashboard`、`/dashboard/state` 的中文文案、关键中文字段、响应式布局契约和真实下单禁用边界，并安全调用模拟交易周期与运行备份端点。
 - `python scripts/verify_dashboard_chrome_visual.py --base-url http://127.0.0.1:8000` 会调用本机 Chrome headless 截取桌面和移动视口，检查截图尺寸、像素多样性、渲染后可见中文文案、旧英文界面文案禁用项和响应式布局契约；截图与 DOM HTML 只作为本地临时证据，提交到 GitHub 的默认证据是 `outputs/visual_acceptance/dashboard_chrome_visual_report.json`。
 - 控制台启动后会自动启动运行维护：默认每 300 秒采样一次健康状态，默认每天自动备份一次，并保留最近 30 份备份。
@@ -171,7 +174,7 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - `PaperTradingLoop` 每次自动模拟交易周期会把组合权益快照追加写入 `runtime/paper_performance_history.jsonl`。
 - `GET /paper/performance/history` 汇总记录次数、最新总权益、累计收益率、最新权益变化、权益高水位、最大回撤、当前回撤、累计佣金和执行模型。
 - 控制台的“模拟绩效”面板显示权益历史、收益率、回撤、最新策略、标的、方向、佣金、执行模型和交易次数，默认使用中文展示字段。
-- 当模拟组合现金不足以覆盖下一笔买入的预计成交价、滑点和佣金，且组合仍有可卖持仓时，`PaperTradingLoop` 会自动生成 1 单位或符合风控上限的减仓卖出候选单，用于回收现金并保持模拟交易循环可持续运行。
+- `PaperTradingLoop` 会根据 `max_position_weight_pct` 和 `max_total_gross_exposure_pct` 检查目标仓位与总敞口；若持仓超限，会优先生成“目标仓位再平衡”卖出候选单；若现金不足以覆盖下一笔买入的预计成交价、滑点和佣金，且组合仍有可卖持仓，会生成现金回收减仓候选单，保持模拟交易循环可持续运行。
 
 ## 模拟执行成本
 

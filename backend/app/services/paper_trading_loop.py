@@ -144,7 +144,10 @@ class PaperTradingLoop:
         df = load_price_fixture(price_path or self.price_path)
         latest_prices = df.sort_values("date").groupby("symbol").tail(1).copy()
         latest_price_map = {str(row["symbol"]): float(row["close"]) for _, row in latest_prices.iterrows()}
-        max_notional = float(self.policy.data.get("risk_limits", {}).get("max_order_value_aud", 0))
+        limits = self.policy.data.get("risk_limits", {})
+        max_notional = float(limits.get("max_order_value_aud", 0))
+        max_position_weight_pct = float(limits.get("max_position_weight_pct", 0) or 0)
+        max_total_gross_exposure_pct = float(limits.get("max_total_gross_exposure_pct", 0) or 0)
         candidates = latest_prices[latest_prices["close"] <= max_notional].sort_values("close", ascending=False)
         tradable_symbols = set(candidates["symbol"].tolist())
         winner = _select_tradable_winner(tournament, tradable_symbols)
@@ -158,6 +161,87 @@ class PaperTradingLoop:
         quantity = 1.0
         estimated_price = float(latest["close"])
         strategy_id = str(winner.get("strategy_id", "fixture_momentum_v0"))
+        exposure = _portfolio_exposure(
+            cash=self.paper_broker.cash,
+            positions=self.paper_broker.positions,
+            latest_price_map=latest_price_map,
+        )
+        risk_reduction_order = _select_policy_reduction_sell_order(
+            latest_price_map=latest_price_map,
+            positions=self.paper_broker.positions,
+            max_notional=max_notional,
+            equity=exposure["equity"],
+            total_gross_exposure=exposure["total_gross_exposure"],
+            max_position_weight_pct=max_position_weight_pct,
+            max_total_gross_exposure_pct=max_total_gross_exposure_pct,
+        )
+        if risk_reduction_order:
+            side = "sell"
+            symbol, estimated_price, quantity = risk_reduction_order
+            strategy_id = f"target_rebalance_{symbol}"
+            return OrderIntent.create(
+                strategy_id=strategy_id,
+                symbol=str(symbol or latest["symbol"]),
+                side=side,
+                quantity=quantity,
+                estimated_price=estimated_price,
+                source_run_id=run_id,
+                ttl_seconds=self.refresh_interval_seconds,
+            )
+
+        buy_order = _select_policy_eligible_buy_order(
+            candidates=candidates.to_dict("records"),
+            tournament=tournament,
+            cash=self.paper_broker.cash,
+            positions=self.paper_broker.positions,
+            latest_price_map=latest_price_map,
+            adapter_status=self.paper_broker_adapter.status(),
+            max_notional=max_notional,
+            equity=exposure["equity"],
+            total_gross_exposure=exposure["total_gross_exposure"],
+            max_position_weight_pct=max_position_weight_pct,
+            max_total_gross_exposure_pct=max_total_gross_exposure_pct,
+        )
+        if buy_order:
+            symbol, estimated_price, quantity, strategy_id = buy_order
+            return OrderIntent.create(
+                strategy_id=strategy_id,
+                symbol=symbol,
+                side="buy",
+                quantity=quantity,
+                estimated_price=estimated_price,
+                source_run_id=run_id,
+                ttl_seconds=self.refresh_interval_seconds,
+            )
+
+        rebalance_order = _select_rebalance_sell_order(
+            latest_price_map=latest_price_map,
+            positions=self.paper_broker.positions,
+            max_notional=max_notional,
+        )
+        if rebalance_order:
+            side = "sell"
+            symbol, estimated_price, quantity = rebalance_order
+            strategy_id = (
+                f"cash_rebalance_{symbol}"
+                if self.paper_broker.cash
+                < _estimated_buy_cash_required(
+                    estimated_price,
+                    quantity=1.0,
+                    adapter_status=self.paper_broker_adapter.status(),
+                )
+                else f"target_rebalance_{symbol}"
+            )
+            return OrderIntent.create(
+                strategy_id=strategy_id,
+                symbol=str(symbol or latest["symbol"]),
+                side=side,
+                quantity=quantity,
+                estimated_price=estimated_price,
+                source_run_id=run_id,
+                ttl_seconds=self.refresh_interval_seconds,
+            )
+
         buy_cash_required = _estimated_buy_cash_required(
             estimated_price,
             quantity=quantity,
@@ -341,6 +425,103 @@ def _select_rebalance_sell_order(
         return None
     symbol, estimated_price, order_quantity, _ = sorted(candidates, key=lambda row: row[3], reverse=True)[0]
     return symbol, estimated_price, order_quantity
+
+
+def _portfolio_exposure(*, cash: float, positions: dict[str, float], latest_price_map: dict[str, float]) -> dict:
+    position_values = {
+        str(symbol): max(float(quantity), 0.0) * float(latest_price_map.get(symbol, 0.0) or 0.0)
+        for symbol, quantity in positions.items()
+    }
+    total_gross_exposure = sum(position_values.values())
+    return {
+        "position_values": position_values,
+        "total_gross_exposure": total_gross_exposure,
+        "equity": float(cash) + total_gross_exposure,
+    }
+
+
+def _select_policy_reduction_sell_order(
+    *,
+    latest_price_map: dict[str, float],
+    positions: dict[str, float],
+    max_notional: float,
+    equity: float,
+    total_gross_exposure: float,
+    max_position_weight_pct: float,
+    max_total_gross_exposure_pct: float,
+) -> tuple[str, float, float] | None:
+    max_position_value = equity * (max_position_weight_pct / 100.0) if max_position_weight_pct > 0 else 0.0
+    max_gross_value = equity * (max_total_gross_exposure_pct / 100.0) if max_total_gross_exposure_pct > 0 else 0.0
+    candidates: list[tuple[str, float, float, float]] = []
+    for symbol, raw_quantity in positions.items():
+        available_quantity = float(raw_quantity)
+        estimated_price = float(latest_price_map.get(symbol, 0.0) or 0.0)
+        if available_quantity <= 0 or estimated_price <= 0:
+            continue
+        position_value = available_quantity * estimated_price
+        position_excess = max(position_value - max_position_value, 0.0) if max_position_value > 0 else 0.0
+        gross_excess = max(total_gross_exposure - max_gross_value, 0.0) if max_gross_value > 0 else 0.0
+        reduction_need = max(position_excess, gross_excess)
+        if reduction_need <= 0:
+            continue
+        max_quantity_by_policy = max_notional / estimated_price if max_notional > 0 else available_quantity
+        desired_quantity = max(1.0 if available_quantity >= 1.0 else available_quantity, reduction_need / estimated_price)
+        order_quantity = min(available_quantity, max_quantity_by_policy, desired_quantity)
+        if order_quantity <= 0:
+            continue
+        candidates.append((str(symbol), estimated_price, round(order_quantity, 6), reduction_need))
+    if not candidates:
+        return None
+    symbol, estimated_price, order_quantity, _ = sorted(candidates, key=lambda row: row[3], reverse=True)[0]
+    return symbol, estimated_price, order_quantity
+
+
+def _select_policy_eligible_buy_order(
+    *,
+    candidates: list[dict],
+    tournament: dict,
+    cash: float,
+    positions: dict[str, float],
+    latest_price_map: dict[str, float],
+    adapter_status: dict,
+    max_notional: float,
+    equity: float,
+    total_gross_exposure: float,
+    max_position_weight_pct: float,
+    max_total_gross_exposure_pct: float,
+) -> tuple[str, float, float, str] | None:
+    ranked_symbols = _ranked_candidate_symbols(tournament, candidates)
+    max_position_value = equity * (max_position_weight_pct / 100.0) if max_position_weight_pct > 0 else float("inf")
+    max_gross_value = equity * (max_total_gross_exposure_pct / 100.0) if max_total_gross_exposure_pct > 0 else float("inf")
+    for symbol in ranked_symbols:
+        estimated_price = float(latest_price_map.get(symbol, 0.0) or 0.0)
+        if estimated_price <= 0:
+            continue
+        current_position_value = max(float(positions.get(symbol, 0.0) or 0.0), 0.0) * estimated_price
+        if current_position_value + estimated_price > max_position_value:
+            continue
+        if total_gross_exposure + estimated_price > max_gross_value:
+            continue
+        if estimated_price > max_notional:
+            continue
+        if cash < _estimated_buy_cash_required(estimated_price, quantity=1.0, adapter_status=adapter_status):
+            continue
+        strategy_id = _strategy_id_for_symbol(tournament, symbol) or f"fixture_momentum_{symbol}"
+        return str(symbol), estimated_price, 1.0, strategy_id
+    return None
+
+
+def _ranked_candidate_symbols(tournament: dict, candidates: list[dict]) -> list[str]:
+    ranked: list[str] = []
+    for candidate in tournament.get("candidates", []):
+        symbol = candidate.get("symbol")
+        if symbol and symbol not in ranked:
+            ranked.append(str(symbol))
+    for candidate in candidates:
+        symbol = candidate.get("symbol")
+        if symbol and symbol not in ranked:
+            ranked.append(str(symbol))
+    return ranked
 
 
 def _strategy_id_for_symbol(tournament: dict, symbol: str) -> str | None:

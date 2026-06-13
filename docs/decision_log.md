@@ -42,17 +42,23 @@
 - 原因：成熟模拟交易不能用零成本成交高估策略表现。
 - 影响：`LocalSandboxPaperBrokerAdapter` 记录参考价、模拟成交价、5.00 基点滑点、每笔 1.00 AUD 模拟佣金、累计成本和中文执行模型。
 
-## 2026-06-13：模拟交易循环必须感知现金和持仓
+## 2026-06-13：模拟交易循环必须感知现金、持仓和目标敞口
 
-- 决策：`PaperTradingLoop` 正常优先生成策略胜出标的的买入候选；当按当前模拟执行模型估算现金不足且组合仍有可卖持仓时，自动改为生成减仓卖出候选。
-- 原因：长期 5 分钟循环如果只买入，会把本地模拟现金耗尽并持续产生被拒绝模拟订单，无法证明成熟的 paper trading。
-- 影响：减仓卖单仍走 `OrderIntent -> 风控 -> 审批队列 -> BrokerReadyOrderTicket -> 本地模拟成交`，不会触发真实资金订单。
+- 决策：`PaperTradingLoop` 正常优先生成策略胜出标的的买入候选；但在买入前必须先检查 `max_position_weight_pct` 和 `max_total_gross_exposure_pct`，若持仓或总敞口超限则生成“目标仓位再平衡”卖出候选；若现金不足且仍有可卖持仓，则生成现金回收减仓候选。
+- 原因：长期 5 分钟循环如果只买入，会把本地模拟现金耗尽并持续产生被拒绝模拟订单；如果只做现金回收，又会在下一轮重新买回，形成不成熟的振荡。
+- 影响：再平衡/减仓卖单仍走 `OrderIntent -> 风控 -> 审批队列 -> BrokerReadyOrderTicket -> 本地模拟成交`，不会触发真实资金订单；用户可见策略名会显示“目标仓位再平衡”或“现金回收减仓”。
 
 ## 2026-06-13：纸面经纪商 provider 必须 fail-closed
 
 - 决策：纸面交易经纪商通过 `configs/paper_broker.yaml` 选择，默认只能使用本地沙盒；外部 paper API provider 在真实实现、凭据隔离、纸面模式证明和回归测试完成前必须返回未就绪状态。
 - 原因：外部经纪商 paper API 是后续成熟 paper trading 的必要入口，但不能因为误配或半成品代码绕过真实下单边界。
 - 影响：`build_paper_broker_adapter()` 支持默认本地沙盒和外部 paper API fail-closed 壳；控制台显示纸面交易提供方、适配器就绪、允许纸面下单、外部纸面 API、未就绪原因和下一步。
+
+## 2026-06-13：模拟交易成熟度验收使用临时运行态
+
+- 决策：新增 `scripts/verify_paper_trading_maturity.py`，用临时 SQLite 队列、临时组合状态和临时历史文件连续跑模拟交易周期，并额外验证现金不足减仓。
+- 原因：6月15日交付需要证明模拟交易链路能连续运行，而不是只通过单一 API smoke；临时运行态可以避免污染真实 runtime。
+- 影响：成熟度验收报告覆盖连续周期、风控、审批队列、经纪商就绪工单、5分钟 TTL、模拟成交和真实下单禁用边界；默认输出到 `outputs/paper_maturity/paper_trading_maturity_latest.json`。
 
 ## 2026-06-13：Alpaca Paper 适配器只允许 paper host
 

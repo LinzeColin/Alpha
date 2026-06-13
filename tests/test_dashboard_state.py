@@ -384,6 +384,7 @@ def test_python_display_locale_covers_runtime_statuses_and_live_reasons():
     assert zh_reason("live trading disabled by policy") == "策略已禁用真实资金交易"
     assert zh_reason("FailClosedLiveBroker never submits real orders") == "失败即关闭真实经纪商适配器不会提交真实订单"
     assert zh_strategy_id("cash_rebalance_TLT") == "现金回收减仓 TLT"
+    assert zh_strategy_id("target_rebalance_TLT") == "目标仓位再平衡 TLT"
 
 
 def test_paper_cycle_summary_is_chinese_for_human_cli(tmp_path, monkeypatch):
