@@ -397,8 +397,8 @@ def dashboard() -> str:
     <div class="grid-two">
       <section><h2>模拟组合</h2><div id="portfolio"></div></section>
       <section><h2>模拟绩效</h2><div id="paperPerformance"></div></section>
-      <section><h2>智能体状态</h2><div id="agent"></div></section>
-      <section><h2>模拟交易执行层</h2><div id="broker"></div></section>
+      <section><h2>智能体运行状态</h2><div id="agent"></div></section>
+      <section><h2>模拟交易状态（模拟交易执行层）</h2><div id="broker"></div></section>
       <section><h2>Moomoo OpenD</h2><div id="moomooBroker"></div></section>
       <section><h2>行情数据</h2><div id="marketData"></div></section>
       <section><h2>运行健康</h2><div id="opsHealth"></div></section>

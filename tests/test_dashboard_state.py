@@ -185,6 +185,8 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "系统快照" in html
     assert "模拟组合" in html
     assert "模拟绩效" in html
+    assert "智能体运行状态" in html
+    assert "模拟交易状态" in html
     assert "模拟收益率" in html
     assert "累计收益率" in html
     assert "最大回撤" in html

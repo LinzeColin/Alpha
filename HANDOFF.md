@@ -229,6 +229,9 @@ Paper readiness target tests -> .venv/bin/python -m pytest tests/test_paper_read
 Paper readiness full regression -> .venv/bin/python -m pytest tests -q -> 55 passed
 Paper readiness CLI verification -> .venv/bin/python -m backend.app.services.paper_readiness returned overall_status_zh=不可交付, pass/warn/fail=7/1/2 because no live loop snapshot and no fresh pending ticket in the current runtime state
 Paper readiness safety scan -> no new real broker place_order/unlock_trade path; readiness report states it does not submit real-money orders
+Paper readiness runtime verification -> foreground FastAPI app on 127.0.0.1:8000 returned `/readiness/paper-trading` overall_status_zh=已就绪, pass/warn/fail=10/0/0 after app-managed loop generated fresh runtime evidence
+Dashboard Chinese status marker verification -> `/dashboard` returned 200 and contained 交付就绪/交付日期/交付项/运行状态/交易状态; forbidden legacy phrases Alpha Dashboard and Run Paper Cycle were absent
+Dashboard Chinese title reinforcement -> dashboard now labels the relevant panels as 智能体运行状态 and 模拟交易状态（模拟交易执行层）
 ```
 
 ## Unresolved Risks
@@ -237,7 +240,7 @@ Paper readiness safety scan -> no new real broker place_order/unlock_trade path;
 - This machine's current Python SSL trust chain blocked live Stooq refresh during validation; do not disable SSL verification by default.
 - External broker paper API integration is not connected yet; local sandbox paper adapter abstraction, Moomoo OpenD read-only probe, and manual broker-ready JSON/CSV/Chinese HTML ticket export now exist.
 - Moomoo OpenD is installed and listening on `127.0.0.1:11111`; Codex's sandboxed socket checks may be blocked, but an escalated read-only port check succeeded. The project `.venv` still cannot import `moomoo` or `futu`; install the correct API package into `.venv` before building quote/account read-only calls.
-- `/readiness/paper-trading` and `python -m backend.app.services.paper_readiness` now exist; current CLI evidence is `不可交付` until the app-managed loop is running and a fresh pending candidate ticket exists.
+- `/readiness/paper-trading` and `python -m backend.app.services.paper_readiness` now exist; direct CLI evidence can still be `不可交付` without an app-managed loop snapshot, while the foreground FastAPI runtime verified 10/10 readiness with fresh loop evidence.
 - Dashboard is local MVP only.
 - Approval queue is SQLite-backed locally and automatic backup/rotation now exists; it still needs a normal macOS `.app` long-run soak and multi-process contention hardening before claiming unattended 30-day robustness.
 - The current execution environment may reclaim `nohup` background servers between tool calls; foreground uvicorn verified the app runtime, and the start script now detects post-health-check instability, but final `.app` long-run verification should be done from the user's normal macOS session.
