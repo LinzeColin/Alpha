@@ -55,3 +55,11 @@ Decision: Alpha runtime surfaces should display Chinese text for the owner-facin
 Reason: The user requires the whole system to be readable in Chinese during operation.
 
 Consequence: `/dashboard` translates titles, buttons, metrics, tables, empty states, and status/actionability values into Chinese. API field names and machine-readable enum values remain stable for tests and automation.
+
+## 2026-06-13: Broker Paper Adapter Boundary
+
+Decision: Paper trading execution should flow through a replaceable broker paper adapter, starting with `LocalSandboxPaperBrokerAdapter`.
+
+Reason: The MVP needs a broker-like paper execution receipt and dashboard visibility before connecting any real broker paper API. This keeps the execution surface testable without accepting credentials or enabling real-money order submission.
+
+Consequence: `PaperTradingLoop` now returns `paper_broker_adapter` and `broker_paper_order` receipts. The dashboard exposes a Chinese "模拟交易执行层" section showing adapter, mode, connection, credential requirement, and whether real order submission is enabled.

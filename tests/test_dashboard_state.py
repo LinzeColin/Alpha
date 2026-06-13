@@ -17,6 +17,10 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
     assert state["health"]["refresh_interval_seconds"] == 300
     assert state["agent_status"]["status"] == "ready"
     assert state["paper_portfolio"]["trade_count"] == 1
+    assert state["paper_broker_status"]["adapter_id"] == "local_sandbox_paper_broker"
+    assert state["paper_broker_status"]["mode"] == "paper"
+    assert state["paper_broker_status"]["live_order_submission_enabled"] is False
+    assert state["paper_broker_status"]["paper_trade_count"] == 1
     assert state["strategy_tournament"]["candidate_count"] > 0
     assert state["strategy_tournament"]["validation_summary"]["validated_count"] > 0
     assert "hit_rate" in state["strategy_tournament"]["winner"]
@@ -78,6 +82,8 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "模拟组合" in html
     assert "策略锦标赛" in html
     assert "审批队列" in html
+    assert "模拟交易执行层" in html
+    assert "允许真实下单" in html
     assert "有效候选单" in html
     assert "过期候选单" in html
     assert "待人工确认" in html

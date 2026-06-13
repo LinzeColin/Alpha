@@ -16,6 +16,13 @@ def test_paper_loop_generates_ticket_and_fills_paper_order(tmp_path):
     assert result["refresh_interval_seconds"] == DEFAULT_REFRESH_INTERVAL_SECONDS
     assert result["risk_check"]["allowed"] is True
     assert result["paper_order"]["status"] == "filled"
+    assert result["paper_broker_adapter"]["adapter_id"] == "local_sandbox_paper_broker"
+    assert result["paper_broker_adapter"]["live_order_submission_enabled"] is False
+    assert result["broker_paper_order"]["status"] == "filled"
+    assert result["broker_paper_order"]["mode"] == "paper"
+    assert result["broker_paper_order"]["broker_order_id"].startswith("paper_")
+    assert result["broker_paper_order"]["client_order_id"] == result["intent"]["idempotency_key"]
+    assert result["broker_paper_order"]["ticket_id"] == result["approval_queue"]["ticket"]["ticket_id"]
     assert result["approval_queue"]["status"] == "queued"
     assert result["approval_queue"]["ticket"]["status"] == "pending_owner_approval"
     assert result["approval_queue"]["ticket"]["human_action_required"] is True

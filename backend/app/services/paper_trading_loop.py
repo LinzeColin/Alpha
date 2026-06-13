@@ -9,6 +9,7 @@ from uuid import uuid4
 from backend.app.services.approval_queue import ApprovalQueue
 from backend.app.services.audit import MemoryAuditSink
 from backend.app.services.backtest import load_price_fixture
+from backend.app.services.broker_paper_adapter import LocalSandboxPaperBrokerAdapter, PaperBrokerAdapter
 from backend.app.services.order_ticket import BrokerReadyOrderTicket, OrderIntent, utc_now_iso
 from backend.app.services.paper_broker import PaperBroker, PaperOrder
 from backend.app.services.policy import GovernorPolicy
@@ -27,6 +28,7 @@ class PaperTradingLoop:
         price_path: str | Path,
         approval_queue: ApprovalQueue | None = None,
         paper_broker: PaperBroker | None = None,
+        paper_broker_adapter: PaperBrokerAdapter | None = None,
         paper_state_path: str | Path | None = None,
         audit_sink: MemoryAuditSink | None = None,
         refresh_interval_seconds: int = DEFAULT_REFRESH_INTERVAL_SECONDS,
@@ -36,6 +38,7 @@ class PaperTradingLoop:
         self.approval_queue = approval_queue or ApprovalQueue()
         self.paper_state_path = Path(paper_state_path) if paper_state_path else None
         self.paper_broker = paper_broker or (PaperBroker.load(self.paper_state_path) if self.paper_state_path else PaperBroker())
+        self.paper_broker_adapter = paper_broker_adapter or LocalSandboxPaperBrokerAdapter(self.paper_broker)
         self.audit_sink = audit_sink or MemoryAuditSink()
         self.refresh_interval_seconds = refresh_interval_seconds
 
@@ -47,17 +50,22 @@ class PaperTradingLoop:
         ticket = BrokerReadyOrderTicket.from_intent(intent, risk_check).as_dict()
         queue_result = self.approval_queue.enqueue(ticket)
 
-        paper_result = {"status": "skipped", "reason": risk_check["reason"]}
+        paper_order = PaperOrder(
+            idempotency_key=intent.idempotency_key,
+            symbol=intent.symbol,
+            side=intent.side,
+            quantity=intent.quantity,
+            price=intent.estimated_price,
+        )
+        broker_paper_receipt = self.paper_broker_adapter.skipped_receipt(
+            paper_order,
+            reason=risk_check["reason"],
+            source_ticket=ticket,
+        )
+        paper_result = broker_paper_receipt["paper_result"]
         if risk_check.get("allowed"):
-            paper_result = self.paper_broker.submit_order(
-                PaperOrder(
-                    idempotency_key=intent.idempotency_key,
-                    symbol=intent.symbol,
-                    side=intent.side,
-                    quantity=intent.quantity,
-                    price=intent.estimated_price,
-                )
-            )
+            broker_paper_receipt = self.paper_broker_adapter.submit_order(paper_order, source_ticket=ticket)
+            paper_result = broker_paper_receipt["paper_result"]
             if self.paper_state_path:
                 self.paper_broker.save(self.paper_state_path)
 
@@ -75,6 +83,7 @@ class PaperTradingLoop:
                 "strategy_tournament": tournament,
                 "intent": intent.as_dict(),
                 "risk_check": risk_check,
+                "broker_paper_receipt": broker_paper_receipt,
                 "paper_result": paper_result,
                 "paper_portfolio": portfolio,
             },
@@ -90,6 +99,8 @@ class PaperTradingLoop:
             "strategy_tournament": tournament,
             "risk_check": risk_check,
             "approval_queue": queue_result,
+            "paper_broker_adapter": self.paper_broker_adapter.status(),
+            "broker_paper_order": broker_paper_receipt,
             "paper_order": paper_result,
             "paper_portfolio": portfolio,
             "audit_events": self.audit_sink.as_dicts(),

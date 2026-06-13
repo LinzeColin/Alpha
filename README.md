@@ -41,6 +41,7 @@ http://localhost:8000/dashboard/state
 ```text
 POST /paper/run-once
 GET  /paper/portfolio
+GET  /paper/broker/status
 POST /strategy/tournament/run
 GET  /agent/loop/status
 GET  /orders/approval-queue
@@ -53,3 +54,4 @@ GET  /orders/approval-queue
 - 策略/风控配置加载失败即拒绝。
 - 外部 API 不得触发真实资金下单。
 - Alpha 可以生成供用户审核的经纪商就绪订单工单，但不得自主提交真实资金订单。
+- 当前模拟交易执行层使用 `LocalSandboxPaperBrokerAdapter`；它返回 broker-like paper receipt，但不需要凭据，也不允许真实下单。

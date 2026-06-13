@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse
 from backend.app.schemas.strategy_dsl import validate_strategy
 from backend.app.services.agent_runtime import AUTO_PAPER_AGENT
 from backend.app.services.backtest import run_buy_and_hold_fixture
+from backend.app.services.broker_paper_adapter import LocalSandboxPaperBrokerAdapter
 from backend.app.services.approval_queue import ApprovalQueue
 from backend.app.services.policy import GovernorPolicy
 from backend.app.services.live_broker import FailClosedLiveBroker, LiveOrderIntent
@@ -89,6 +90,7 @@ def agent_status() -> dict:
             "risk_check",
             "approval_queue",
             "broker_ready_order_ticket",
+            "broker_paper_adapter",
         ],
         "pending_tickets": queue_summary["fresh_pending_count"],
         "expired_tickets": queue_summary["expired_pending_count"],
@@ -108,6 +110,11 @@ def paper_portfolio() -> dict:
     return PaperBroker.load(PAPER_STATE_PATH).portfolio_snapshot(latest_mark_prices(DATA_PATH))
 
 
+@router.get("/paper/broker/status")
+def paper_broker_status() -> dict:
+    return LocalSandboxPaperBrokerAdapter(PaperBroker.load(PAPER_STATE_PATH)).status()
+
+
 @router.post("/strategy/tournament/run")
 def strategy_tournament_run() -> dict:
     return run_strategy_tournament(DATA_PATH)
@@ -120,6 +127,7 @@ def dashboard_state() -> dict:
         "owner_summary": owner_summary(),
         "agent_status": agent_status(),
         "paper_portfolio": paper_portfolio(),
+        "paper_broker_status": paper_broker_status(),
         "strategy_tournament": strategy_tournament_run(),
         "approval_queue": approval_queue(),
     }
@@ -180,6 +188,7 @@ def dashboard() -> str:
     <div class="grid-two">
       <section><h2>模拟组合</h2><div id="portfolio"></div></section>
       <section><h2>智能体状态</h2><div id="agent"></div></section>
+      <section><h2>模拟交易执行层</h2><div id="broker"></div></section>
     </div>
     <section><h2>策略锦标赛</h2><div id="tournament"></div></section>
     <section><h2>审批队列</h2><div id="queue"></div></section>
@@ -205,6 +214,7 @@ def dashboard() -> str:
       hold_research: '继续研究观察',
       reject: '拒绝',
       rejected: '已拒绝',
+      paper: '模拟交易',
       fresh: '有效',
       expired: '已过期',
       invalid: '无效',
@@ -214,7 +224,8 @@ def dashboard() -> str:
       paper_trading: '全自动模拟交易',
       risk_check: '自动风控检查',
       approval_queue: '自动进入审批队列',
-      broker_ready_order_ticket: '经纪商就绪订单工单'
+      broker_ready_order_ticket: '经纪商就绪订单工单',
+      broker_paper_adapter: '模拟交易执行适配器'
     };
     const SIDE_TEXT = { buy: '买入', sell: '卖出' };
     function displayStatus(value, fallback = '无') {
@@ -229,6 +240,9 @@ def dashboard() -> str:
     }
     function displayValue(value, fallback = '无') {
       return value === null || value === undefined || value === '' ? fallback : value;
+    }
+    function displayBool(value) {
+      return value ? '是' : '否';
     }
     function pill(text, kind) {
       return `<span class="pill ${kind}">${text}</span>`;
@@ -282,9 +296,28 @@ def dashboard() -> str:
             <tr><th>最新候选单</th><td>${agent.latest_ticket_created_at || '无'}</td></tr>
             <tr><th>最新有效候选单</th><td>${agent.latest_fresh_ticket_created_at || '无'}</td></tr>
             <tr><th>过期候选单</th><td>${agent.expired_tickets || 0}</td></tr>
-            <tr><th>最新结果</th><td>${displayValue(summary.intent_symbol)} / ${displayStatus(summary.ticket_status)} / ${displayStatus(summary.paper_order_status)}</td></tr>
+            <tr><th>最新结果</th><td>${displayValue(summary.intent_symbol)} / ${displayStatus(summary.ticket_status)} / ${displayStatus(summary.paper_order_status)} / ${displayStatus(summary.broker_paper_order_status)}</td></tr>
+            <tr><th>最新模拟经纪商订单</th><td>${displayValue(summary.broker_paper_order_id)}</td></tr>
             <tr><th>错误</th><td>${loop.error_count || 0}${loop.last_error ? '：' + loop.last_error : ''}</td></tr>
             <tr><th>能力</th><td>${(agent.capabilities || []).map(displayCapability).join('，')}</td></tr>
+          </tbody>
+        </table>
+      `;
+    }
+    function renderBroker(broker) {
+      const latest = broker.latest_trade || {};
+      const latestLine = latest.symbol ? `${latest.symbol} / ${displaySide(latest.side)} / ${displayValue(latest.quantity)} @ ${displayValue(latest.price)}` : '暂无';
+      document.getElementById('broker').innerHTML = `
+        <table>
+          <tbody>
+            <tr><th>Adapter</th><td>${displayValue(broker.adapter_id)}</td></tr>
+            <tr><th>名称</th><td>${displayValue(broker.broker_name)}</td></tr>
+            <tr><th>模式</th><td>${displayStatus(broker.mode)}</td></tr>
+            <tr><th>连接</th><td>${displayBool(broker.connected)}</td></tr>
+            <tr><th>需要凭据</th><td>${displayBool(broker.credential_required)}</td></tr>
+            <tr><th>允许真实下单</th><td>${displayBool(broker.live_order_submission_enabled)}</td></tr>
+            <tr><th>交易次数</th><td>${broker.paper_trade_count || 0}</td></tr>
+            <tr><th>最近模拟成交</th><td>${latestLine}</td></tr>
           </tbody>
         </table>
       `;
@@ -323,6 +356,7 @@ def dashboard() -> str:
         renderMetrics(data);
         renderPortfolio(data.paper_portfolio || {});
         renderAgent(data.agent_status || {});
+        renderBroker(data.paper_broker_status || {});
         renderTournament(data.strategy_tournament || {});
         renderQueue(data.approval_queue || {});
         document.getElementById('lastUpdated').textContent = '最近更新：' + new Date().toLocaleString('zh-CN');

@@ -12,6 +12,7 @@ class FakePaperLoop:
             "risk_check": {"status": "approved_for_owner_review"},
             "approval_queue": {"ticket": {"status": "pending_owner_approval"}},
             "paper_order": {"status": "filled"},
+            "broker_paper_order": {"status": "filled", "broker_order_id": "paper_123"},
             "paper_portfolio": {"trade_count": 1, "total_equity": 10000.0},
         }
 
@@ -37,5 +38,7 @@ def test_auto_paper_agent_runtime_runs_immediate_cycle_and_stops():
     assert running["error_count"] == 0
     assert running["status"] == "sleeping"
     assert running["last_result_summary"]["intent_symbol"] == "TLT"
+    assert running["last_result_summary"]["broker_paper_order_status"] == "filled"
+    assert running["last_result_summary"]["broker_paper_order_id"] == "paper_123"
     assert stopped["status"] == "stopped"
     assert stopped["task_running"] is False

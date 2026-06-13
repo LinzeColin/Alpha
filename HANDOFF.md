@@ -26,6 +26,8 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - Approval queue now derives ticket freshness from `expires_at`; only fresh `pending_owner_approval` tickets count as owner-actionable.
 - Dashboard user-facing display is now Chinese: page title, buttons, metric labels, table headers, empty states, and status/actionability mappings render in Chinese while API machine fields remain stable.
 - Local launcher scripts now print Chinese startup/shutdown messages.
+- Paper trading execution now flows through `LocalSandboxPaperBrokerAdapter`, which returns broker-like paper receipts without credentials or real order submission.
+- `/paper/broker/status` and the dashboard "模拟交易执行层" section expose paper adapter status, mode, connection, credential requirement, live-order disabled state, trade count, and latest simulated fill.
 - AppleScript `Alpha.app` is installed at `/Users/linzezhang/Downloads/Alpha.app`, `/Users/linzezhang/Applications/Alpha.app`, and `/Applications/Alpha.app`.
 - GitHub connector backup now contains the core runtime/dashboard/code/test changes from this run.
 - Repo launcher exists at `outputs/applications/Alpha.command`; an older external copy was observed at `/Users/linzezhang/Downloads/applicatioins/Alpha.command`.
@@ -38,6 +40,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - Refresh cadence target is 300 seconds by default.
 - Use one app-managed paper loop; do not start a second external agent process beside the dashboard.
 - User-visible runtime surfaces should display Chinese; API field names and enum values stay machine-readable and stable.
+- Paper execution adapters may be broker-like, but committed defaults must stay local sandbox or broker paper/read-only only.
 
 ## Files To Read First
 
@@ -86,6 +89,10 @@ Full regression -> .venv/bin/python -m pytest tests -q -> 21 passed
 Diff hygiene -> git diff --check -> passed
 浏览器中文控制台验证 -> 标题 Alpha 控制台, lang zh-CN, 旧英文可见短语=[], 已成功点击 运行模拟交易周期, 控制台错误=[]
 Launcher text verification -> scripts/start_alpha_dashboard.sh prints Chinese startup and health-check messages
+Broker paper adapter unit tests -> .venv/bin/python -m pytest tests/test_broker_paper_adapter.py tests/test_paper_trading_loop.py tests/test_dashboard_state.py tests/test_agent_runtime.py -q -> 11 passed
+Broker paper adapter full regression -> .venv/bin/python -m pytest tests -q -> 23 passed
+Broker paper isolated loop -> generated broker_paper_order status=filled, mode=paper, live_order_submission_enabled=false, broker_order_id=paper_...
+Browser broker execution layer verification -> dashboard showed 模拟交易执行层, 模式=模拟交易, 允许真实下单=否, consoleErrors=[]
 Repo launcher -> outputs/applications/Alpha.command exists and is executable
 External app launchers -> /Users/linzezhang/Downloads/Alpha.app, /Users/linzezhang/Applications/Alpha.app, and /Applications/Alpha.app exist and pass plist validation
 ```
@@ -93,7 +100,7 @@ External app launchers -> /Users/linzezhang/Downloads/Alpha.app, /Users/linzezha
 ## Unresolved Risks
 
 - Current market data is fixture-only.
-- Broker paper integration is not connected yet.
+- External broker paper API integration is not connected yet; local sandbox paper adapter abstraction now exists.
 - Dashboard is local MVP only.
 - Approval queue is local file/in-memory capable, not a durable production database yet.
 - Real broker live order submission remains intentionally out of scope.
@@ -102,4 +109,4 @@ External app launchers -> /Users/linzezhang/Downloads/Alpha.app, /Users/linzezha
 
 ## Next Step
 
-Authenticate GitHub CLI/HTTPS push or continue connector-based sync for the remaining seed/task-pack docs, then start broker paper integration design.
+Authenticate GitHub CLI/HTTPS push or continue connector-based sync, then implement a concrete broker paper/read-only adapter for the user's chosen broker.

@@ -100,6 +100,7 @@ class AutoPaperAgentRuntime:
         ticket = result.get("approval_queue", {}).get("ticket", {})
         portfolio = result.get("paper_portfolio", {})
         intent = result.get("intent", {})
+        broker_paper_order = result.get("broker_paper_order", {})
         return {
             "run_id": result.get("run_id"),
             "status": result.get("status"),
@@ -108,6 +109,8 @@ class AutoPaperAgentRuntime:
             "risk_status": result.get("risk_check", {}).get("status"),
             "ticket_status": ticket.get("status"),
             "paper_order_status": result.get("paper_order", {}).get("status"),
+            "broker_paper_order_status": broker_paper_order.get("status"),
+            "broker_paper_order_id": broker_paper_order.get("broker_order_id"),
             "paper_trade_count": portfolio.get("trade_count"),
             "paper_total_equity": portfolio.get("total_equity"),
         }
