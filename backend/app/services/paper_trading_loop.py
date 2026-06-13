@@ -61,6 +61,9 @@ class PaperTradingLoop:
             if self.paper_state_path:
                 self.paper_broker.save(self.paper_state_path)
 
+        mark_prices = latest_mark_prices(self.price_path)
+        portfolio = self.paper_broker.portfolio_snapshot(mark_prices)
+
         self.audit_sink.write(
             trace_id=run_id,
             actor_type="agent",
@@ -68,7 +71,13 @@ class PaperTradingLoop:
             event_type="paper_cycle",
             decision=queue_result["status"],
             reason=risk_check["reason"],
-            payload={"intent": intent.as_dict(), "risk_check": risk_check, "paper_result": paper_result},
+            payload={
+                "strategy_tournament": tournament,
+                "intent": intent.as_dict(),
+                "risk_check": risk_check,
+                "paper_result": paper_result,
+                "paper_portfolio": portfolio,
+            },
         )
 
         return {
@@ -82,7 +91,7 @@ class PaperTradingLoop:
             "risk_check": risk_check,
             "approval_queue": queue_result,
             "paper_order": paper_result,
-            "paper_portfolio": self.paper_broker.snapshot(),
+            "paper_portfolio": portfolio,
             "audit_events": self.audit_sink.as_dicts(),
         }
 
@@ -116,16 +125,27 @@ class PaperTradingLoop:
         )
 
 
-def build_default_loop(queue_path: str | Path | None = None, interval_seconds: int = DEFAULT_REFRESH_INTERVAL_SECONDS) -> PaperTradingLoop:
+def build_default_loop(
+    queue_path: str | Path | None = None,
+    paper_state_path: str | Path | None = None,
+    interval_seconds: int = DEFAULT_REFRESH_INTERVAL_SECONDS,
+) -> PaperTradingLoop:
     root = Path(__file__).resolve().parents[3]
     policy = GovernorPolicy.load(root / "configs" / "trading_governor_policy.yaml")
+    state_path = Path(paper_state_path) if paper_state_path else root / "runtime" / "paper_portfolio.json"
     return PaperTradingLoop(
         policy=policy,
         price_path=root / "data" / "sample_prices.csv",
         approval_queue=ApprovalQueue(queue_path or root / "runtime" / "approval_queue.json"),
-        paper_state_path=root / "runtime" / "paper_portfolio.json",
+        paper_state_path=state_path,
         refresh_interval_seconds=interval_seconds,
     )
+
+
+def latest_mark_prices(price_path: str | Path) -> dict[str, float]:
+    df = load_price_fixture(price_path)
+    latest_prices = df.sort_values("date").groupby("symbol").tail(1)
+    return {str(row["symbol"]): float(row["close"]) for _, row in latest_prices.iterrows()}
 
 
 def main() -> None:
@@ -133,9 +153,14 @@ def main() -> None:
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--interval-seconds", type=int, default=DEFAULT_REFRESH_INTERVAL_SECONDS)
     parser.add_argument("--queue-path", default=None)
+    parser.add_argument("--paper-state-path", default=None)
     args = parser.parse_args()
 
-    loop = build_default_loop(queue_path=args.queue_path, interval_seconds=args.interval_seconds)
+    loop = build_default_loop(
+        queue_path=args.queue_path,
+        paper_state_path=args.paper_state_path,
+        interval_seconds=args.interval_seconds,
+    )
     if args.once:
         print(json.dumps(loop.run_once(), indent=2, sort_keys=True))
         return
