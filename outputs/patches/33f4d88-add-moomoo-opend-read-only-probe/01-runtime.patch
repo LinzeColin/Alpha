@@ -1,0 +1,356 @@
+diff --git a/backend/app/api/routes.py b/backend/app/api/routes.py
+index 7ed2e52..5d85386 100644
+--- a/backend/app/api/routes.py
++++ b/backend/app/api/routes.py
+@@ -16,6 +16,7 @@ from backend.app.services.broker_ticket_export import (
+ from backend.app.services.policy import GovernorPolicy
+ from backend.app.services.live_broker import FailClosedLiveBroker, LiveOrderIntent
+ from backend.app.services.market_data_gateway import MarketDataGateway, MarketDataSnapshot
++from backend.app.services.moomoo_broker_probe import probe_moomoo_opend
+ from backend.app.services.ops_health import collect_ops_health, create_runtime_backup
+ from backend.app.services.ops_runtime import AUTO_OPS_MAINTENANCE
+ from backend.app.services.paper_trading_loop import DEFAULT_REFRESH_INTERVAL_SECONDS, build_default_loop, latest_mark_prices
+@@ -225,6 +226,11 @@ def paper_broker_status() -> dict:
+     return LocalSandboxPaperBrokerAdapter(PaperBroker.load(PAPER_STATE_PATH)).status()
+ 
+ 
++@router.get("/broker/moomoo/status")
++def moomoo_broker_status() -> dict:
++    return probe_moomoo_opend()
++
++
+ @router.post("/strategy/tournament/run")
+ def strategy_tournament_run() -> dict:
+     return run_strategy_tournament(resolve_market_data().price_path)
+@@ -298,6 +304,7 @@ def dashboard_state() -> dict:
+         "paper_portfolio": paper_portfolio(),
+         "paper_performance": paper_performance_history(),
+         "paper_broker_status": paper_broker_status(),
++        "moomoo_broker_status": moomoo_broker_status(),
+         "strategy_tournament": strategy_tournament_run(),
+         "strategy_journal": strategy_tournament_history(),
+         "approval_queue": approval_queue(),
+@@ -363,6 +370,7 @@ def dashboard() -> str:
+       <section><h2>模拟绩效</h2><div id="paperPerformance"></div></section>
+       <section><h2>智能体状态</h2><div id="agent"></div></section>
+       <section><h2>模拟交易执行层</h2><div id="broker"></div></section>
++      <section><h2>Moomoo OpenD</h2><div id="moomooBroker"></div></section>
+       <section><h2>行情数据</h2><div id="marketData"></div></section>
+       <section><h2>运行健康</h2><div id="opsHealth"></div></section>
+     </div>
+@@ -396,6 +404,12 @@ def dashboard() -> str:
+       owner_rejected: '已拒绝',
+       broker_ticket_exported: '工单已导出',
+       paper: '模拟交易',
++      read_only_probe: '只读连接探测',
++      ready_read_only: '只读探测就绪',
++      api_missing: 'API 包未安装',
++      opend_unreachable: 'OpenD 未连接',
++      not_configured: '未就绪',
++      probe_error: '探测异常',
+       fresh: '有效',
+       expired: '已过期',
+       invalid: '无效',
+@@ -546,6 +560,7 @@ def dashboard() -> str:
+       const agent = data.agent_status || {};
+       const loop = agent.loop || {};
+       const marketData = data.market_data || {};
++      const moomoo = data.moomoo_broker_status || {};
+       const opsHealth = data.ops_health || {};
+       const opsMaintenance = data.ops_maintenance || {};
+       const strategyJournal = data.strategy_journal || {};
+@@ -556,6 +571,7 @@ def dashboard() -> str:
+         metric('运行健康', pill(displayStatus(opsHealth.overall_status, '未知'), opsHealth.fail_count ? 'danger' : (opsHealth.warn_count ? 'warn' : 'ok'))),
+         metric('自动维护', pill(displayStatus(opsMaintenance.status, '未知'), opsMaintenance.error_count ? 'danger' : (opsMaintenance.task_running ? 'ok' : 'warn'))),
+         metric('行情源', displayMarketDataSource(marketData.source_kind)),
++        metric('Moomoo OpenD', pill(moomoo.status_zh || displayStatus(moomoo.status, '未知'), moomoo.read_only_ready ? 'ok' : 'warn')),
+         metric('行情质量', pill(displayDataQuality(marketData.data_quality), marketData.real_market_data ? 'ok' : 'warn')),
+         metric('最新行情日', displayValue(marketData.latest_date)),
+         metric('模拟权益', Number(portfolio.total_equity || 0).toFixed(2)),
+@@ -731,6 +747,30 @@ def dashboard() -> str:
+         </table>
+       `;
+     }
++    function renderMoomooBroker(status) {
++      const packageInfo = status.package || {};
++      const connection = status.opend_connection || {};
++      const kind = status.read_only_ready ? 'ok' : 'warn';
++      document.getElementById('moomooBroker').innerHTML = `
++        <table>
++          <tbody>
++            <tr><th>连接模式</th><td>${status.mode_zh || displayStatus(status.mode, '未知')}</td></tr>
++            <tr><th>探测结果</th><td>${pill(status.status_zh || displayStatus(status.status, '未知'), kind)}</td></tr>
++            <tr><th>说明</th><td>${status.message_zh || '暂无说明'}</td></tr>
++            <tr><th>OpenD 地址</th><td>${displayValue(status.host)}:${displayValue(status.port)}</td></tr>
++            <tr><th>OpenD 连接</th><td>${status.opend_connected_zh || displayBool(status.opend_connected)}</td></tr>
++            <tr><th>API 包</th><td>${status.package_available_zh || displayBool(status.package_available)} / ${displayValue(packageInfo.import_name, '未发现')} / ${displayValue(packageInfo.version, '未知版本')}</td></tr>
++            <tr><th>只读就绪</th><td>${status.read_only_ready_zh || displayBool(status.read_only_ready)}</td></tr>
++            <tr><th>探测需凭据</th><td>${status.credential_required_for_probe_zh || displayBool(status.credential_required_for_probe)}</td></tr>
++            <tr><th>交易解锁</th><td>${status.trade_unlock_required_zh || displayBool(status.trade_unlock_required)}</td></tr>
++            <tr><th>允许真实下单</th><td>${status.live_order_submission_enabled_zh || displayBool(status.live_order_submission_enabled)}</td></tr>
++            <tr><th>安全操作</th><td>${(status.safe_operations_zh || []).join('，') || '无'}</td></tr>
++            <tr><th>禁止操作</th><td>${(status.forbidden_operations_zh || []).join('，') || '无'}</td></tr>
++            <tr><th>连接错误</th><td>${connection.error_zh || '无'}</td></tr>
++          </tbody>
++        </table>
++      `;
++    }
+     function renderTournament(tournament) {
+       const rows = (tournament.candidates || []).slice(0, 8).map(row => `
+         <tr>
+@@ -813,6 +853,7 @@ def dashboard() -> str:
+         renderPaperPerformance(data.paper_performance || {});
+         renderAgent(data.agent_status || {});
+         renderBroker(data.paper_broker_status || {});
++        renderMoomooBroker(data.moomoo_broker_status || {});
+         renderMarketData(data.market_data || {});
+         renderOpsHealth(data.ops_health || {});
+         document.getElementById('opsHealth').insertAdjacentHTML('beforeend', renderOpsMaintenance(data.ops_maintenance || {}));
+
+diff --git a/backend/app/services/moomoo_broker_probe.py b/backend/app/services/moomoo_broker_probe.py
+new file mode 100644
+index 0000000..fa8e388
+--- /dev/null
++++ b/backend/app/services/moomoo_broker_probe.py
+@@ -0,0 +1,195 @@
++from __future__ import annotations
++
++import importlib.metadata
++import importlib.util
++import os
++import socket
++from dataclasses import dataclass
++from datetime import datetime, timezone
++from typing import Callable
++
++
++DEFAULT_MOOMOO_OPEND_HOST = "127.0.0.1"
++DEFAULT_MOOMOO_OPEND_PORT = 11111
++DEFAULT_MOOMOO_OPEND_TIMEOUT_SECONDS = 0.25
++
++PACKAGE_CANDIDATES = (
++    {"import_name": "moomoo", "distribution_names": ("moomoo", "moomoo-api")},
++    {"import_name": "futu", "distribution_names": ("futu", "futu-api")},
++)
++
++STATUS_ZH = {
++    "ready_read_only": "只读探测就绪",
++    "api_missing": "API 包未安装",
++    "opend_unreachable": "OpenD 未连接",
++    "not_configured": "未就绪",
++    "probe_error": "探测异常",
++}
++
++MESSAGE_ZH = {
++    "ready_read_only": "Moomoo API 包和本机 OpenD 端口均可用；当前仅允许只读探测，不会解锁交易或提交真实资金订单。",
++    "api_missing": "检测到本机 OpenD 端口，但当前 Python 环境未安装可导入的 moomoo/futu API 包。",
++    "opend_unreachable": "当前 Python 环境可导入 Moomoo API 包，但未能连接本机 OpenD 端口。",
++    "not_configured": "当前 Python 环境未发现 Moomoo API 包，也未能连接本机 OpenD 端口。",
++    "probe_error": "Moomoo OpenD 探测过程中发生异常；系统保持只读与真实下单禁用状态。",
++}
++
++
++@dataclass(frozen=True)
++class MoomooOpenDProbeConfig:
++    host: str = DEFAULT_MOOMOO_OPEND_HOST
++    port: int = DEFAULT_MOOMOO_OPEND_PORT
++    timeout_seconds: float = DEFAULT_MOOMOO_OPEND_TIMEOUT_SECONDS
++
++    @classmethod
++    def from_env(cls) -> "MoomooOpenDProbeConfig":
++        return cls(
++            host=os.getenv("MOOMOO_OPEND_HOST", DEFAULT_MOOMOO_OPEND_HOST),
++            port=_int_env("MOOMOO_OPEND_PORT", DEFAULT_MOOMOO_OPEND_PORT),
++            timeout_seconds=_float_env("MOOMOO_OPEND_TIMEOUT_SECONDS", DEFAULT_MOOMOO_OPEND_TIMEOUT_SECONDS),
++        )
++
++
++def probe_moomoo_opend(
++    config: MoomooOpenDProbeConfig | None = None,
++    *,
++    package_detector: Callable[[], dict] | None = None,
++    connection_probe: Callable[[str, int, float], dict] | None = None,
++) -> dict:
++    cfg = config or MoomooOpenDProbeConfig.from_env()
++    try:
++        detected_package = (package_detector or detect_moomoo_api_package)()
++        connection = (connection_probe or probe_tcp_connection)(cfg.host, cfg.port, cfg.timeout_seconds)
++    except Exception as exc:
++        detected_package = {
++            "available": False,
++            "import_name": None,
++            "distribution_name": None,
++            "version": None,
++            "message_zh": "Moomoo API 包检测失败。",
++        }
++        connection = {"connected": False, "error": exc.__class__.__name__, "error_zh": _connection_error_zh(exc)}
++        status = "probe_error"
++        return _probe_status(cfg, detected_package=detected_package, connection=connection, status=status)
++    status = _status(package_available=detected_package["available"], opend_connected=connection["connected"])
++    return _probe_status(cfg, detected_package=detected_package, connection=connection, status=status)
++
++
++def _probe_status(
++    cfg: MoomooOpenDProbeConfig,
++    *,
++    detected_package: dict,
++    connection: dict,
++    status: str,
++) -> dict:
++    return {
++        "provider_id": "moomoo_opend",
++        "provider_name": "Moomoo OpenD",
++        "provider_name_zh": "Moomoo OpenD",
++        "mode": "read_only_probe",
++        "mode_zh": "只读连接探测",
++        "status": status,
++        "status_zh": STATUS_ZH[status],
++        "message_zh": MESSAGE_ZH[status],
++        "generated_at": _utc_now_iso(),
++        "host": cfg.host,
++        "port": cfg.port,
++        "timeout_seconds": cfg.timeout_seconds,
++        "package": detected_package,
++        "package_available": detected_package["available"],
++        "package_available_zh": "是" if detected_package["available"] else "否",
++        "opend_connection": connection,
++        "opend_connected": connection["connected"],
++        "opend_connected_zh": "是" if connection["connected"] else "否",
++        "read_only_ready": detected_package["available"] and connection["connected"],
++        "read_only_ready_zh": "是" if detected_package["available"] and connection["connected"] else "否",
++        "credential_required_for_probe": False,
++        "credential_required_for_probe_zh": "否",
++        "trade_unlock_required": False,
++        "trade_unlock_required_zh": "否",
++        "trade_context_enabled": False,
++        "trade_context_enabled_zh": "否",
++        "live_order_submission_enabled": False,
++        "live_order_submission_enabled_zh": "否",
++        "supports_real_broker_place_order": False,
++        "supports_real_broker_place_order_zh": "否",
++        "safe_operations_zh": ["检测 API 包", "检测本机 OpenD 端口", "读取连接就绪状态"],
++        "forbidden_operations_zh": ["解锁交易", "提交真实资金订单", "修改真实账户"],
++    }
++
++
++def detect_moomoo_api_package() -> dict:
++    for candidate in PACKAGE_CANDIDATES:
++        import_name = candidate["import_name"]
++        if importlib.util.find_spec(import_name) is None:
++            continue
++        version = _package_version(import_name, candidate["distribution_names"])
++        return {
++            "available": True,
++            "import_name": import_name,
++            "distribution_name": version["distribution_name"],
++            "version": version["version"],
++            "message_zh": "当前 Python 环境可导入 Moomoo API 包。",
++        }
++    return {
++        "available": False,
++        "import_name": None,
++        "distribution_name": None,
++        "version": None,
++        "message_zh": "当前 Python 环境未发现可导入的 moomoo 或 futu API 包。",
++    }
++
++
++def probe_tcp_connection(host: str, port: int, timeout_seconds: float) -> dict:
++    try:
++        with socket.create_connection((host, int(port)), timeout=float(timeout_seconds)):
++            return {"connected": True, "error": None, "error_zh": None}
++    except Exception as exc:
++        return {"connected": False, "error": exc.__class__.__name__, "error_zh": _connection_error_zh(exc)}
++
++
++def _status(*, package_available: bool, opend_connected: bool) -> str:
++    if package_available and opend_connected:
++        return "ready_read_only"
++    if opend_connected and not package_available:
++        return "api_missing"
++    if package_available and not opend_connected:
++        return "opend_unreachable"
++    return "not_configured"
++
++
++def _package_version(import_name: str, distribution_names: tuple[str, ...]) -> dict:
++    for name in (import_name, *distribution_names):
++        try:
++            return {"distribution_name": name, "version": importlib.metadata.version(name)}
++        except importlib.metadata.PackageNotFoundError:
++            continue
++    return {"distribution_name": None, "version": None}
++
++
++def _connection_error_zh(exc: Exception) -> str:
++    if isinstance(exc, ConnectionRefusedError):
++        return "本机 OpenD 端口拒绝连接。"
++    if isinstance(exc, TimeoutError):
++        return "连接本机 OpenD 端口超时。"
++    if isinstance(exc, PermissionError):
++        return "当前运行环境没有权限连接本机 OpenD 端口。"
++    return "无法连接本机 OpenD 端口。"
++
++
++def _utc_now_iso() -> str:
++    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
++
++
++def _int_env(name: str, default: int) -> int:
++    try:
++        return int(os.getenv(name, str(default)))
++    except ValueError:
++        return default
++
++
++def _float_env(name: str, default: float) -> float:
++    try:
++        return float(os.getenv(name, str(default)))
++    except ValueError:
++        return default
+
+diff --git a/backend/app/services/ops_health.py b/backend/app/services/ops_health.py
+index 5e6fe94..66acd74 100644
+--- a/backend/app/services/ops_health.py
++++ b/backend/app/services/ops_health.py
+@@ -12,6 +12,7 @@ from typing import Any
+ from backend.app.services.approval_queue import ApprovalQueue
+ from backend.app.services.broker_paper_adapter import LocalSandboxPaperBrokerAdapter
+ from backend.app.services.market_data_gateway import MarketDataGateway
++from backend.app.services.moomoo_broker_probe import probe_moomoo_opend
+ from backend.app.services.paper_broker import PaperBroker
+@@ -39,6 +40,7 @@ def collect_ops_health(
+     log_path: str | Path | None = None,
+     market_data_gateway: MarketDataGateway | None = None,
+     loop_snapshot: dict | None = None,
++    moomoo_probe_status: dict | None = None,
+     max_loop_lag_seconds: int = DEFAULT_MAX_LOOP_LAG_SECONDS,
+     max_backup_age_seconds: int = DEFAULT_MAX_BACKUP_AGE_SECONDS,
+ ) -> dict:
+@@ -54,6 +56,7 @@ def collect_ops_health(
+         _check_approval_queue(queue_path),
+         _check_paper_portfolio(paper_state_path),
+         _check_paper_broker_boundary(paper_state_path),
++        _check_moomoo_read_only_probe(moomoo_probe_status if moomoo_probe_status is not None else probe_moomoo_opend()),
+         _check_market_data(gateway),
+         _check_dashboard_process(pid_path, loop_snapshot=loop_snapshot),
+         _check_log_tail(log_path),
+@@ -306,6 +309,20 @@ def _check_paper_broker_boundary(paper_state_path: Path) -> dict:
+     return _check("live_order_boundary", "真实下单边界", "pass", "执行层保持模拟模式，真实下单禁用。", status)
++
++
++def _check_moomoo_read_only_probe(status: dict) -> dict:
++    if status.get("live_order_submission_enabled") or status.get("trade_context_enabled") or status.get("supports_real_broker_place_order"):
++        return _check("moomoo_read_only_probe", "Moomoo OpenD 只读探测", "fail", "Moomoo 探测层出现真实交易能力，必须立即停用。", status)
++    if status.get("read_only_ready"):
++        return _check("moomoo_read_only_probe", "Moomoo OpenD 只读探测", "pass", "Moomoo API 包和本机 OpenD 端口可用，且保持只读。", status)
++    return _check(
++        "moomoo_read_only_probe",
++        "Moomoo OpenD 只读探测",
++        "warn",
++        status.get("message_zh") or "Moomoo OpenD 只读探测未就绪；本地模拟交易仍可继续。",
++        status,
++    )
+ 
+ 
+ def _check_market_data(gateway: MarketDataGateway) -> dict:
