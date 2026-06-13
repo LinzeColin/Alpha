@@ -265,6 +265,10 @@ def dashboard() -> str:
       fresh: '有效',
       expired: '已过期',
       invalid: '无效',
+      starting: '正在启动',
+      blocked: '已阻止',
+      unchanged: '未变化',
+      updated: '已更新',
       unknown: '未知'
     };
     const CAPABILITY_TEXT = {
@@ -274,16 +278,74 @@ def dashboard() -> str:
       broker_ready_order_ticket: '经纪商就绪订单工单',
       broker_paper_adapter: '模拟交易执行适配器'
     };
+    const AGENT_TEXT = {
+      paper_trading_loop: '模拟交易循环智能体'
+    };
+    const ADAPTER_TEXT = {
+      local_sandbox_paper_broker: '本地沙盒模拟经纪商适配器'
+    };
+    const BROKER_TEXT = {
+      'Alpha Local Sandbox': 'Alpha 本地沙盒'
+    };
+    const ACCOUNT_TEXT = {
+      local_paper_account: '本地模拟账户'
+    };
     const SIDE_TEXT = { buy: '买入', sell: '卖出' };
+    const ORDER_TYPE_TEXT = { market: '市价单' };
+    const TIME_IN_FORCE_TEXT = { day: '当日有效' };
+    const REASON_TEXT = {
+      'pre-trade risk checks passed': '下单前风控检查通过',
+      'kill switch active': '总开关已触发',
+      'missing idempotency key': '缺少幂等键',
+      'invalid side': '方向无效',
+      'invalid quantity, price, or notional': '数量、价格或名义金额无效',
+      'max order value not configured': '最大订单金额未配置',
+      'max order value exceeded': '超过最大订单金额',
+      ticket_not_found: '未找到工单',
+      ticket_transition_blocked: '工单状态流转被阻止',
+      ticket_must_be_owner_reviewed_before_export: '导出前必须先完成所有者复核',
+      risk_blocked_ticket_cannot_be_owner_reviewed_or_exported: '风控阻止的工单不能复核或导出',
+      ticket_already_in_requested_state: '工单已处于目标状态'
+    };
     function displayStatus(value, fallback = '无') {
       if (value === null || value === undefined || value === '') return fallback;
-      return STATUS_TEXT[value] || value;
+      return STATUS_TEXT[value] || '未知状态';
     }
     function displayCapability(value) {
-      return CAPABILITY_TEXT[value] || value;
+      return CAPABILITY_TEXT[value] || '未知能力';
+    }
+    function displayAgentId(value) {
+      return AGENT_TEXT[value] || '未知智能体';
+    }
+    function displayAdapterId(value) {
+      return ADAPTER_TEXT[value] || '未知适配器';
+    }
+    function displayBrokerName(value) {
+      return BROKER_TEXT[value] || displayValue(value, '未知执行层');
+    }
+    function displayAccount(value) {
+      return ACCOUNT_TEXT[value] || '本地账户';
     }
     function displaySide(value) {
-      return SIDE_TEXT[value] || displayStatus(value, '');
+      return SIDE_TEXT[value] || '未知方向';
+    }
+    function displayOrderType(value) {
+      return ORDER_TYPE_TEXT[value] || '未知订单类型';
+    }
+    function displayTimeInForce(value) {
+      return TIME_IN_FORCE_TEXT[value] || '未知有效期';
+    }
+    function displayReason(value) {
+      if (value === null || value === undefined || value === '') return '无';
+      return REASON_TEXT[value] || '未知原因';
+    }
+    function displayStrategyId(value) {
+      if (!value) return '无';
+      const raw = String(value);
+      const match = raw.match(/^momentum_([^_]+)_(\\d+)d$/);
+      if (match) return `动量策略 ${match[1]} ${match[2]}日`;
+      if (raw.startsWith('fixture_momentum_')) return `样例动量策略 ${raw.replace('fixture_momentum_', '')}`;
+      return raw;
     }
     function displayValue(value, fallback = '无') {
       return value === null || value === undefined || value === '' ? fallback : value;
@@ -292,10 +354,10 @@ def dashboard() -> str:
       return value ? '是' : '否';
     }
     function displayStorageBackend(value) {
-      if (value === 'sqlite') return 'SQLite';
+      if (value === 'sqlite') return 'SQLite 数据库';
       if (value === 'json') return 'JSON 文件';
       if (value === 'memory') return '内存';
-      return displayValue(value);
+      return '未知存储';
     }
     function pill(text, kind) {
       return `<span class="pill ${kind}">${text}</span>`;
@@ -342,7 +404,7 @@ def dashboard() -> str:
       document.getElementById('agent').innerHTML = `
         <table>
           <tbody>
-            <tr><th>ID</th><td>${agent.agent_id}</td></tr>
+            <tr><th>智能体</th><td>${displayAgentId(agent.agent_id)}</td></tr>
             <tr><th>状态</th><td>${pill(displayStatus(agent.status), 'ok')}</td></tr>
             <tr><th>循环</th><td>${pill(displayStatus(loop.status, '未知'), loopKind)}</td></tr>
             <tr><th>运行次数</th><td>${loop.run_count || 0}</td></tr>
@@ -352,9 +414,9 @@ def dashboard() -> str:
             <tr><th>最新候选单</th><td>${agent.latest_ticket_created_at || '无'}</td></tr>
             <tr><th>最新有效候选单</th><td>${agent.latest_fresh_ticket_created_at || '无'}</td></tr>
             <tr><th>过期候选单</th><td>${agent.expired_tickets || 0}</td></tr>
-            <tr><th>最新结果</th><td>${displayValue(summary.intent_symbol)} / ${displayStatus(summary.ticket_status)} / ${displayStatus(summary.paper_order_status)} / ${displayStatus(summary.broker_paper_order_status)}</td></tr>
+            <tr><th>最新结果</th><td>${displayValue(summary.intent_symbol)} / ${displayStrategyId(summary.intent_strategy_id)} / ${displayStatus(summary.ticket_status)} / ${displayStatus(summary.paper_order_status)} / ${displayStatus(summary.broker_paper_order_status)}</td></tr>
             <tr><th>最新模拟经纪商订单</th><td>${displayValue(summary.broker_paper_order_id)}</td></tr>
-            <tr><th>错误</th><td>${loop.error_count || 0}${loop.last_error ? '：' + loop.last_error : ''}</td></tr>
+            <tr><th>错误</th><td>${loop.error_count || 0}${loop.last_error ? '：' + displayReason(loop.last_error) : ''}</td></tr>
             <tr><th>能力</th><td>${(agent.capabilities || []).map(displayCapability).join('，')}</td></tr>
           </tbody>
         </table>
@@ -366,8 +428,9 @@ def dashboard() -> str:
       document.getElementById('broker').innerHTML = `
         <table>
           <tbody>
-            <tr><th>Adapter</th><td>${displayValue(broker.adapter_id)}</td></tr>
-            <tr><th>名称</th><td>${displayValue(broker.broker_name)}</td></tr>
+            <tr><th>适配器</th><td>${displayAdapterId(broker.adapter_id)}</td></tr>
+            <tr><th>名称</th><td>${displayBrokerName(broker.broker_name)}</td></tr>
+            <tr><th>账户</th><td>${displayAccount(broker.account_ref)}</td></tr>
             <tr><th>模式</th><td>${displayStatus(broker.mode)}</td></tr>
             <tr><th>连接</th><td>${displayBool(broker.connected)}</td></tr>
             <tr><th>需要凭据</th><td>${displayBool(broker.credential_required)}</td></tr>
@@ -381,13 +444,13 @@ def dashboard() -> str:
     function renderTournament(tournament) {
       const rows = (tournament.candidates || []).slice(0, 8).map(row => `
         <tr>
-          <td>${row.strategy_id}</td><td>${row.symbol}</td><td>${row.lookback_days}</td>
+          <td>${displayStrategyId(row.strategy_id)}</td><td>${row.symbol}</td><td>${row.lookback_days}</td>
           <td>${Number((row.total_return || 0) * 100).toFixed(2)}%</td><td>${Number((row.oos_return || 0) * 100).toFixed(2)}%</td>
           <td>${Number((row.hit_rate || 0) * 100).toFixed(2)}%</td><td>${row.validation_windows || 0}</td>
           <td>${Number((row.max_drawdown || 0) * 100).toFixed(2)}%</td><td>${Number(row.score || 0).toFixed(4)}</td><td>${displayStatus(row.decision)}</td>
         </tr>`).join('');
       document.getElementById('tournament').innerHTML = `
-        <div class="status">当前胜出：${(tournament.winner && tournament.winner.strategy_id) || '无'}</div>
+        <div class="status">当前胜出：${displayStrategyId(tournament.winner && tournament.winner.strategy_id)}</div>
         <table><thead><tr><th>策略</th><th>标的</th><th>回看天数</th><th>收益</th><th>样本外收益</th><th>命中率</th><th>验证窗口</th><th>回撤</th><th>分数</th><th>决策</th></tr></thead><tbody>${rows}</tbody></table>
       `;
     }
@@ -399,7 +462,8 @@ def dashboard() -> str:
         return `<tr>
           <td>${ticket.ticket_id}</td><td>${displayStatus(ticket.actionability || ticket.status)}</td><td>${payload.symbol || ''}</td>
           <td>${displaySide(payload.side)}</td><td>${payload.quantity || ''}</td>
-          <td>${payload.estimated_price || ''}</td><td>${displayStatus(risk.status, '未知')}</td>
+          <td>${payload.estimated_price || ''}<br><span class="muted">${displayOrderType(payload.order_type)} / ${displayTimeInForce(payload.time_in_force)}</span></td>
+          <td>${displayStatus(risk.status, '未知')}<br><span class="muted">${displayReason(risk.reason)}</span></td>
           <td>${displayStatus(ticket.freshness && ticket.freshness.status, '未知')}</td>
           <td>${(ticket.freshness && ticket.freshness.seconds_until_expiry) ?? '不适用'}</td>
           <td>${renderTicketActions(ticket)}</td>
@@ -436,7 +500,7 @@ def dashboard() -> str:
         renderQueue(data.approval_queue || {});
         document.getElementById('lastUpdated').textContent = '最近更新：' + new Date().toLocaleString('zh-CN');
       } catch (error) {
-        document.getElementById('lastUpdated').textContent = '最近更新失败：' + error;
+        document.getElementById('lastUpdated').textContent = '最近更新失败：请查看后台日志。';
       }
     }
     async function runCycle() {
@@ -450,8 +514,7 @@ def dashboard() -> str:
         body: JSON.stringify({ actor_id: 'owner_dashboard' })
       });
       if (!response.ok) {
-        const text = await response.text();
-        document.getElementById('lastUpdated').textContent = '审批操作失败：' + text;
+        document.getElementById('lastUpdated').textContent = '审批操作失败：请刷新后重试，详情见后台日志。';
         return;
       }
       await loadState();

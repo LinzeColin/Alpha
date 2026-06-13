@@ -10,6 +10,7 @@ from backend.app.services.approval_queue import ApprovalQueue
 from backend.app.services.audit import MemoryAuditSink
 from backend.app.services.backtest import load_price_fixture
 from backend.app.services.broker_paper_adapter import LocalSandboxPaperBrokerAdapter, PaperBrokerAdapter
+from backend.app.services.display_locale import format_paper_cycle_summary_zh
 from backend.app.services.order_ticket import BrokerReadyOrderTicket, OrderIntent, utc_now_iso
 from backend.app.services.paper_broker import PaperBroker, PaperOrder
 from backend.app.services.policy import GovernorPolicy
@@ -106,10 +107,13 @@ class PaperTradingLoop:
             "audit_events": self.audit_sink.as_dicts(),
         }
 
-    def run_forever(self) -> None:
+    def run_forever(self, *, output_json: bool = False) -> None:
         while True:
             result = self.run_once()
-            print(json.dumps(result, indent=2, sort_keys=True))
+            if output_json:
+                print(json.dumps(result, indent=2, sort_keys=True))
+            else:
+                print(format_paper_cycle_summary_zh(result), flush=True)
             time.sleep(self.refresh_interval_seconds)
 
     def _generate_order_intent(self, run_id: str, *, tournament: dict) -> OrderIntent:
@@ -165,6 +169,7 @@ def main() -> None:
     parser.add_argument("--interval-seconds", type=int, default=DEFAULT_REFRESH_INTERVAL_SECONDS)
     parser.add_argument("--queue-path", default=None)
     parser.add_argument("--paper-state-path", default=None)
+    parser.add_argument("--json", action="store_true", help="输出原始机器 JSON；默认输出中文运行摘要")
     args = parser.parse_args()
 
     loop = build_default_loop(
@@ -173,9 +178,13 @@ def main() -> None:
         interval_seconds=args.interval_seconds,
     )
     if args.once:
-        print(json.dumps(loop.run_once(), indent=2, sort_keys=True))
+        result = loop.run_once()
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True))
+        else:
+            print(format_paper_cycle_summary_zh(result))
         return
-    loop.run_forever()
+    loop.run_forever(output_json=args.json)
 
 
 def _select_tradable_winner(tournament: dict, tradable_symbols: set[str]) -> dict:

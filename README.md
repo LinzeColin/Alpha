@@ -11,6 +11,12 @@ python -m backend.app.services.paper_trading_loop --once
 uvicorn backend.app.main:app --reload
 ```
 
+`paper_trading_loop --once` 默认输出中文人工可读摘要；如需给自动化读取原始机器字段，使用：
+
+```bash
+python -m backend.app.services.paper_trading_loop --once --json
+```
+
 启动/停止本地工作台：
 
 ```bash
@@ -66,3 +72,8 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - Alpha 可以生成供用户审核的经纪商就绪订单工单，但不得自主提交真实资金订单。
 - 当前模拟交易执行层使用 `LocalSandboxPaperBrokerAdapter`；它返回 broker-like paper receipt，但不需要凭据，也不允许真实下单。
 - 审批队列默认使用 SQLite 持久化，支持在网页/API 中标记“已人工复核”“已拒绝”“工单已导出”；这些动作只更新本地审计状态，不会调用真实 broker 下单接口。
+
+## 中文显示
+
+- 控制台页面、按钮、表格、状态、风险原因、执行层名称、策略名称和本地命令摘要默认中文显示。
+- API 字段名、内部枚举、工单号、文件路径和股票代码保持机器可读格式，供测试、MCP、后续券商适配器和自动化流程稳定使用。

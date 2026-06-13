@@ -25,6 +25,8 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - `scripts/start_alpha_dashboard.sh` now performs a startup health check and removes stale pid files on failure.
 - Approval queue now derives ticket freshness from `expires_at`; only fresh `pending_owner_approval` tickets count as owner-actionable.
 - Dashboard user-facing display is now Chinese: page title, buttons, metric labels, table headers, empty states, and status/actionability mappings render in Chinese while API machine fields remain stable.
+- Dashboard display now also localizes agent names, adapter names, account labels, strategy IDs, order type/time-in-force, risk reasons, and unknown status fallbacks.
+- `python -m backend.app.services.paper_trading_loop --once` now defaults to a Chinese human-readable summary; use `--json` for raw machine JSON output.
 - Local launcher scripts now print Chinese startup/shutdown messages.
 - Paper trading execution now flows through `LocalSandboxPaperBrokerAdapter`, which returns broker-like paper receipts without credentials or real order submission.
 - `/paper/broker/status` and the dashboard "模拟交易执行层" section expose paper adapter status, mode, connection, credential requirement, live-order disabled state, trade count, and latest simulated fill.
@@ -69,6 +71,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 ```bash
 python -m pytest tests -q
 python -m backend.app.services.paper_trading_loop --once
+python -m backend.app.services.paper_trading_loop --once --json
 ```
 
 Latest validation:
@@ -103,6 +106,7 @@ Repo launcher -> outputs/applications/Alpha.command exists and is executable
 External app launchers -> /Users/linzezhang/Downloads/Alpha.app, /Users/linzezhang/Applications/Alpha.app, and /Applications/Alpha.app exist and pass plist validation
 Approval queue review actions -> pending ticket can be marked owner_reviewed, then broker_ticket_exported; exported ticket records live_order_submission_enabled=false
 SQLite approval queue validation -> ticket persists across `ApprovalQueue` instances, owner review/export survives reload, and storage status reports backend=sqlite durable=true
+Full Chinese display validation -> dashboard HTML/user-facing mappings include Chinese agent/adapter/order/risk labels; CLI summary hides raw status IDs while preserving --json for automation
 ```
 
 ## Unresolved Risks

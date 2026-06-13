@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from backend.app.api import routes
+from backend.app.services.display_locale import format_paper_cycle_summary_zh
 from backend.app.services.approval_queue import ApprovalQueue
 
 
@@ -110,6 +111,12 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "审批队列" in html
     assert "模拟交易执行层" in html
     assert "允许真实下单" in html
+    assert "适配器" in html
+    assert "本地沙盒模拟经纪商适配器" in html
+    assert "模拟交易循环智能体" in html
+    assert "市价单" in html
+    assert "当日有效" in html
+    assert "下单前风控检查通过" in html
     assert "有效候选单" in html
     assert "过期候选单" in html
     assert "已复核" in html
@@ -126,3 +133,21 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "System Snapshot" not in html
     assert "Approval Queue" not in html
     assert "No pending tickets" not in html
+    assert "<th>Adapter</th>" not in html
+
+
+def test_paper_cycle_summary_is_chinese_for_human_cli(tmp_path, monkeypatch):
+    monkeypatch.setattr(routes, "QUEUE_PATH", tmp_path / "approval_queue.sqlite3")
+    monkeypatch.setattr(routes, "PAPER_STATE_PATH", tmp_path / "paper_portfolio.json")
+    monkeypatch.setattr(routes, "DATA_PATH", Path("data/sample_prices.csv"))
+
+    result = routes.paper_run_once()
+    summary = format_paper_cycle_summary_zh(result)
+
+    assert "Alpha 模拟交易周期摘要" in summary
+    assert "候选订单：" in summary
+    assert "风控：已通过风控，待人工确认（下单前风控检查通过）" in summary
+    assert "执行层：本地沙盒模拟经纪商适配器" in summary
+    assert "安全边界：本周期只执行模拟交易并生成待人工确认工单，不会提交真实资金订单。" in summary
+    assert "pending_owner_approval" not in summary
+    assert "local_sandbox_paper_broker" not in summary

@@ -56,6 +56,14 @@ Reason: The user requires the whole system to be readable in Chinese during oper
 
 Consequence: `/dashboard` translates titles, buttons, metrics, tables, empty states, and status/actionability values into Chinese. API field names and machine-readable enum values remain stable for tests and automation.
 
+## 2026-06-13: Human Runtime Output Defaults To Chinese
+
+Decision: Owner-facing runtime output should default to Chinese, including dashboard display names and `paper_trading_loop --once` CLI summaries.
+
+Reason: The user requires the operating workspace to be readable without interpreting raw machine enum values.
+
+Consequence: Dashboard rendering maps agent IDs, adapter IDs, strategy IDs, order types, validity, risk reasons, capabilities, and unknown status fallbacks into Chinese. The CLI keeps a `--json` option for raw automation output.
+
 ## 2026-06-13: Broker Paper Adapter Boundary
 
 Decision: Paper trading execution should flow through a replaceable broker paper adapter, starting with `LocalSandboxPaperBrokerAdapter`.
