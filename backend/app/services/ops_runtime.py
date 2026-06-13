@@ -18,7 +18,8 @@ from backend.app.services.ops_health import (
 )
 from backend.app.services.paper_readiness import collect_paper_trading_readiness
 from backend.app.services.runtime_status import atomic_write_runtime_snapshot
-from backend.app.services.soak_readiness import append_soak_readiness_history, collect_soak_readiness
+from backend.app.services.soak_history import append_soak_readiness_history
+from backend.app.services.soak_readiness import collect_soak_readiness
 
 
 def _utc_now() -> datetime:

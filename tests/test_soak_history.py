@@ -1,4 +1,4 @@
-from backend.app.services.soak_readiness import append_soak_readiness_history, summarize_soak_readiness_history
+from backend.app.services.soak_history import append_soak_readiness_history, summarize_soak_readiness_history
 
 
 def _report(*, status: str = "healthy", warn_count: int = 0, fail_count: int = 0, ticket_id: str = "ticket_1") -> dict:
@@ -41,10 +41,15 @@ def test_soak_history_records_consecutive_no_fail_samples(tmp_path):
     assert final_summary["status_zh"] == "就绪"
     assert final_summary["run_count"] == 4
     assert final_summary["row_count"] == 4
+    assert final_summary["recent_count"] == 4
     assert final_summary["consecutive_no_fail_count"] == 1
     assert final_summary["consecutive_healthy_count"] == 1
     assert final_summary["last_failure_at"] == "2026-06-13T00:00:01+00:00"
+    assert final_summary["latest_generated_at"] == final_summary["latest_sample_at"]
+    assert final_summary["target_coverage_zh"].endswith("%")
+    assert final_summary["completion_status_zh"] == "观察运行中"
     assert final_summary["latest_fresh_ticket_id"] == "ticket_d"
+    assert final_summary["safety_boundary"]["live_order_submission_enabled"] is False
     assert "连续 1 次采样无失败" in final_summary["summary_zh"]
 
 
@@ -55,4 +60,8 @@ def test_soak_history_empty_summary_is_chinese(tmp_path):
     assert summary["status_zh"] == "暂无记录"
     assert summary["consecutive_no_fail_count"] == 0
     assert summary["run_count"] == 0
+    assert summary["observed_days_zh"] == "0.00 天"
+    assert summary["target_coverage_zh"] == "0.00%"
+    assert summary["completion_status_zh"] == "尚未开始"
+    assert summary["safety_boundary"]["live_order_submission_enabled"] is False
     assert "尚无长运行采样历史" in summary["summary_zh"]

@@ -78,7 +78,7 @@ git diff --check
 
 安全扫描结果：没有发现真实下单启用路径；命中项只包含禁用说明、测试断言和 `live_order_submission_enabled=false` 相关字段。
 
-短周期运行验证：`ALPHA_MARKET_DATA_PROVIDER=moomoo_opend` 下启动 `AutoPaperAgentRuntime` 与 `AutoOpsMaintenanceRuntime` 各完成 1 轮；`collect_paper_trading_readiness(root=.)` 通过持久心跳返回 `overall_status=healthy pass/warn/fail=10/0/0 latest_fresh_ticket_id=ticket_8e41d2a1b1d9`；`collect_soak_readiness(root=.)` 返回 `overall_status=degraded pass/warn/fail=7/1/0`，唯一关注项为当前 Codex 环境的 dashboard PID/ops health，不涉及真实下单能力。
+短周期运行验证：`ALPHA_MARKET_DATA_PROVIDER=moomoo_opend` 下启动 `AutoPaperAgentRuntime` 与 `AutoOpsMaintenanceRuntime` 各完成 1 轮；`runtime/soak_readiness_history.jsonl` 写入 1 条采样，`consecutive_no_fail_count=1`、`latest_fail_count=0`、`completion_status_zh=观察运行中`、`live_order_submission_enabled=false`。该验证只使用本机富途牛牛开放网关只读行情/本地模拟交易，不创建交易上下文、不解锁交易、不提交真实订单。
 
 运行态检查：沙箱对本机 HTTP 读取和部分 Python 直接导入调用有阻塞/超时现象；启动脚本 bug 已在本轮修复。控制台静态 HTML 中文显示由测试覆盖，临时 HTTP 读取曾验证到页面包含“富途牛牛开放网关（只读）/富途行情/接口包/软件开发包可导入”，且旧英文标签为空；后续若需要最终视觉证据，建议用 Browser/Chrome 工具或用户本机浏览器打开 `http://127.0.0.1:8000/dashboard` 再截屏。
 
@@ -91,6 +91,6 @@ git diff --check
 
 ## 下一步
 
-1. 提交并推送长运行采样历史改动到 `codex/soak-readiness-quote`，不要强推 `main`。
+1. 提交并推送长运行采样历史改动到 GitHub 备份分支，建议 `codex/alpha-soak-history-20260613`，不要强推 `main`。
 2. 继续补 dashboard 稳定性：增加 Browser/Chrome 视觉验收脚本，检查长运行预检、长运行历史、审批队列和中文状态在真实页面中不重叠、不露 raw enum。
 3. 继续补外部 broker paper API 适配调研和接口壳，但仍不得接入真实下单。

@@ -24,7 +24,8 @@ from backend.app.services.paper_readiness import collect_paper_trading_readiness
 from backend.app.services.paper_trading_loop import DEFAULT_REFRESH_INTERVAL_SECONDS, build_default_loop, latest_mark_prices
 from backend.app.services.paper_broker import PaperBroker
 from backend.app.services.paper_performance import summarize_paper_performance_history
-from backend.app.services.soak_readiness import collect_soak_readiness, summarize_soak_readiness_history
+from backend.app.services.soak_history import summarize_soak_readiness_history
+from backend.app.services.soak_readiness import collect_soak_readiness
 from backend.app.services.strategy_journal import summarize_strategy_tournament_history
 from backend.app.services.strategy_iteration import run_strategy_tournament
 
