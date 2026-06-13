@@ -6,7 +6,7 @@ def test_dashboard_http_smoke_validation_accepts_chinese_safe_payloads():
         health={"status": "ok", "status_zh": "正常", "live_trading_enabled": False, "refresh_interval_seconds": 300},
         dashboard_html=(
             "Alpha 控制台 运行模拟交易周期 生成运行备份 刷新公共行情 系统快照 长运行预检 长运行历史 "
-            "审批队列 本地应用入口 纸面交易提供方 允许纸面下单 外部账户同步 同步说明 富途牛牛开放网关（只读） /dashboard/state /paper/run-once /ops/backup "
+            "审批队列 本地应用入口 纸面交易提供方预检 纸面交易提供方 允许纸面下单 外部账户同步 同步说明 富途牛牛开放网关（只读） /dashboard/state /paper/run-once /ops/backup "
             "/market-data/refresh /orders/approval-queue/ owner-review reject mark-exported "
             "/broker-ticket/view /broker-ticket.csv * { box-sizing: border-box; overflow-x: hidden; "
             "flex-wrap: wrap; .header-actions { display: flex; flex-wrap: wrap; "
@@ -34,6 +34,11 @@ def test_dashboard_http_smoke_validation_accepts_chinese_safe_payloads():
                 "live_order_submission_enabled": False,
                 "live_order_submission_enabled_zh": "否",
                 "account": {},
+            },
+            "paper_broker_readiness": {
+                "status_zh": "需关注",
+                "summary_zh": "本地沙盒模拟交易可用于 6月15日自动模拟交易；外部纸面账户端到端验证仍是下一阶段缺口。",
+                "safety_boundary": {"live_order_submission_enabled": False},
             },
             "moomoo_broker_status": {
                 "mode_zh": "只读连接探测",
@@ -74,6 +79,11 @@ def test_dashboard_http_smoke_validation_rejects_english_and_live_order_paths():
                 "live_order_submission_enabled": False,
                 "live_order_submission_enabled_zh": "否",
                 "account": {},
+            },
+            "paper_broker_readiness": {
+                "status_zh": "需关注",
+                "summary_zh": "本地沙盒模拟交易可用于 6月15日自动模拟交易；外部纸面账户端到端验证仍是下一阶段缺口。",
+                "safety_boundary": {"live_order_submission_enabled": False},
             },
             "moomoo_broker_status": {
                 "mode_zh": "只读连接探测",

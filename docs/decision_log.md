@@ -60,11 +60,17 @@
 - 原因：长期 5 分钟循环如果只买入，会把本地模拟现金耗尽并持续产生被拒绝模拟订单；如果只做现金回收，又会在下一轮重新买回，形成不成熟的振荡。
 - 影响：再平衡/减仓卖单仍走 `OrderIntent -> 风控 -> 审批队列 -> BrokerReadyOrderTicket -> 本地模拟成交`，不会触发真实资金订单；用户可见策略名会显示“目标仓位再平衡”或“现金回收减仓”。
 
-## 2026-06-13：纸面经纪商 provider 必须 fail-closed
+## 2026-06-13：纸面经纪商提供方必须失败即关闭
 
-- 决策：纸面交易经纪商通过 `configs/paper_broker.yaml` 选择，默认只能使用本地沙盒；外部 paper API provider 在真实实现、凭据隔离、纸面模式证明和回归测试完成前必须返回未就绪状态。
-- 原因：外部经纪商 paper API 是后续成熟 paper trading 的必要入口，但不能因为误配或半成品代码绕过真实下单边界。
-- 影响：`build_paper_broker_adapter()` 支持默认本地沙盒和外部 paper API fail-closed 壳；控制台显示纸面交易提供方、适配器就绪、允许纸面下单、外部纸面 API、未就绪原因和下一步。
+- 决策：纸面交易经纪商通过 `configs/paper_broker.yaml` 选择，默认只能使用本地沙盒；外部纸面交易 API 提供方在真实实现、凭据隔离、纸面模式证明和回归测试完成前必须返回未就绪状态。
+- 原因：外部经纪商纸面交易 API 是后续成熟自动模拟交易的必要入口，但不能因为误配或半成品代码绕过真实下单边界。
+- 影响：`build_paper_broker_adapter()` 支持默认本地沙盒和外部纸面交易 API 失败即关闭壳；控制台显示纸面交易提供方、适配器就绪、允许纸面下单、外部纸面 API、未就绪原因和下一步。
+
+## 2026-06-13：纸面交易提供方预检必须区分本地沙盒与外部账户端到端验证
+
+- 决策：新增 `/readiness/paper-broker` 和 `scripts/verify_paper_broker_readiness.py`，把本地沙盒模拟成交能力、外部纸面账户只读同步、外部纸面下单端到端验证和真实下单禁用边界拆开验收。
+- 原因：6月15日本地自动模拟交易可以依赖本地沙盒完成，但 7月15日前真实可行纸面交易需要外部纸面账户端到端验证；两者不能混为同一个“已完成”状态。
+- 影响：默认 `local_sandbox` 报告为“本地模拟可用，外部纸面账户待接入”，状态为需关注但不失败；外部提供方一旦被选择而同步或纸面下单未就绪，则失败即关闭。
 
 ## 2026-06-13：模拟交易成熟度验收使用临时运行态
 
@@ -72,23 +78,35 @@
 - 原因：6月15日交付需要证明模拟交易链路能连续运行，而不是只通过单一 API smoke；临时运行态可以避免污染真实 runtime。
 - 影响：成熟度验收报告覆盖连续周期、风控、审批队列、经纪商就绪工单、5分钟 TTL、模拟成交和真实下单禁用边界；默认输出到 `outputs/paper_maturity/paper_trading_maturity_latest.json`。
 
-## 2026-06-13：Alpaca Paper 适配器只允许 paper host
+## 2026-06-13：模拟交易成熟度验收必须逐周期证明交易链路
+
+- 决策：`scripts/verify_paper_trading_maturity.py` 的报告必须包含 `cycle_chain_matrix`，逐周期证明 `OrderIntent`、风险检查、审批队列、经纪商就绪工单、client order id、模拟成交回执、TTL 和真实下单禁用边界一致。
+- 原因：仅凭总数相等无法排除某一周期的工单与成交回执错配、TTL 错配或链路局部跳过；6月15日成熟度证据必须能直接支持“agent 自动生成候选订单、自动完成风控、自动入队、自动生成经纪商就绪工单”的判断。
+- 影响：成熟度验收检查项从 9 项增加到 12 项，正常周期、目标仓位再平衡和现金回收减仓场景均新增逐周期链路检查。
+
+## 2026-06-13：Alpaca 纸面交易适配器只允许纸面交易地址
 
 - 决策：`alpaca_paper` 只允许 `https://paper-api.alpaca.markets`，凭据只从 `ALPACA_PAPER_KEY_ID` 与 `ALPACA_PAPER_SECRET_KEY` 读取，默认配置仍关闭。
-- 原因：Alpaca 官方 paper 文档说明 paper 账户使用不同 key 和 paper base URL；订单 API 与 live 规格一致，因此必须靠 host allowlist 和显式配置阻断 live endpoint。
-- 影响：`AlpacaPaperBrokerAdapter` 支持 mock 验证的 `POST /v2/orders` paper 下单回执；未配置凭据、base URL 非 paper host、未显式启用时均 fail-closed，不会暴露 secret。
+- 原因：Alpaca 官方纸面交易文档说明纸面账户使用不同 key 和纸面交易基础地址；订单 API 与真实交易规格一致，因此必须靠地址允许列表和显式配置阻断真实交易地址。
+- 影响：`AlpacaPaperBrokerAdapter` 支持模拟验证的 `POST /v2/orders` 纸面下单回执；未配置凭据、base URL 非纸面交易地址、未显式启用时均失败即关闭，不会暴露 secret。
 
 ## 2026-06-13：Alpaca Paper 只读同步与纸面下单分开开关
 
 - 决策：`alpaca_paper` 的账户、持仓和最近订单同步必须由 `read_only_sync_enabled` 单独开启；纸面订单提交仍必须由 `order_submission_enabled` 单独开启。
-- 原因：只读同步和纸面订单提交的风险不同，分开开关可以先验证账户可见性、中文控制台展示和凭据脱敏，再进入纸面订单 E2E。
+- 原因：只读同步和纸面订单提交的风险不同，分开开关可以先验证账户可见性、中文控制台展示和凭据脱敏，再进入纸面订单端到端验证。
 - 影响：新增 `/paper/broker/external-snapshot` 和控制台“外部账户同步”展示；账户原始 ID 与 account number 不进入返回快照，真实下单仍固定禁用。
+
+## 2026-06-13：纸面交易提供方必须有独立预检
+
+- 决策：新增 `/readiness/paper-broker`、控制台“纸面交易提供方预检”和 `scripts/verify_paper_broker_readiness.py`，分别验证纸面交易配置、适配器安全边界、当前纸面成交能力、外部纸面账户同步和外部纸面下单端到端门槛。
+- 原因：6月15日可以用本地沙盒证明自动模拟交易成熟度，但这不能被误写成外部真实纸面账户已经端到端完成；两类证据必须拆开显示。
+- 影响：当前默认报告为“本地模拟可用，外部纸面账户待接入”，真实下单仍禁用；外部提供方被显式选中但同步或纸面下单门槛缺失时会失败即关闭。
 
 ## 2026-06-13：Moomoo 本机安装只开放只读行情路径
 
-- 决策：即使本机已安装 Moomoo、Moomoo OpenD 和 `moomoo-api`，Alpha 当前也只把它作为只读行情和网关就绪来源，不把 `moomoo_paper` 自动升级为可下单 provider。
+- 决策：即使本机已安装 Moomoo、Moomoo OpenD 和 `moomoo-api`，Alpha 当前也只把它作为只读行情和网关就绪来源，不把 `moomoo_paper` 自动升级为可下单提供方。
 - 原因：Moomoo 官方 paper 示例仍需要创建交易上下文并调用 `place_order(..., trd_env=TrdEnv.SIMULATE)`；这与项目当前“禁止提交可直接触发真实 broker place_order 路径”的安全扫描门槛冲突，必须作为单独受控适配器重新设计。
-- 影响：本机只读验收结果写入 `outputs/moomoo_opend_readiness_20260613.json`；`moomoo_paper` 继续 fail-closed，`live_order_submission_enabled=false`、`trade_context_enabled=false`。
+- 影响：本机只读验收结果写入 `outputs/moomoo_opend_readiness_20260613.json`；`moomoo_paper` 继续失败即关闭，`live_order_submission_enabled=false`、`trade_context_enabled=false`。
 
 ## 2026-06-13：审批队列可交互但不执行真实下单
 

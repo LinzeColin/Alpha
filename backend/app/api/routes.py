@@ -24,6 +24,7 @@ from backend.app.services.ops_runtime import AUTO_OPS_MAINTENANCE
 from backend.app.services.paper_readiness import collect_paper_trading_readiness
 from backend.app.services.paper_trading_loop import DEFAULT_REFRESH_INTERVAL_SECONDS, build_default_loop, latest_mark_prices
 from backend.app.services.paper_broker import PaperBroker
+from backend.app.services.paper_broker_readiness import collect_paper_broker_readiness
 from backend.app.services.paper_performance import summarize_paper_performance_history
 from backend.app.services.soak_history import summarize_soak_readiness_history
 from backend.app.services.soak_readiness import collect_soak_readiness
@@ -276,6 +277,19 @@ def paper_broker_external_snapshot() -> dict:
     return build_paper_broker_adapter(paper_broker, config_path=PAPER_BROKER_CONFIG_PATH).external_snapshot()
 
 
+@router.get("/readiness/paper-broker")
+def paper_broker_readiness() -> dict:
+    broker_status = paper_broker_status()
+    external_snapshot = paper_broker_external_snapshot()
+    return collect_paper_broker_readiness(
+        root=ROOT,
+        config_path=PAPER_BROKER_CONFIG_PATH,
+        paper_state_path=PAPER_STATE_PATH,
+        paper_broker_status=broker_status,
+        external_snapshot=external_snapshot,
+    )
+
+
 @router.get("/broker/moomoo/status")
 def moomoo_broker_status() -> dict:
     return probe_moomoo_opend()
@@ -399,6 +413,7 @@ def dashboard_state() -> dict:
         "paper_performance": paper_performance_history(),
         "paper_broker_status": paper_broker_status(),
         "paper_broker_external_snapshot": paper_broker_external_snapshot(),
+        "paper_broker_readiness": paper_broker_readiness(),
         "moomoo_broker_status": moomoo_broker_status(),
         "moomoo_quote_snapshot": moomoo_quote_snapshot(),
         "strategy_tournament": strategy_tournament_run(),
@@ -480,6 +495,7 @@ def dashboard() -> str:
       <section><h2>模拟绩效</h2><div id="paperPerformance"></div></section>
       <section><h2>智能体运行状态</h2><div id="agent"></div></section>
       <section><h2>模拟交易状态（模拟交易执行层）</h2><div id="broker"></div></section>
+      <section><h2>纸面交易提供方预检</h2><div id="paperBrokerReadiness"></div></section>
       <section><h2>富途牛牛开放网关（只读）</h2><div id="moomooBroker"></div></section>
       <section><h2>行情数据</h2><div id="marketData"></div></section>
       <section><h2>运行健康</h2><div id="opsHealth"></div></section>
@@ -723,6 +739,7 @@ def dashboard() -> str:
       const moomooQuote = data.moomoo_quote_snapshot || {};
       const strategyJournal = data.strategy_journal || {};
       const paperPerformance = data.paper_performance || {};
+      const paperBrokerReadiness = data.paper_broker_readiness || {};
       document.getElementById('metrics').innerHTML = [
         metric('智能体', pill(displayStatus(agent.status), 'ok')),
         metric('循环', pill(displayStatus(loop.status, '未知'), loop.error_count ? 'danger' : 'ok')),
@@ -740,6 +757,7 @@ def dashboard() -> str:
         metric('最新行情日', displayValue(marketData.latest_date)),
         metric('模拟权益', Number(portfolio.total_equity || 0).toFixed(2)),
         metric('模拟收益率', paperPerformance.total_return_zh || '0.00%'),
+        metric('纸面提供方预检', pill(paperBrokerReadiness.overall_status_zh || displayStatus(paperBrokerReadiness.overall_status, '未知'), paperBrokerReadiness.fail_count ? 'danger' : (paperBrokerReadiness.warn_count ? 'warn' : 'ok'))),
         metric('当前回撤', paperPerformance.current_drawdown_zh || '0.00%'),
         metric('模拟交易数', portfolio.trade_count || 0),
         metric('有效候选单', queueSummary.fresh_pending_count || queue.count || 0),
@@ -1060,6 +1078,39 @@ def dashboard() -> str:
         </table>
       `;
     }
+    function renderPaperBrokerReadiness(readiness) {
+      const checks = readiness.checks || [];
+      const status = readiness.paper_broker_status || {};
+      const snapshot = readiness.external_snapshot_summary || {};
+      const rows = checks.map(check => {
+        const kind = check.status === 'fail' ? 'danger' : (check.status === 'warn' ? 'warn' : 'ok');
+        return `<tr><td>${check.title_zh || '未知检查'}</td><td>${pill(check.status_zh || displayStatus(check.status), kind)}</td><td>${check.message_zh || ''}</td></tr>`;
+      }).join('');
+      document.getElementById('paperBrokerReadiness').innerHTML = `
+        <div class="metric-grid">
+          ${metric('总体状态', pill(readiness.overall_status_zh || displayStatus(readiness.overall_status, '未知'), readiness.fail_count ? 'danger' : (readiness.warn_count ? 'warn' : 'ok')))}
+          ${metric('当前提供方', readiness.provider_zh || '未知')}
+          ${metric('本地沙盒可用', readiness.local_sandbox_ready_zh || '否')}
+          ${metric('外部纸面账户端到端验证', readiness.external_paper_e2e_ready_zh || '否')}
+          ${metric('通过', readiness.pass_count || 0)}
+          ${metric('需关注', readiness.warn_count || 0)}
+          ${metric('失败', readiness.fail_count || 0)}
+        </div>
+        <table>
+          <tbody>
+            <tr><th>结论</th><td>${readiness.summary_zh || '无'}</td></tr>
+            <tr><th>适配器就绪</th><td>${status.adapter_readiness_zh || displayStatus(status.adapter_readiness, '未知')}</td></tr>
+            <tr><th>允许纸面下单</th><td>${status.paper_order_submission_enabled_zh || displayBool(status.paper_order_submission_enabled)}</td></tr>
+            <tr><th>外部账户同步</th><td>${snapshot.status_zh || '未配置'}</td></tr>
+            <tr><th>外部持仓数</th><td>${snapshot.position_count || 0}</td></tr>
+            <tr><th>外部最近订单数</th><td>${snapshot.recent_order_count || 0}</td></tr>
+            <tr><th>允许真实下单</th><td>${displayBool((readiness.safety_boundary || {}).live_order_submission_enabled)}</td></tr>
+            <tr><th>安全边界</th><td>${displayValue((readiness.safety_boundary || {}).message_zh)}</td></tr>
+          </tbody>
+        </table>
+        <table><thead><tr><th>检查项</th><th>状态</th><th>说明</th></tr></thead><tbody>${rows || '<tr><td colspan="3" class="muted">暂无纸面交易提供方预检结果</td></tr>'}</tbody></table>
+      `;
+    }
     function renderMoomooBroker(status, quoteSnapshot) {
       const packageInfo = status.package || {};
       const connection = status.opend_connection || {};
@@ -1175,6 +1226,7 @@ def dashboard() -> str:
         renderPaperPerformance(data.paper_performance || {});
         renderAgent(data.agent_status || {});
         renderBroker(data.paper_broker_status || {}, data.paper_broker_external_snapshot || {});
+        renderPaperBrokerReadiness(data.paper_broker_readiness || {});
         renderMoomooBroker(data.moomoo_broker_status || {}, data.moomoo_quote_snapshot || {});
         renderMarketData(data.market_data || {});
         renderOpsHealth(data.ops_health || {});

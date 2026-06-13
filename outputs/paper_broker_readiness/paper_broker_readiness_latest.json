@@ -1,0 +1,173 @@
+{
+  "check_count": 5,
+  "checks": [
+    {
+      "evidence": {
+        "allow_external_paper_api": false,
+        "config_error": null,
+        "config_exists": true,
+        "config_path": "/Users/linzezhang/Documents/Codex/2026-06-13/files-mentioned-by-the-user-alpha/configs/paper_broker.yaml",
+        "live_order_submission_enabled": false,
+        "provider": "local_sandbox",
+        "require_paper_mode": true
+      },
+      "id": "paper_broker_config",
+      "message_zh": "纸面交易配置保持纸面模式和真实下单禁用。",
+      "status": "pass",
+      "status_zh": "通过",
+      "title_zh": "纸面交易配置"
+    },
+    {
+      "evidence": {
+        "adapter_readiness": "ready",
+        "live_order_submission_enabled": false,
+        "mode": "paper",
+        "provider": "local_sandbox",
+        "supports_real_broker_place_order": false
+      },
+      "id": "paper_adapter_safety",
+      "message_zh": "适配器保持纸面模式，且不支持真实资金下单。",
+      "status": "pass",
+      "status_zh": "通过",
+      "title_zh": "适配器安全边界"
+    },
+    {
+      "evidence": {
+        "adapter_readiness": "ready",
+        "connected": true,
+        "execution_model_zh": "固定佣金与滑点模型",
+        "paper_order_submission_enabled": true,
+        "provider": "local_sandbox",
+        "provider_zh": "本地沙盒模拟交易",
+        "supports_market_orders": true
+      },
+      "id": "active_paper_execution",
+      "message_zh": "当前提供方可执行纸面订单，且只处于纸面模式。",
+      "status": "pass",
+      "status_zh": "通过",
+      "title_zh": "当前纸面成交能力"
+    },
+    {
+      "evidence": {
+        "position_count": 0,
+        "provider": "local_sandbox",
+        "read_only_sync_enabled": null,
+        "read_only_sync_ready": null,
+        "recent_order_count": 0,
+        "snapshot_status": "not_configured",
+        "summary_zh": "本地沙盒不需要外部纸面账户同步。"
+      },
+      "id": "external_paper_account_sync",
+      "message_zh": "当前使用本地沙盒；外部纸面账户端到端验证尚未接入，不阻断 6月15日本地模拟交易交付。",
+      "status": "warn",
+      "status_zh": "需关注",
+      "title_zh": "外部纸面账户同步"
+    },
+    {
+      "evidence": {
+        "credentials_present": null,
+        "live_order_submission_enabled": false,
+        "paper_base_url_allowed": null,
+        "paper_order_submission_enabled": true,
+        "provider": "local_sandbox"
+      },
+      "id": "external_paper_order_submission",
+      "message_zh": "当前外部纸面下单端到端验证未启用；本地沙盒模拟成交仍可运行。",
+      "status": "warn",
+      "status_zh": "需关注",
+      "title_zh": "外部纸面下单端到端验证"
+    }
+  ],
+  "external_paper_e2e_ready": false,
+  "external_paper_e2e_ready_zh": "否",
+  "external_snapshot_summary": {
+    "live_order_submission_enabled": false,
+    "live_order_submission_enabled_zh": "否",
+    "position_count": 0,
+    "provider": "local_sandbox",
+    "provider_zh": "本地沙盒模拟交易",
+    "read_only_sync_enabled": false,
+    "read_only_sync_enabled_zh": "否",
+    "recent_order_count": 0,
+    "status": "not_configured",
+    "status_zh": "未就绪",
+    "summary_zh": "本地沙盒不需要外部纸面账户同步。"
+  },
+  "fail_count": 0,
+  "generated_at": "2026-06-13T09:52:23+00:00",
+  "local_sandbox_ready": true,
+  "local_sandbox_ready_zh": "是",
+  "overall_status": "local_paper_ready_external_pending",
+  "overall_status_zh": "本地模拟可用，外部纸面账户待接入",
+  "paper_broker_status": {
+    "account_ref": "local_paper_account",
+    "account_ref_zh": "本地模拟账户",
+    "adapter_id": "local_sandbox_paper_broker",
+    "adapter_id_zh": "本地沙盒模拟经纪商适配器",
+    "adapter_readiness": "ready",
+    "adapter_readiness_zh": "就绪",
+    "broker_name": "Alpha Local Sandbox",
+    "broker_name_zh": "Alpha 本地沙盒",
+    "commission_per_order": 1.0,
+    "connected": true,
+    "connected_zh": "是",
+    "credential_required": false,
+    "credential_required_zh": "否",
+    "execution_model": {
+      "commission_per_order": 1.0,
+      "currency": "AUD",
+      "execution_model_id": "fixed_cost_slippage_v1",
+      "execution_model_zh": "固定佣金与滑点模型",
+      "slippage_bps": 5.0
+    },
+    "execution_model_zh": "固定佣金与滑点模型",
+    "external_paper_api_enabled": false,
+    "external_paper_api_enabled_zh": "否",
+    "latest_trade": {
+      "commission": 1.0,
+      "execution_model_id": "fixed_cost_slippage_v1",
+      "gross_notional": 99.95,
+      "idempotency_key": "run_aa8f435becfb:target_rebalance_TLT:TLT:sell:1.165909:2026-06-13T09:52:22+00:00",
+      "notional": 98.95,
+      "price": 85.7271,
+      "quantity": 1.165909,
+      "reference_price": 85.77,
+      "side": "sell",
+      "slippage_bps": 5.0,
+      "symbol": "TLT"
+    },
+    "live_order_submission_enabled": false,
+    "live_order_submission_enabled_zh": "否",
+    "mode": "paper",
+    "mode_zh": "模拟交易",
+    "paper_order_submission_enabled": true,
+    "paper_order_submission_enabled_zh": "是",
+    "paper_trade_count": 146,
+    "provider": "local_sandbox",
+    "provider_zh": "本地沙盒模拟交易",
+    "slippage_bps": 5.0,
+    "supports_market_orders": true,
+    "supports_market_orders_zh": "是",
+    "supports_real_broker_place_order": false,
+    "supports_real_broker_place_order_zh": "否",
+    "total_commission": 102.0
+  },
+  "pass_count": 3,
+  "provider": "local_sandbox",
+  "provider_zh": "本地沙盒模拟交易",
+  "safety_boundary": {
+    "live_order_submission_enabled": false,
+    "message_zh": "纸面交易提供方预检不会启用真实资金下单；外部提供方也必须保持纸面交易端点、纸面模式和凭据隔离。",
+    "supports_real_broker_place_order": false
+  },
+  "status": "warn",
+  "status_zh": "需关注",
+  "summary_zh": "本地沙盒模拟交易可用于 6月15日自动模拟交易；外部纸面账户端到端验证仍是下一阶段缺口。",
+  "warn_count": 2,
+  "write_result": {
+    "file_size_bytes": 6137,
+    "path": "/Users/linzezhang/Documents/Codex/2026-06-13/files-mentioned-by-the-user-alpha/outputs/paper_broker_readiness/paper_broker_readiness_latest.json",
+    "status": "written",
+    "status_zh": "已写入"
+  }
+}

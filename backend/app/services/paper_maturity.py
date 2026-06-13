@@ -41,6 +41,9 @@ def run_paper_trading_maturity_check(
 
     checks = [
         _check_normal_cycles(normal, cycles=cycles),
+        _check_cycle_chain_contract(normal, scenario_id="normal", expected_cycles=cycles),
+        _check_cycle_chain_contract(rebalance, scenario_id="target_rebalance", expected_cycles=1),
+        _check_cycle_chain_contract(cash_rebalance, scenario_id="cash_rebalance", expected_cycles=1),
         _check_normal_readiness(normal),
         _check_rebalance_sell(rebalance),
         _check_cash_rebalance_sell(cash_rebalance),
@@ -70,6 +73,11 @@ def run_paper_trading_maturity_check(
         "target_rebalance": _sanitize_scenario(rebalance),
         "rebalance": _sanitize_scenario(rebalance),
         "cash_rebalance": _sanitize_scenario(cash_rebalance),
+        "cycle_chain_matrix": {
+            "normal_cycles": _cycle_chain_matrix(normal),
+            "target_rebalance": _cycle_chain_matrix(rebalance),
+            "cash_rebalance": _cycle_chain_matrix(cash_rebalance),
+        },
         "summary_zh": _summary_zh(checks),
         "safety_boundary": {
             "live_order_submission_enabled": False,
@@ -302,6 +310,119 @@ def _check_normal_readiness(scenario: dict) -> dict:
     return _check("paper_readiness_gate", "模拟交易就绪门槛", "pass", "连续周期后的模拟交易就绪报告达到健康状态。", evidence)
 
 
+def _check_cycle_chain_contract(scenario: dict, *, scenario_id: str, expected_cycles: int) -> dict:
+    matrix = _cycle_chain_matrix(scenario)
+    failed = [row for row in matrix if row.get("status") != "pass"]
+    evidence = {
+        "scenario_id": scenario_id,
+        "expected_cycles": expected_cycles,
+        "cycle_count": len(matrix),
+        "failed_cycle_count": len(failed),
+        "failed_cycles": failed[:5],
+        "cycle_chain_matrix": matrix,
+    }
+    if len(matrix) != expected_cycles:
+        return _check(
+            f"{scenario_id}_cycle_chain",
+            "逐周期交易链路",
+            "fail",
+            "逐周期交易链路数量不符合预期。",
+            evidence,
+        )
+    if failed:
+        return _check(
+            f"{scenario_id}_cycle_chain",
+            "逐周期交易链路",
+            "fail",
+            "至少一个周期没有完整通过候选订单、风控、审批队列、经纪商就绪工单和模拟成交链路。",
+            evidence,
+        )
+    return _check(
+        f"{scenario_id}_cycle_chain",
+        "逐周期交易链路",
+        "pass",
+        "每个周期均自动生成候选订单、完成风控、进入审批队列、生成经纪商就绪工单并完成本地模拟成交。",
+        evidence,
+    )
+
+
+def _cycle_chain_matrix(scenario: dict) -> list[dict]:
+    rows = []
+    for index, result in enumerate(scenario.get("results") or [], start=1):
+        intent = result.get("intent") or {}
+        risk = result.get("risk_check") or {}
+        queue = result.get("approval_queue") or {}
+        ticket = queue.get("ticket") or {}
+        payload = ticket.get("broker_payload") or {}
+        broker_receipt = result.get("broker_paper_order") or {}
+        paper_order = result.get("paper_order") or {}
+        intent_id = intent.get("intent_id")
+        client_order_id = payload.get("client_order_id")
+        receipt_client_order_id = broker_receipt.get("client_order_id")
+        ticket_id = ticket.get("ticket_id")
+        receipt_ticket_id = broker_receipt.get("ticket_id")
+        ttl_seconds = _ttl_seconds(intent)
+        refresh_interval = result.get("refresh_interval_seconds")
+        failures = []
+        if not intent_id:
+            failures.append("missing_intent")
+        if risk.get("allowed") is not True:
+            failures.append("risk_not_allowed")
+        if queue.get("status") != "queued":
+            failures.append("not_queued")
+        if ticket.get("status") != "pending_owner_approval":
+            failures.append("ticket_not_pending_owner_approval")
+        if not _broker_ticket_is_ready(result):
+            failures.append("broker_ticket_not_ready")
+        if client_order_id != intent.get("idempotency_key"):
+            failures.append("ticket_client_order_mismatch")
+        if receipt_client_order_id != intent.get("idempotency_key"):
+            failures.append("receipt_client_order_mismatch")
+        if receipt_ticket_id != ticket_id:
+            failures.append("receipt_ticket_mismatch")
+        if paper_order.get("status") != "filled" or broker_receipt.get("status") != "filled":
+            failures.append("paper_order_not_filled")
+        if ttl_seconds != refresh_interval:
+            failures.append("ttl_not_refresh_interval")
+        if broker_receipt.get("live_order_submission_enabled") or broker_receipt.get("supports_real_broker_place_order"):
+            failures.append("live_order_boundary_violation")
+
+        rows.append(
+            {
+                "cycle_index": index,
+                "run_id": result.get("run_id"),
+                "status": "pass" if not failures else "fail",
+                "status_zh": "通过" if not failures else "失败",
+                "failures": failures,
+                "intent_id": intent_id,
+                "ticket_id": ticket_id,
+                "symbol": intent.get("symbol"),
+                "side": intent.get("side"),
+                "side_zh": intent.get("side_zh"),
+                "strategy_id": intent.get("strategy_id"),
+                "strategy_id_zh": intent.get("strategy_id_zh"),
+                "risk_allowed": risk.get("allowed"),
+                "risk_reason_zh": risk.get("reason_zh"),
+                "queue_status": queue.get("status"),
+                "queue_status_zh": queue.get("status_zh"),
+                "ticket_status": ticket.get("status"),
+                "ticket_status_zh": ticket.get("status_zh"),
+                "human_action_required": ticket.get("human_action_required"),
+                "human_action_required_zh": ticket.get("human_action_required_zh"),
+                "client_order_id_matches_intent": client_order_id == intent.get("idempotency_key"),
+                "receipt_client_order_id_matches_intent": receipt_client_order_id == intent.get("idempotency_key"),
+                "receipt_ticket_id_matches_ticket": receipt_ticket_id == ticket_id,
+                "paper_order_status": paper_order.get("status"),
+                "broker_receipt_status": broker_receipt.get("status"),
+                "ttl_seconds": ttl_seconds,
+                "refresh_interval_seconds": refresh_interval,
+                "expires_at": intent.get("expires_at"),
+                "live_order_submission_enabled": bool(broker_receipt.get("live_order_submission_enabled")),
+            }
+        )
+    return rows
+
+
 def _check_rebalance_sell(scenario: dict) -> dict:
     result = (scenario.get("results") or [{}])[0]
     intent = result.get("intent") or {}
@@ -421,7 +542,7 @@ def _summary_zh(checks: list[dict]) -> str:
         return f"模拟交易成熟度验收失败：{fail_count} 个失败项需要先修复。"
     if warn_count:
         return f"模拟交易主链路通过，但仍有 {warn_count} 个关注项。"
-    return "连续模拟交易、目标仓位再平衡、现金回收减仓、风控、审批队列、经纪商就绪工单、5分钟时效和真实下单禁用边界均通过。"
+    return "连续模拟交易、逐周期候选订单链路、目标仓位再平衡、现金回收减仓、风控、审批队列、经纪商就绪工单、5分钟时效和真实下单禁用边界均通过。"
 
 
 def _utc_now_iso() -> str:

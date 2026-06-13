@@ -34,6 +34,7 @@ scripts/check_alpha_soak.sh
 python -m backend.app.services.paper_readiness
 python -m backend.app.services.soak_readiness
 python scripts/verify_app_entry.py
+python scripts/verify_paper_broker_readiness.py
 python scripts/verify_paper_trading_maturity.py --cycles 3
 python scripts/verify_chinese_display.py
 python scripts/verify_dashboard_http_smoke.py --base-url http://127.0.0.1:8000 --exercise-actions
@@ -55,6 +56,7 @@ runtime/market_data/latest_prices.csv
 runtime/strategy_tournament_history.jsonl
 runtime/backups/
 outputs/app_entry/app_entry_readiness_latest.json
+outputs/paper_broker_readiness/paper_broker_readiness_latest.json
 outputs/paper_maturity/paper_trading_maturity_latest.json
 ```
 
@@ -64,9 +66,9 @@ outputs/paper_maturity/paper_trading_maturity_latest.json
 configs/paper_broker.yaml
 ```
 
-默认 `provider: local_sandbox`，即本地沙盒模拟交易。`alpaca_paper` 只有在 paper host allowlist、paper 环境变量凭据和显式启用开关全部通过后才会执行只读同步或提交纸面订单；`ibkr_paper`、`moomoo_paper` 或 `external_paper_api` 仍保持 fail-closed。任何外部 provider 都不会回退成真实资金下单。
+默认 `provider: local_sandbox`，即本地沙盒模拟交易。`alpaca_paper` 只有在纸面交易地址允许列表、纸面账户环境变量凭据和显式启用开关全部通过后才会执行只读同步或提交纸面订单；`ibkr_paper`、`moomoo_paper` 或 `external_paper_api` 仍保持失败即关闭。任何外部提供方都不会回退成真实资金下单。
 
-`alpaca_paper` 已具备受控适配器实现，但默认关闭。启用前必须确认 `base_url` 仍为 `https://paper-api.alpaca.markets`，设置 `ALPACA_PAPER_KEY_ID` 与 `ALPACA_PAPER_SECRET_KEY`，并显式把 `allow_external_paper_api` 改为 `true`；只读同步还需要 `read_only_sync_enabled: true`，纸面订单提交还需要 `order_submission_enabled: true`。当前只允许 `market/day` 纸面订单，不支持 live endpoint。
+`alpaca_paper` 已具备受控适配器实现，但默认关闭。启用前必须确认 `base_url` 仍为 `https://paper-api.alpaca.markets`，设置 `ALPACA_PAPER_KEY_ID` 与 `ALPACA_PAPER_SECRET_KEY`，并显式把 `allow_external_paper_api` 改为 `true`；只读同步还需要 `read_only_sync_enabled: true`，纸面订单提交还需要 `order_submission_enabled: true`。当前只允许市价单/当日有效纸面订单，不支持真实交易地址。
 
 `.app` 格式入口已安装到：
 
@@ -102,6 +104,7 @@ POST /market-data/refresh
 GET  /ops/health
 POST /ops/backup
 GET  /ops/maintenance/status
+GET  /readiness/paper-broker
 GET  /readiness/paper-trading
 GET  /readiness/app-entry
 GET  /readiness/soak
@@ -123,7 +126,7 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - 外部 API 不得触发真实资金下单。
 - Alpha 可以生成供用户审核的经纪商就绪订单工单，但不得自主提交真实资金订单。
 - 当前模拟交易执行层使用 `LocalSandboxPaperBrokerAdapter`；它返回类经纪商模拟回执，但不需要凭据，也不允许真实下单。
-- 纸面交易经纪商适配通过 `configs/paper_broker.yaml` 选择；默认本地沙盒可成交，Alpaca paper adapter 必须通过 paper host allowlist、paper 环境变量凭据和显式启用开关才会执行只读同步或提交纸面订单；其他外部 provider 未配置完成时 fail-closed，并在控制台显示“外部纸面 API”“外部账户同步”“未就绪原因”和“下一步”。
+- 纸面交易经纪商适配通过 `configs/paper_broker.yaml` 选择；默认本地沙盒可成交，Alpaca 纸面交易适配器必须通过纸面交易地址允许列表、纸面账户环境变量凭据和显式启用开关才会执行只读同步或提交纸面订单；其他外部提供方未配置完成时失败即关闭，并在控制台显示“外部纸面 API”“外部账户同步”“未就绪原因”和“下一步”。
 - 富途牛牛开放网关集成当前只做只读连接探测：检测当前 Python 环境是否可导入 `moomoo`/`futu` 接口包，并检测本机开放网关端口；不会解锁交易、不会读取或提交交易凭据、不会调用真实下单接口。
 - 审批队列默认使用 SQLite 持久化，支持在网页/API 中标记“已人工复核”“已拒绝”“工单已导出”；这些动作只更新本地审计状态，不会调用真实 broker 下单接口。
 - 已人工复核且仍在有效期内的工单可导出为机器 JSON 包或中文 CSV 人工录入表；过期工单不能复核或导出。
@@ -133,6 +136,7 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - `GET /ops/health` 汇总自动循环、SQLite 审批队列、模拟组合、模拟执行层边界、富途牛牛开放网关只读探测、行情数据、控制台进程、日志和最近备份状态。
 - `POST /ops/backup` 会在 `runtime/backups/` 下生成一次本地运行状态备份，包含审批队列快照、模拟组合、行情缓存、PID 和日志尾部。
 - `GET /ops/maintenance/status` 显示应用托管自动运行维护：健康采样次数、自动备份次数、下次维护时间、健康历史文件和备份轮转配置。
+- `GET /readiness/paper-broker` 输出纸面交易提供方预检，区分本地沙盒模拟成交是否可用、外部纸面账户只读同步是否完成、外部纸面下单端到端验证是否完成，以及真实下单禁用边界是否仍有效；默认显示本地沙盒模拟交易可用于 6月15日自动模拟交易，同时把外部纸面账户只读同步和纸面下单端到端验证标为下一阶段缺口。
 - `GET /readiness/paper-trading` 输出 6月15日模拟交易交付就绪报告，并标注 6月17日网页与本地应用入口交付目标；逐项验证自动循环、策略迭代、模拟成交、OrderIntent、风控、审批队列、经纪商就绪工单、5分钟时效、本地应用入口和真实下单边界。自动循环检查会验证心跳新鲜度、进程存活、`interval_seconds` 不超过 300 秒，以及 `next_run_at - last_run_completed_at` 与刷新间隔一致。
 - `GET /readiness/app-entry` 输出本地应用入口验收，控制台“本地应用入口”面板显示仓库、Downloads、用户 Applications 和系统 Applications 中 `Alpha.app` 的完整性、plist、可执行状态和指纹一致性。
 - `GET /readiness/soak` 输出 30 天本地长运行预检报告，聚合应用入口、模拟交易交付就绪、5分钟循环、有效经纪商就绪工单、运行健康、自动维护、恢复备份和真实下单边界。
@@ -145,7 +149,8 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - `python -m backend.app.services.paper_readiness` 输出中文交付就绪摘要；加 `--json` 可查看完整机器证据。
 - `python -m backend.app.services.soak_readiness` 输出中文长运行预检摘要；该报告证明是否可以开始本地 soak，不等于已经完成 30 天验证。
 - `python scripts/verify_app_entry.py` 验证仓库、Downloads、用户 Applications 和系统 Applications 的 `Alpha.app` 应用包结构、Info.plist、可执行 applet、安装副本关键文件指纹，以及 AppleScript/命令入口是否指向当前仓库控制台启动脚本；默认输出证据到 `outputs/app_entry/app_entry_readiness_latest.json`。
-- `python scripts/verify_paper_trading_maturity.py --cycles 3` 使用临时运行态连续跑多轮模拟交易，并额外验证目标仓位再平衡卖单、现金回收减仓、风控、审批队列、经纪商就绪工单、5 分钟 TTL、300 秒调度契约和真实下单禁用边界；现金回收分支使用临时策略覆写隔离验证，不修改默认提交配置；默认输出证据到 `outputs/paper_maturity/paper_trading_maturity_latest.json`。
+- `python scripts/verify_paper_broker_readiness.py` 验证纸面交易提供方配置、纸面模式、真实下单禁用、本地沙盒成交能力、外部纸面账户同步和外部纸面下单端到端缺口；默认本地沙盒状态会给出“本地模拟可用，外部纸面账户待接入”的需关注结论，不阻断 6月15日本地自动模拟交易交付；默认输出证据到 `outputs/paper_broker_readiness/paper_broker_readiness_latest.json`。
+- `python scripts/verify_paper_trading_maturity.py --cycles 3` 使用临时运行态连续跑多轮模拟交易，并额外验证逐周期候选订单链路、目标仓位再平衡卖单、现金回收减仓、风控、审批队列、经纪商就绪工单、5 分钟 TTL、300 秒调度契约和真实下单禁用边界；报告中的 `cycle_chain_matrix` 会逐周期证明 `OrderIntent`、风险检查、审批队列、经纪商就绪工单、client order id、模拟成交回执和 TTL 一致；现金回收分支使用临时策略覆写隔离验证，不修改默认提交配置；默认输出证据到 `outputs/paper_maturity/paper_trading_maturity_latest.json`。
 - `python scripts/verify_dashboard_http_smoke.py --base-url http://127.0.0.1:8000 --exercise-actions` 会通过 HTTP 检查 `/health`、`/dashboard`、`/dashboard/state` 的中文文案、关键中文字段、响应式布局契约和真实下单禁用边界，并安全调用模拟交易周期与运行备份端点。
 - `python scripts/verify_dashboard_chrome_visual.py --base-url http://127.0.0.1:8000` 会调用本机 Chrome headless 截取桌面和移动视口，检查截图尺寸、像素多样性、渲染后可见中文文案、旧英文界面文案禁用项和响应式布局契约；截图与 DOM HTML 只作为本地临时证据，提交到 GitHub 的默认证据是 `outputs/visual_acceptance/dashboard_chrome_visual_report.json`。
 - 控制台启动后会自动启动运行维护：默认每 300 秒采样一次健康状态，默认每天自动备份一次，并保留最近 30 份备份。
@@ -198,4 +203,4 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - `ALPHA_MARKET_DATA_PROVIDER=moomoo_opend` 时，行情数据网关会把只读快照转换成本地价格缓存，用于模拟交易的价格路径。
 - 控制台的“富途牛牛开放网关（只读）”面板会显示接口包、软件开发包可导入、开放网关连接、只读就绪、只读行情快照、交易解锁、允许真实下单和禁止操作。
 - 该探测层只用于确认本机环境和只读行情是否可用；当前不会创建交易上下文、不会解锁交易、不会提交真实资金订单。
-- `moomoo_paper` 仍保持 fail-closed。安装富途牛牛客户端、富途牛牛开放网关和 `moomoo-api` 只代表行情/网关前置条件满足，不代表 Alpha 可以自动提交富途牛牛模拟或真实订单。
+- `moomoo_paper` 仍保持失败即关闭。安装富途牛牛客户端、富途牛牛开放网关和 `moomoo-api` 只代表行情/网关前置条件满足，不代表 Alpha 可以自动提交富途牛牛模拟或真实订单。

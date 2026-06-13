@@ -24,12 +24,14 @@
 - 经纪商工单 JSON 仍保留机器字段；默认 HTML 视图和 CSV 下载面向人工操作改为中文。
 - 富途牛牛开放网关仍只允许只读探测和只读行情快照；不得创建交易上下文、不得解锁交易、不得调用真实下单。
 - 2026-06-13 本机只读验收已确认：`moomoo-api 10.7.6708` 可导入，提权只读探测确认 OpenD `127.0.0.1:11111` 已连通，并通过 `OpenQuoteContext` 获取 `US.SPY`、`US.QQQ`、`US.TLT` 共 3 行行情快照；证据见 `outputs/moomoo_opend_readiness_20260613.json`。
-- 新增 `configs/paper_broker.yaml` 和 `build_paper_broker_adapter()`；默认 `local_sandbox` 继续本地模拟成交；`alpaca_paper` 已实现 paper host allowlist、环境变量凭据门槛和 mock 下单回执但默认关闭；`ibkr_paper`、`moomoo_paper`、`external_paper_api` 目前只返回中文未就绪状态并 fail-closed。
-- Alpaca paper 适配依据见 `docs/paper_broker_provider_notes.md`；当前已实现默认关闭的账户/持仓/最近订单只读同步和纸面订单 mock 下单路径，尚未完成用户真实 Alpaca paper account E2E。
+- 新增 `configs/paper_broker.yaml` 和 `build_paper_broker_adapter()`；默认 `local_sandbox` 继续本地模拟成交；`alpaca_paper` 已实现纸面交易地址允许列表、环境变量凭据门槛和模拟下单回执测试但默认关闭；`ibkr_paper`、`moomoo_paper`、`external_paper_api` 目前只返回中文未就绪状态并失败即关闭。
+- Alpaca 纸面交易适配依据见 `docs/paper_broker_provider_notes.md`；当前已实现默认关闭的账户/持仓/最近订单只读同步和纸面订单模拟下单路径，尚未完成用户真实 Alpaca 纸面账户端到端验证。
 - Moomoo paper 下单未实现；官方 paper 示例仍需要创建交易上下文并调用 `place_order(..., trd_env=TrdEnv.SIMULATE)`，与当前安全扫描门槛冲突，必须另开受控适配 run 后再做。
-- 控制台“模拟交易执行层”已显示纸面交易提供方、适配器就绪、允许纸面下单、外部纸面 API、未就绪原因和下一步。
+- 新增 `backend/app/services/paper_broker_readiness.py`、`scripts/verify_paper_broker_readiness.py`、`/readiness/paper-broker` 和控制台“纸面交易提供方预检”面板；当前报告为“本地模拟可用，外部纸面账户待接入”，证据写入 `outputs/paper_broker_readiness/paper_broker_readiness_latest.json`。
+- 控制台“模拟交易执行层”和“纸面交易提供方预检”已显示纸面交易提供方、适配器就绪、允许纸面下单、外部纸面 API、未就绪原因、下一步、本地沙盒可用性和外部纸面账户端到端验证状态。
 - `PaperTradingLoop` 已具备现金/持仓/目标敞口约束感知：正常优先生成买入候选；若单标的仓位或总敞口超过 policy 上限，则优先生成“目标仓位再平衡”卖出候选；若现金不足以覆盖预计买入成交价、滑点和佣金但组合仍有可卖持仓，则生成现金回收减仓候选；两类卖单都会继续通过风控、审批队列、经纪商就绪工单和本地模拟成交。
-- 新增 `backend/app/services/paper_maturity.py` 和 `scripts/verify_paper_trading_maturity.py`：用临时本地状态验收连续模拟周期、目标仓位再平衡卖单、现金回收减仓、风控、审批队列、经纪商就绪工单、5分钟 TTL 和真实下单禁用边界，并写入 `outputs/paper_maturity/paper_trading_maturity_latest.json`。
+- 新增 `backend/app/services/paper_maturity.py` 和 `scripts/verify_paper_trading_maturity.py`：用临时本地状态验收连续模拟周期、逐周期候选订单链路、目标仓位再平衡卖单、现金回收减仓、风控、审批队列、经纪商就绪工单、5分钟 TTL 和真实下单禁用边界，并写入 `outputs/paper_maturity/paper_trading_maturity_latest.json`。
+- 成熟度报告包含 `cycle_chain_matrix`，逐周期证明 `OrderIntent`、风险检查、审批队列、经纪商就绪工单、client order id、模拟成交回执和 TTL 一致。
 - `scripts/start_alpha_dashboard.sh` 和 `scripts/stop_alpha_dashboard.sh` 修复了变量紧贴中文标点时的 zsh 解析问题。
 - 自动模拟交易循环和自动维护循环会分别写入 `runtime/agent_loop_status.json` 与 `runtime/ops_maintenance_status.json`；`/readiness/paper-trading` 和 `/readiness/soak` 可以读取新鲜心跳并校验进程仍存活，避免把已退出的 App 误判为就绪；`/readiness/paper-trading` 还会验证 `next_run_at - last_run_completed_at` 与 300 秒刷新契约一致。
 - 自动维护循环每轮追加 `runtime/soak_readiness_history.jsonl`；`/readiness/soak/history` 和控制台“长运行预检”显示历史采样数、连续无失败采样数、连续完全通过采样数、最近失败时间和最近采样表。
@@ -57,6 +59,7 @@
 - `backend/app/services/runtime_status.py`
 - `backend/app/services/broker_ticket_export.py`
 - `backend/app/services/broker_paper_adapter.py`
+- `backend/app/services/paper_broker_readiness.py`
 - `backend/app/services/strategy_iteration.py`
 - `backend/app/schemas/strategy_dsl.py`
 - `configs/paper_broker.yaml`
@@ -66,8 +69,10 @@
 - `scripts/verify_dashboard_http_smoke.py`
 - `scripts/verify_dashboard_chrome_visual.py`
 - `scripts/verify_app_entry.py`
+- `scripts/verify_paper_broker_readiness.py`
 - `backend/app/services/app_entry.py`
 - `outputs/app_entry/app_entry_readiness_latest.json`
+- `outputs/paper_broker_readiness/paper_broker_readiness_latest.json`
 - `outputs/visual_acceptance/dashboard_chrome_visual_report.json`
 - `tests/test_dashboard_state.py`
 - `tests/test_dashboard_chrome_visual.py`
@@ -122,6 +127,9 @@ python /Users/linzezhang/.codex/skills/webapp-testing/scripts/with_server.py --s
 python scripts/verify_app_entry.py
 # status_zh=通过，仓库、Downloads、用户 Applications、系统 Applications 的 Alpha.app 应用包完整，安装副本关键文件指纹与仓库 Alpha.app 一致，AppleScript/命令入口指向当前仓库 scripts/start_alpha_dashboard.sh；证据见 outputs/app_entry/app_entry_readiness_latest.json
 
+python scripts/verify_paper_broker_readiness.py
+# 总体状态：本地模拟可用，外部纸面账户待接入；通过/关注/失败：3 / 2 / 0；本地沙盒可用于 6月15日自动模拟交易，外部纸面账户端到端验证仍待接入；证据见 outputs/paper_broker_readiness/paper_broker_readiness_latest.json
+
 git diff --check
 # passed
 
@@ -146,7 +154,7 @@ MOOMOO_API_HOME=runtime/moomoo_api_home .venv/bin/python -c "import json; from b
 
 目标敞口再平衡验证：在运行态 `TLT` 严重超配时，`python -m backend.app.services.paper_trading_loop --once` 生成 `TLT / 卖出 / 数量 1.165909`，策略显示“目标仓位再平衡 TLT”，风控通过、审批队列入队、模拟成交完成，现金回升到 `104.81`，`live_order_submission_enabled=false`。
 
-模拟交易成熟度验收：`python scripts/verify_paper_trading_maturity.py --cycles 3` 通过，报告覆盖连续正常周期、目标仓位再平衡卖单、现金回收减仓、风控、审批队列、经纪商就绪工单、5分钟 TTL 和真实下单禁用边界；现金回收分支使用临时策略覆写隔离验证，不修改默认提交配置；安全边界文案明确“不触发真实下单、不提交真实资金订单”。
+模拟交易成熟度验收：`python scripts/verify_paper_trading_maturity.py --cycles 3` 通过，12 项检查全通过；报告覆盖连续正常周期、逐周期候选订单链路、目标仓位再平衡卖单、现金回收减仓、风控、审批队列、经纪商就绪工单、5分钟 TTL 和真实下单禁用边界；`cycle_chain_matrix.normal_cycles` 含 3 条逐周期链路记录，每条均证明 intent、ticket、client order id、模拟成交回执和 300 秒 TTL 一致；现金回收分支使用临时策略覆写隔离验证，不修改默认提交配置；安全边界文案明确“不触发真实下单、不提交真实资金订单”。
 
 运行态 5 分钟调度验收：`open -g /Users/linzezhang/Downloads/Alpha.app` 启动后，`/agent/loop/status` 显示 `interval_seconds=300`、`last_run_completed_at=2026-06-13T09:16:20+00:00`、`next_run_at=2026-06-13T09:21:20+00:00`；`/readiness/paper-trading` 返回 `overall_status=healthy`、`pass_count=10`、`scheduled_delay_seconds=300`、有效候选单 `ticket_469b80ceb4e1`，真实下单边界仍为 false。
 
@@ -155,12 +163,12 @@ MOOMOO_API_HOME=runtime/moomoo_api_home .venv/bin/python -c "import json; from b
 ## 未解决风险
 
 - 30 天长运行尚未完成，只能声明具备开始预检/观察运行条件。
-- Alpaca paper adapter 已有只读同步 mock 测试和 mock 下单测试，但尚未在用户真实 Alpaca paper account 上做 E2E；Moomoo 已完成本机只读行情验收，但 paper 下单适配尚未实现；默认仍是真实本机只读行情加本地沙盒模拟成交。
+- Alpaca 纸面交易适配器已有只读同步模拟测试和模拟下单测试，但尚未在用户真实 Alpaca 纸面账户上做端到端验证；Moomoo 已完成本机只读行情验收，但纸面下单适配尚未实现；默认仍是真实本机只读行情加本地沙盒模拟成交。
 - GitHub `main` 可能与远端历史不一致，当前应优先推送备份分支，禁止强推。
 - 30 天长运行仍需要真实时间跨度的历史采样；当前心跳只证明 App/循环在当前进程下新鲜运行。
 
 ## 下一步
 
 1. 提交并推送长运行采样历史改动到 GitHub 备份分支，建议 `codex/alpha-soak-history-20260613`，不要强推 `main`。
-2. 继续补外部 broker paper API 的真实 provider 实现前置条件：官方 paper API 文档、凭据隔离方案、纸面模式证明、只允许 paper endpoint 的回归测试。
+2. 继续补外部纸面交易 API 的真实提供方实现前置条件：官方纸面交易 API 文档、凭据隔离方案、纸面模式证明、只允许纸面交易地址的回归测试。
 3. 继续积累真实 30 天长运行采样；每个异常必须进入运行健康/备份/恢复证据链。

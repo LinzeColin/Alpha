@@ -109,6 +109,10 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
     assert state["paper_broker_status"]["commission_per_order"] == 1.0
     assert state["paper_broker_status"]["slippage_bps"] == 5.0
     assert state["paper_broker_status"]["paper_trade_count"] == 1
+    assert state["paper_broker_readiness"]["overall_status_zh"] == "本地模拟可用，外部纸面账户待接入"
+    assert state["paper_broker_readiness"]["local_sandbox_ready"] is True
+    assert state["paper_broker_readiness"]["external_paper_e2e_ready"] is False
+    assert state["paper_broker_readiness"]["safety_boundary"]["live_order_submission_enabled"] is False
     assert state["paper_broker_external_snapshot"]["status"] == "not_configured"
     assert state["paper_broker_external_snapshot"]["status_zh"] == "未就绪"
     assert state["paper_broker_external_snapshot"]["provider_zh"] == "本地沙盒模拟交易"
@@ -304,6 +308,8 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "refresh_error_zh" in html
     assert "允许真实下单" in html
     assert "纸面交易提供方" in html
+    assert "纸面交易提供方预检" in html
+    assert "外部纸面账户端到端验证" in html
     assert "本地沙盒模拟交易" in html
     assert "适配器就绪" in html
     assert "允许纸面下单" in html
