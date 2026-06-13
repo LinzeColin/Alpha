@@ -23,6 +23,14 @@ scripts/stop_alpha_dashboard.sh
 When the dashboard starts, the app lifecycle starts the automatic paper agent
 runtime. It runs one paper cycle immediately, then refreshes every 300 seconds.
 
+App-format launchers are installed at:
+
+```text
+/Users/linzezhang/Downloads/Alpha.app
+/Users/linzezhang/Applications/Alpha.app
+/Applications/Alpha.app
+```
+
 Open:
 
 ```text
