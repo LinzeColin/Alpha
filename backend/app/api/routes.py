@@ -129,11 +129,11 @@ def dashboard_state() -> dict:
 def dashboard() -> str:
     return """
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Alpha Dashboard</title>
+  <title>Alpha 控制台</title>
   <style>
     :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     body { margin: 0; background: #f5f6f3; color: #1d1f21; }
@@ -164,27 +164,72 @@ def dashboard() -> str:
 <body>
   <header>
     <div>
-      <h1>Alpha Dashboard</h1>
-      <div class="status" id="lastUpdated">Loading</div>
+      <h1>Alpha 控制台</h1>
+      <div class="status" id="lastUpdated">正在加载</div>
     </div>
     <div>
-      <button onclick="runCycle()">Run Paper Cycle</button>
-      <button class="secondary" onclick="loadState()">Refresh</button>
+      <button onclick="runCycle()">运行模拟交易周期</button>
+      <button class="secondary" onclick="loadState()">刷新</button>
     </div>
   </header>
   <main>
     <section>
-      <h2>System Snapshot</h2>
+      <h2>系统快照</h2>
       <div class="metric-grid" id="metrics"></div>
     </section>
     <div class="grid-two">
-      <section><h2>Paper Portfolio</h2><div id="portfolio"></div></section>
-      <section><h2>Agent Status</h2><div id="agent"></div></section>
+      <section><h2>模拟组合</h2><div id="portfolio"></div></section>
+      <section><h2>智能体状态</h2><div id="agent"></div></section>
     </div>
-    <section><h2>Strategy Tournament</h2><div id="tournament"></div></section>
-    <section><h2>Approval Queue</h2><div id="queue"></div></section>
+    <section><h2>策略锦标赛</h2><div id="tournament"></div></section>
+    <section><h2>审批队列</h2><div id="queue"></div></section>
   </main>
   <script>
+    const STATUS_TEXT = {
+      ready: '就绪',
+      sleeping: '等待下次运行',
+      running_cycle: '正在运行周期',
+      error_sleeping: '错误后等待',
+      stopped: '已停止',
+      completed: '已完成',
+      queued: '已入队',
+      duplicate: '重复候选单',
+      skipped: '已跳过',
+      filled: '模拟成交',
+      pending_owner_approval: '待人工确认',
+      fresh_pending_owner_approval: '有效，待人工确认',
+      expired_owner_approval: '已过期，需重新生成',
+      blocked_by_risk: '风控阻止',
+      approved_for_owner_review: '已通过风控，待人工确认',
+      promote_to_paper: '可进入模拟交易',
+      hold_research: '继续研究观察',
+      reject: '拒绝',
+      rejected: '已拒绝',
+      fresh: '有效',
+      expired: '已过期',
+      invalid: '无效',
+      unknown: '未知'
+    };
+    const CAPABILITY_TEXT = {
+      paper_trading: '全自动模拟交易',
+      risk_check: '自动风控检查',
+      approval_queue: '自动进入审批队列',
+      broker_ready_order_ticket: '经纪商就绪订单工单'
+    };
+    const SIDE_TEXT = { buy: '买入', sell: '卖出' };
+    function displayStatus(value, fallback = '无') {
+      if (value === null || value === undefined || value === '') return fallback;
+      return STATUS_TEXT[value] || value;
+    }
+    function displayCapability(value) {
+      return CAPABILITY_TEXT[value] || value;
+    }
+    function displaySide(value) {
+      return SIDE_TEXT[value] || displayStatus(value, '');
+    }
+    function displayValue(value, fallback = '无') {
+      return value === null || value === undefined || value === '' ? fallback : value;
+    }
     function pill(text, kind) {
       return `<span class="pill ${kind}">${text}</span>`;
     }
@@ -196,15 +241,16 @@ def dashboard() -> str:
       const queue = data.approval_queue || {};
       const queueSummary = queue.summary || {};
       const health = data.health || {};
-      const loop = (data.agent_status && data.agent_status.loop) || {};
+      const agent = data.agent_status || {};
+      const loop = agent.loop || {};
       document.getElementById('metrics').innerHTML = [
-        metric('Agent', pill(data.agent_status.status, 'ok')),
-        metric('Loop', pill(loop.status || 'unknown', loop.error_count ? 'danger' : 'ok')),
-        metric('Paper Equity', Number(portfolio.total_equity || 0).toFixed(2)),
-        metric('Paper Trades', portfolio.trade_count || 0),
-        metric('Fresh Tickets', queueSummary.fresh_pending_count || queue.count || 0),
-        metric('Expired Tickets', queueSummary.expired_pending_count || 0),
-        metric('Refresh', `${health.refresh_interval_seconds || 300}s`)
+        metric('智能体', pill(displayStatus(agent.status), 'ok')),
+        metric('循环', pill(displayStatus(loop.status, '未知'), loop.error_count ? 'danger' : 'ok')),
+        metric('模拟权益', Number(portfolio.total_equity || 0).toFixed(2)),
+        metric('模拟交易数', portfolio.trade_count || 0),
+        metric('有效候选单', queueSummary.fresh_pending_count || queue.count || 0),
+        metric('过期候选单', queueSummary.expired_pending_count || 0),
+        metric('刷新间隔', `${health.refresh_interval_seconds || 300} 秒`)
       ].join('');
     }
     function renderPortfolio(portfolio) {
@@ -212,11 +258,11 @@ def dashboard() -> str:
       const rows = positions.map(row => `<tr><td>${row.symbol}</td><td>${row.quantity}</td><td>${row.mark_price}</td><td>${row.market_value}</td></tr>`).join('');
       document.getElementById('portfolio').innerHTML = `
         <div class="metric-grid">
-          ${metric('Cash', Number(portfolio.cash || 0).toFixed(2))}
-          ${metric('Positions Value', Number(portfolio.positions_value || 0).toFixed(2))}
-          ${metric('Total Equity', Number(portfolio.total_equity || 0).toFixed(2))}
+          ${metric('现金', Number(portfolio.cash || 0).toFixed(2))}
+          ${metric('持仓市值', Number(portfolio.positions_value || 0).toFixed(2))}
+          ${metric('总权益', Number(portfolio.total_equity || 0).toFixed(2))}
         </div>
-        <table><thead><tr><th>Symbol</th><th>Qty</th><th>Mark</th><th>Value</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="muted">No paper positions yet</td></tr>'}</tbody></table>
+        <table><thead><tr><th>标的</th><th>数量</th><th>标记价</th><th>市值</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="muted">暂无模拟持仓</td></tr>'}</tbody></table>
       `;
     }
     function renderAgent(agent) {
@@ -227,18 +273,18 @@ def dashboard() -> str:
         <table>
           <tbody>
             <tr><th>ID</th><td>${agent.agent_id}</td></tr>
-            <tr><th>Status</th><td>${pill(agent.status, 'ok')}</td></tr>
-            <tr><th>Loop</th><td>${pill(loop.status || 'unknown', loopKind)}</td></tr>
-            <tr><th>Run Count</th><td>${loop.run_count || 0}</td></tr>
-            <tr><th>Refresh</th><td>${agent.refresh_interval_seconds}s</td></tr>
-            <tr><th>Last Run</th><td>${loop.last_run_completed_at || 'Not yet'}</td></tr>
-            <tr><th>Next Run</th><td>${loop.next_run_at || 'Pending'}</td></tr>
-            <tr><th>Latest Ticket</th><td>${agent.latest_ticket_created_at || 'None'}</td></tr>
-            <tr><th>Latest Fresh Ticket</th><td>${agent.latest_fresh_ticket_created_at || 'None'}</td></tr>
-            <tr><th>Expired Tickets</th><td>${agent.expired_tickets || 0}</td></tr>
-            <tr><th>Last Result</th><td>${summary.intent_symbol || 'None'} / ${summary.ticket_status || 'None'} / ${summary.paper_order_status || 'None'}</td></tr>
-            <tr><th>Errors</th><td>${loop.error_count || 0}${loop.last_error ? ': ' + loop.last_error : ''}</td></tr>
-            <tr><th>Capabilities</th><td>${(agent.capabilities || []).join(', ')}</td></tr>
+            <tr><th>状态</th><td>${pill(displayStatus(agent.status), 'ok')}</td></tr>
+            <tr><th>循环</th><td>${pill(displayStatus(loop.status, '未知'), loopKind)}</td></tr>
+            <tr><th>运行次数</th><td>${loop.run_count || 0}</td></tr>
+            <tr><th>刷新间隔</th><td>${agent.refresh_interval_seconds} 秒</td></tr>
+            <tr><th>上次运行</th><td>${loop.last_run_completed_at || '尚未运行'}</td></tr>
+            <tr><th>下次运行</th><td>${loop.next_run_at || '等待中'}</td></tr>
+            <tr><th>最新候选单</th><td>${agent.latest_ticket_created_at || '无'}</td></tr>
+            <tr><th>最新有效候选单</th><td>${agent.latest_fresh_ticket_created_at || '无'}</td></tr>
+            <tr><th>过期候选单</th><td>${agent.expired_tickets || 0}</td></tr>
+            <tr><th>最新结果</th><td>${displayValue(summary.intent_symbol)} / ${displayStatus(summary.ticket_status)} / ${displayStatus(summary.paper_order_status)}</td></tr>
+            <tr><th>错误</th><td>${loop.error_count || 0}${loop.last_error ? '：' + loop.last_error : ''}</td></tr>
+            <tr><th>能力</th><td>${(agent.capabilities || []).map(displayCapability).join('，')}</td></tr>
           </tbody>
         </table>
       `;
@@ -249,11 +295,11 @@ def dashboard() -> str:
           <td>${row.strategy_id}</td><td>${row.symbol}</td><td>${row.lookback_days}</td>
           <td>${Number((row.total_return || 0) * 100).toFixed(2)}%</td><td>${Number((row.oos_return || 0) * 100).toFixed(2)}%</td>
           <td>${Number((row.hit_rate || 0) * 100).toFixed(2)}%</td><td>${row.validation_windows || 0}</td>
-          <td>${Number(row.max_drawdown * 100).toFixed(2)}%</td><td>${Number(row.score).toFixed(4)}</td><td>${row.decision}</td>
+          <td>${Number((row.max_drawdown || 0) * 100).toFixed(2)}%</td><td>${Number(row.score || 0).toFixed(4)}</td><td>${displayStatus(row.decision)}</td>
         </tr>`).join('');
       document.getElementById('tournament').innerHTML = `
-        <div class="status">Winner: ${(tournament.winner && tournament.winner.strategy_id) || 'None'}</div>
-        <table><thead><tr><th>Strategy</th><th>Symbol</th><th>Lookback</th><th>Return</th><th>OOS Return</th><th>Hit Rate</th><th>Windows</th><th>Drawdown</th><th>Score</th><th>Decision</th></tr></thead><tbody>${rows}</tbody></table>
+        <div class="status">当前胜出：${(tournament.winner && tournament.winner.strategy_id) || '无'}</div>
+        <table><thead><tr><th>策略</th><th>标的</th><th>回看天数</th><th>收益</th><th>样本外收益</th><th>命中率</th><th>验证窗口</th><th>回撤</th><th>分数</th><th>决策</th></tr></thead><tbody>${rows}</tbody></table>
       `;
     }
     function renderQueue(queue) {
@@ -261,24 +307,28 @@ def dashboard() -> str:
         const payload = ticket.broker_payload || {};
         const risk = ticket.risk_check || {};
         return `<tr>
-          <td>${ticket.ticket_id}</td><td>${ticket.actionability || ticket.status}</td><td>${payload.symbol || ''}</td>
-          <td>${payload.side || ''}</td><td>${payload.quantity || ''}</td>
-          <td>${payload.estimated_price || ''}</td><td>${risk.status || 'unknown'}</td>
-          <td>${(ticket.freshness && ticket.freshness.status) || 'unknown'}</td>
-          <td>${(ticket.freshness && ticket.freshness.seconds_until_expiry) ?? 'n/a'}</td>
+          <td>${ticket.ticket_id}</td><td>${displayStatus(ticket.actionability || ticket.status)}</td><td>${payload.symbol || ''}</td>
+          <td>${displaySide(payload.side)}</td><td>${payload.quantity || ''}</td>
+          <td>${payload.estimated_price || ''}</td><td>${displayStatus(risk.status, '未知')}</td>
+          <td>${displayStatus(ticket.freshness && ticket.freshness.status, '未知')}</td>
+          <td>${(ticket.freshness && ticket.freshness.seconds_until_expiry) ?? '不适用'}</td>
         </tr>`;
       }).join('');
-      document.getElementById('queue').innerHTML = `<table><thead><tr><th>Ticket</th><th>Actionability</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Price</th><th>Risk</th><th>Freshness</th><th>Seconds Left</th></tr></thead><tbody>${rows || '<tr><td colspan="9" class="muted">No pending tickets</td></tr>'}</tbody></table>`;
+      document.getElementById('queue').innerHTML = `<table><thead><tr><th>候选单</th><th>可操作性</th><th>标的</th><th>方向</th><th>数量</th><th>价格</th><th>风控</th><th>时效性</th><th>剩余秒数</th></tr></thead><tbody>${rows || '<tr><td colspan="9" class="muted">暂无待审批候选单</td></tr>'}</tbody></table>`;
     }
     async function loadState() {
-      const response = await fetch('/dashboard/state');
-      const data = await response.json();
-      renderMetrics(data);
-      renderPortfolio(data.paper_portfolio || {});
-      renderAgent(data.agent_status || {});
-      renderTournament(data.strategy_tournament || {});
-      renderQueue(data.approval_queue || {});
-      document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleString();
+      try {
+        const response = await fetch('/dashboard/state');
+        const data = await response.json();
+        renderMetrics(data);
+        renderPortfolio(data.paper_portfolio || {});
+        renderAgent(data.agent_status || {});
+        renderTournament(data.strategy_tournament || {});
+        renderQueue(data.approval_queue || {});
+        document.getElementById('lastUpdated').textContent = '最近更新：' + new Date().toLocaleString('zh-CN');
+      } catch (error) {
+        document.getElementById('lastUpdated').textContent = '最近更新失败：' + error;
+      }
     }
     async function runCycle() {
       await fetch('/paper/run-once', { method: 'POST' });

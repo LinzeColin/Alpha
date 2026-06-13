@@ -47,3 +47,11 @@ Decision: Strategy tournament candidates must expose simple out-of-sample eviden
 Reason: Last-window momentum ranking is too weak for strategy promotion. Even fixture-level MVP strategy iteration should show whether a signal had repeated one-step-ahead confirmation.
 
 Consequence: `run_strategy_tournament()` now returns `validation_summary`, and each candidate includes `oos_return`, `hit_rate`, and `validation_windows`. The dashboard tournament table displays these fields.
+
+## 2026-06-13: User-Facing Chinese Display
+
+Decision: Alpha runtime surfaces should display Chinese text for the owner-facing dashboard and local launcher messages.
+
+Reason: The user requires the whole system to be readable in Chinese during operation.
+
+Consequence: `/dashboard` translates titles, buttons, metrics, tables, empty states, and status/actionability values into Chinese. API field names and machine-readable enum values remain stable for tests and automation.

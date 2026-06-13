@@ -66,3 +66,25 @@ def test_owner_summary_counts_only_fresh_pending_tickets(tmp_path, monkeypatch):
     assert api_queue["count"] == 0
     assert api_queue["summary"]["total_count"] == 1
     assert api_queue["summary"]["expired_pending_count"] == 1
+
+
+def test_dashboard_html_uses_chinese_user_visible_text():
+    html = routes.dashboard()
+
+    assert '<html lang="zh-CN">' in html
+    assert "Alpha 控制台" in html
+    assert "运行模拟交易周期" in html
+    assert "系统快照" in html
+    assert "模拟组合" in html
+    assert "策略锦标赛" in html
+    assert "审批队列" in html
+    assert "有效候选单" in html
+    assert "过期候选单" in html
+    assert "待人工确认" in html
+    assert "最近更新：" in html
+
+    assert "Alpha Dashboard" not in html
+    assert "Run Paper Cycle" not in html
+    assert "System Snapshot" not in html
+    assert "Approval Queue" not in html
+    assert "No pending tickets" not in html

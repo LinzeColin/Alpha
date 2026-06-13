@@ -9,7 +9,7 @@ stop_pid_file() {
   local pid_file="$2"
 
   if [[ ! -f "$pid_file" ]]; then
-    echo "Alpha $name is not running."
+    echo "Alpha $name 未运行。"
     return
   fi
 
@@ -19,17 +19,17 @@ stop_pid_file() {
     kill "$pid"
     for _ in {1..20}; do
       if ! kill -0 "$pid" 2>/dev/null; then
-        echo "Stopped Alpha $name process $pid."
+        echo "已停止 Alpha $name 进程 $pid。"
         rm -f "$pid_file"
         return
       fi
       sleep 0.25
     done
-    echo "Alpha $name process $pid is still shutting down."
+    echo "Alpha $name 进程 $pid 仍在关闭中。"
   else
-    echo "Alpha $name process $pid is not active."
+    echo "Alpha $name 进程 $pid 未处于活动状态。"
   fi
   rm -f "$pid_file"
 }
 
-stop_pid_file "dashboard" "$DASHBOARD_PID_FILE"
+stop_pid_file "控制台" "$DASHBOARD_PID_FILE"

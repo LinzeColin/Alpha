@@ -1,16 +1,17 @@
-# Alpha Requirements Alignment
+# Alpha 需求对齐
 
-| Requirement | Status | Implementation Direction |
+| 需求 | 状态 | 当前实现 |
 |---|---:|---|
-| Agent 全自动 paper trading | Improved MVP implemented | FastAPI app-managed `AutoPaperAgentRuntime` runs immediately on dashboard startup, then every 300 seconds; `PaperTradingLoop.run_forever()` remains available for CLI |
-| Agent 自动生成真实交易候选订单 | Improved MVP implemented | `OrderIntent` generated from tradable strategy tournament candidate |
-| Agent 自动完成风险检查 | Improved MVP implemented | `pre_trade_risk_check()` before queue entry, with notional limit enforcement |
-| Agent 自动进入审批队列 | MVP implemented | `ApprovalQueue.enqueue()` |
-| Agent 自动生成 broker-ready order ticket | Improved MVP implemented | `BrokerReadyOrderTicket` includes `expires_at`; dashboard/API annotate fresh vs expired actionability |
-| 每 5 分钟更新一次 | Improved MVP implemented | `refresh_interval_seconds: 300` in service, `configs/agent_loop.yaml`, app runtime, dashboard JS refresh, and ticket TTL |
-| Web dashboard | Improved MVP implemented | `/dashboard`, `/dashboard/state`, `/agent/loop/status`, `/paper/portfolio`, `/strategy/tournament/run`; queue table shows actionability/freshness/seconds left; tournament table shows OOS return/hit rate/windows |
-| 操作及时性和时间有效性 | Improved MVP implemented | `ApprovalQueue.summary()` counts only fresh pending tickets as owner-actionable; expired tickets remain for audit |
-| 稳定 webpage 交互平台入口 | Improved MVP implemented | AppleScript `Alpha.app` installed to Downloads, user Applications, and system `/Applications`; command launchers remain as compatibility entries |
-| 策略迭代 | Improved MVP implemented | `run_strategy_tournament()` ranks momentum candidates with walk-forward OOS return, hit rate, validation windows, and tradability selection |
-| `live_trading.enabled:true` | Rejected | Committed defaults must remain disabled |
-| 全自动实盘真实下单 | Rejected | Real-money orders require owner-side broker confirmation |
+| Agent 全自动 paper trading | 已实现增强 MVP | FastAPI 应用托管的 `AutoPaperAgentRuntime` 会在控制台启动后立即运行，然后每 300 秒刷新一次；`PaperTradingLoop.run_forever()` 仍可用于 CLI |
+| Agent 自动生成真实交易候选订单 | 已实现增强 MVP | 从可交易策略锦标赛候选中生成 `OrderIntent` |
+| Agent 自动完成风险检查 | 已实现增强 MVP | 入队前执行 `pre_trade_risk_check()`，并强制检查名义金额限制 |
+| Agent 自动进入审批队列 | 已实现 MVP | 使用 `ApprovalQueue.enqueue()` 入队 |
+| Agent 自动生成 broker-ready order ticket | 已实现增强 MVP | `BrokerReadyOrderTicket` 包含 `expires_at`；控制台/API 标注有效与过期候选单 |
+| 每 5 分钟更新一次 | 已实现增强 MVP | 服务、`configs/agent_loop.yaml`、应用运行时、控制台 JS 刷新和候选单 TTL 均使用 `refresh_interval_seconds: 300` |
+| Web dashboard | 已实现增强 MVP | `/dashboard`、`/dashboard/state`、`/agent/loop/status`、`/paper/portfolio`、`/strategy/tournament/run`；队列表显示可操作性/时效性/剩余秒数；策略表显示样本外收益/命中率/验证窗口 |
+| 操作及时性和时间有效性 | 已实现增强 MVP | `ApprovalQueue.summary()` 只把未过期的待人工确认候选单计为用户可操作；过期候选单保留用于审计 |
+| 稳定 webpage 交互平台入口 | 已实现增强 MVP | AppleScript `Alpha.app` 已安装到 Downloads、用户 Applications 和系统 `/Applications`；命令入口保留用于兼容 |
+| 全中文显示 | 已实现 MVP | 控制台标题、按钮、指标、表格、空状态、状态映射和启动/停止脚本提示均显示中文；API 机器字段和值保持稳定 |
+| 策略迭代 | 已实现增强 MVP | `run_strategy_tournament()` 使用 walk-forward 样本外收益、命中率、验证窗口和可交易选择对 momentum 候选排序 |
+| `live_trading.enabled:true` | 已拒绝 | 提交默认值必须保持禁用 |
+| 全自动实盘真实下单 | 已拒绝 | 真实资金订单需要用户在 broker 侧确认 |

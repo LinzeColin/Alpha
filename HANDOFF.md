@@ -24,6 +24,8 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - `/agent/loop/status` exposes automatic loop state, run count, last result summary, next run time, and errors.
 - `scripts/start_alpha_dashboard.sh` now performs a startup health check and removes stale pid files on failure.
 - Approval queue now derives ticket freshness from `expires_at`; only fresh `pending_owner_approval` tickets count as owner-actionable.
+- Dashboard user-facing display is now Chinese: page title, buttons, metric labels, table headers, empty states, and status/actionability mappings render in Chinese while API machine fields remain stable.
+- Local launcher scripts now print Chinese startup/shutdown messages.
 - AppleScript `Alpha.app` is installed at `/Users/linzezhang/Downloads/Alpha.app`, `/Users/linzezhang/Applications/Alpha.app`, and `/Applications/Alpha.app`.
 - GitHub connector backup now contains the core runtime/dashboard/code/test changes from this run.
 - Repo launcher exists at `outputs/applications/Alpha.command`; an older external copy was observed at `/Users/linzezhang/Downloads/applicatioins/Alpha.command`.
@@ -35,6 +37,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - Broker-ready real-money candidates flow through `OrderIntent -> risk check -> approval queue -> BrokerReadyOrderTicket`.
 - Refresh cadence target is 300 seconds by default.
 - Use one app-managed paper loop; do not start a second external agent process beside the dashboard.
+- User-visible runtime surfaces should display Chinese; API field names and enum values stay machine-readable and stable.
 
 ## Files To Read First
 
@@ -69,7 +72,7 @@ two-cycle smoke -> persisted paper portfolio trade_count=2 and cash=9816.10
 curl /health -> ok, refresh_interval_seconds=300
 curl /dashboard/state -> pending ticket, paper_portfolio, and strategy_tournament visible
 curl /agent/loop/status -> app-managed loop visible with run_count=1, status=sleeping, next_run_at=300 seconds later, error_count=0
-curl /dashboard -> contains Paper Portfolio, Strategy Tournament, Run Paper Cycle, and 300000ms refresh
+curl /dashboard -> 控制台 HTML 可访问，并包含 300000ms 前端刷新配置
 scripts/start_alpha_dashboard.sh -> starts the local dashboard, app-managed paper loop, and writes runtime/alpha_dashboard.pid/log
 scripts/stop_alpha_dashboard.sh -> waits for uvicorn shutdown and releases port 8000 cleanly
 uvicorn foreground runtime check -> /agent/loop/status showed enabled=true, task_running=true, interval_seconds=300, run_count=1, next_run_at populated, error_count=0
@@ -78,7 +81,11 @@ app launcher validation -> plutil -lint passed for repo, Downloads, user Applica
 app launch validation -> open -n /Users/linzezhang/Downloads/Alpha.app started dashboard; /agent/loop/status returned task_running=true, interval_seconds=300, run_count=1, error_count=0
 approval queue freshness API -> /orders/approval-queue returned fresh_pending_count=3, expired_pending_count=11, and fresh/expired actionability fields
 strategy tournament validation -> 9 candidates, 9 validated, winner momentum_QQQ_20d, hit_rate=1.0, oos_return=0.025701, validation_windows=9
-Dashboard HTML/API fallback -> contains System Snapshot, Paper Portfolio, Strategy Tournament, Approval Queue, Run Paper Cycle, 300000ms refresh, OOS Return, Hit Rate, Windows, Fresh Tickets, Expired Tickets, and Seconds Left
+Dashboard Chinese display test -> .venv/bin/python -m pytest tests/test_dashboard_state.py -q -> 4 passed
+Full regression -> .venv/bin/python -m pytest tests -q -> 21 passed
+Diff hygiene -> git diff --check -> passed
+浏览器中文控制台验证 -> 标题 Alpha 控制台, lang zh-CN, 旧英文可见短语=[], 已成功点击 运行模拟交易周期, 控制台错误=[]
+Launcher text verification -> scripts/start_alpha_dashboard.sh prints Chinese startup and health-check messages
 Repo launcher -> outputs/applications/Alpha.command exists and is executable
 External app launchers -> /Users/linzezhang/Downloads/Alpha.app, /Users/linzezhang/Applications/Alpha.app, and /Applications/Alpha.app exist and pass plist validation
 ```

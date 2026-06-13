@@ -22,7 +22,7 @@ OPEN_BROWSER="${ALPHA_OPEN_BROWSER:-1}"
 if [[ -f "$DASHBOARD_PID_FILE" ]]; then
   PID="$(cat "$DASHBOARD_PID_FILE")"
   if kill -0 "$PID" 2>/dev/null; then
-    echo "Alpha dashboard already running at $URL"
+    echo "Alpha 控制台已在 $URL 运行。"
     if [[ "$OPEN_BROWSER" != "0" ]] && command -v open >/dev/null 2>&1; then
       open "$URL"
     fi
@@ -37,12 +37,12 @@ if HEALTH="$(curl -fsS "http://127.0.0.1:8000/health" 2>/dev/null)" && [[ "$HEAL
     EXISTING_PID="$(lsof -tiTCP:8000 -sTCP:LISTEN | head -n 1 || true)"
     if [[ -n "$EXISTING_PID" ]]; then
       echo "$EXISTING_PID" > "$DASHBOARD_PID_FILE"
-      echo "Alpha dashboard already running at $URL as process $EXISTING_PID"
+      echo "Alpha 控制台已在 $URL 运行，进程号 $EXISTING_PID。"
     else
-      echo "Alpha dashboard already running at $URL"
+      echo "Alpha 控制台已在 $URL 运行。"
     fi
   else
-    echo "Alpha dashboard already running at $URL"
+    echo "Alpha 控制台已在 $URL 运行。"
   fi
   if [[ "$OPEN_BROWSER" != "0" ]] && command -v open >/dev/null 2>&1; then
     open "$URL"
@@ -53,20 +53,20 @@ fi
 nohup "$APP_PY" -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 >"$DASHBOARD_LOG_FILE" 2>&1 &
 echo "$!" > "$DASHBOARD_PID_FILE"
 
-echo "Alpha dashboard started at $URL"
-echo "Alpha paper agent loop is managed by the dashboard app runtime."
-echo "Dashboard log: $ROOT/$DASHBOARD_LOG_FILE"
+echo "Alpha 控制台已启动：$URL"
+echo "Alpha 模拟交易智能体循环由控制台应用运行时托管。"
+echo "控制台日志：$ROOT/$DASHBOARD_LOG_FILE"
 
 READY=0
 for _ in {1..60}; do
   if ! kill -0 "$(cat "$DASHBOARD_PID_FILE")" 2>/dev/null; then
-    echo "Alpha dashboard failed during startup."
+    echo "Alpha 控制台启动期间失败。"
     tail -n 80 "$DASHBOARD_LOG_FILE" || true
     rm -f "$DASHBOARD_PID_FILE"
     exit 1
   fi
   if curl -fsS "http://127.0.0.1:8000/health" >/dev/null 2>&1; then
-    echo "Alpha dashboard health check passed."
+    echo "Alpha 控制台健康检查通过。"
     READY=1
     break
   fi
@@ -74,7 +74,7 @@ for _ in {1..60}; do
 done
 
 if [[ "$READY" != "1" ]]; then
-  echo "Alpha dashboard did not become ready within 30 seconds."
+  echo "Alpha 控制台 30 秒内未就绪。"
   tail -n 80 "$DASHBOARD_LOG_FILE" || true
   rm -f "$DASHBOARD_PID_FILE"
   exit 1

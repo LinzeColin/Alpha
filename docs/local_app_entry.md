@@ -1,6 +1,6 @@
-# Alpha Local App Entry
+# Alpha 本地 App 入口
 
-Primary app-format entrypoints:
+主要 `.app` 格式入口：
 
 ```text
 /Users/linzezhang/Downloads/Alpha.app
@@ -8,41 +8,40 @@ Primary app-format entrypoints:
 /Applications/Alpha.app
 ```
 
-Repo app source and generated bundle:
+仓库内 App 源文件和生成包：
 
 ```text
 outputs/applications/Alpha.applescript
 outputs/applications/Alpha.app
 ```
 
-Compatibility command launchers:
+兼容命令入口：
 
 ```text
 outputs/applications/Alpha.command
 outputs/applicatioins/Alpha.command
 ```
 
-The command starts the FastAPI dashboard at:
+命令会启动 FastAPI 控制台：
 
 ```text
 http://127.0.0.1:8000/dashboard
 ```
 
-The app is an AppleScript `.app` generated from `outputs/applications/Alpha.applescript`.
-It calls `scripts/start_alpha_dashboard.sh`, creates `.venv` when missing,
-starts `uvicorn`, starts the 300-second paper trading agent loop inside the
-FastAPI app lifecycle, writes dashboard logs to `runtime/alpha_dashboard.log`,
-and opens the dashboard URL on macOS.
+该 App 是由 `outputs/applications/Alpha.applescript` 生成的 AppleScript `.app`。
+它会调用 `scripts/start_alpha_dashboard.sh`，在缺少 `.venv` 时创建虚拟环境，
+启动 `uvicorn`，在 FastAPI 应用生命周期内启动 300 秒刷新一次的模拟交易智能体循环，
+将控制台日志写入 `runtime/alpha_dashboard.log`，并在 macOS 上打开控制台 URL。
 
-The dashboard exposes automatic loop status at:
+控制台自动循环状态可通过以下地址查看：
 
 ```text
 http://127.0.0.1:8000/agent/loop/status
 ```
 
-Verified app installation:
+已验证的 App 安装状态：
 
 ```text
-plutil -lint passed for repo, Downloads, user Applications, and system Applications copies.
-open -n /Users/linzezhang/Downloads/Alpha.app launched the dashboard and app-managed paper loop.
+仓库、Downloads、用户 Applications、系统 Applications 中的 Alpha.app 均通过 plutil -lint。
+open -n /Users/linzezhang/Downloads/Alpha.app 可启动控制台和应用托管的模拟交易循环。
 ```
