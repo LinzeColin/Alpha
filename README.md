@@ -130,17 +130,17 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - `GET /ops/health` 汇总自动循环、SQLite 审批队列、模拟组合、模拟执行层边界、富途牛牛开放网关只读探测、行情数据、控制台进程、日志和最近备份状态。
 - `POST /ops/backup` 会在 `runtime/backups/` 下生成一次本地运行状态备份，包含审批队列快照、模拟组合、行情缓存、PID 和日志尾部。
 - `GET /ops/maintenance/status` 显示应用托管自动运行维护：健康采样次数、自动备份次数、下次维护时间、健康历史文件和备份轮转配置。
-- `GET /readiness/paper-trading` 输出 6月15日模拟交易交付就绪报告，并标注 6月17日网页与本地应用入口交付目标；逐项验证自动循环、策略迭代、模拟成交、OrderIntent、风控、审批队列、经纪商就绪工单、5分钟时效、本地 App 入口和真实下单边界。
+- `GET /readiness/paper-trading` 输出 6月15日模拟交易交付就绪报告，并标注 6月17日网页与本地应用入口交付目标；逐项验证自动循环、策略迭代、模拟成交、OrderIntent、风控、审批队列、经纪商就绪工单、5分钟时效、本地 App 入口和真实下单边界。自动循环检查会验证心跳新鲜度、进程存活、`interval_seconds` 不超过 300 秒，以及 `next_run_at - last_run_completed_at` 与刷新间隔一致。
 - `GET /readiness/soak` 输出 30 天本地长运行预检报告，聚合 App 入口、模拟交易交付就绪、5分钟循环、有效经纪商就绪工单、运行健康、自动维护、恢复备份和真实下单边界。
 - `GET /readiness/soak/history` 输出自动维护写入的长运行采样历史摘要，包括历史采样数、连续无失败采样数、连续完全通过采样数、最近失败时间和最近采样记录。
-- 自动模拟交易循环会写入 `runtime/agent_loop_status.json`，自动维护循环会写入 `runtime/ops_maintenance_status.json`；就绪检查会校验这些心跳是否新鲜、进程是否仍在运行，用于跨进程证明本地 App 正在运行。
+- 自动模拟交易循环会写入 `runtime/agent_loop_status.json`，自动维护循环会写入 `runtime/ops_maintenance_status.json`；就绪检查会校验这些心跳是否新鲜、进程是否仍在运行，并检查自动模拟交易循环的下一次运行时间确实按 300 秒调度，用于跨进程证明本地 App 正在运行。
 - 自动维护循环每 300 秒会把 `/readiness/soak` 等价预检结果追加到 `runtime/soak_readiness_history.jsonl`；控制台“长运行预检”读取该历史并显示连续无失败采样数。
 - `scripts/check_alpha_ops.sh` 输出中文健康检查摘要；加 `--json` 可输出机器 JSON。
 - `scripts/check_alpha_ops.sh --backup` 可在终端生成一次本地运行状态备份。
 - `scripts/check_alpha_soak.sh` 输出中文长运行预检摘要；加 `--json` 可输出机器 JSON。
 - `python -m backend.app.services.paper_readiness` 输出中文交付就绪摘要；加 `--json` 可查看完整机器证据。
 - `python -m backend.app.services.soak_readiness` 输出中文长运行预检摘要；该报告证明是否可以开始本地 soak，不等于已经完成 30 天验证。
-- `python scripts/verify_paper_trading_maturity.py --cycles 3` 使用临时运行态连续跑多轮模拟交易，并额外验证目标仓位再平衡卖单、现金回收减仓、风控、审批队列、经纪商就绪工单、5 分钟 TTL 和真实下单禁用边界；现金回收分支使用临时策略覆写隔离验证，不修改默认提交配置；默认输出证据到 `outputs/paper_maturity/paper_trading_maturity_latest.json`。
+- `python scripts/verify_paper_trading_maturity.py --cycles 3` 使用临时运行态连续跑多轮模拟交易，并额外验证目标仓位再平衡卖单、现金回收减仓、风控、审批队列、经纪商就绪工单、5 分钟 TTL、300 秒调度契约和真实下单禁用边界；现金回收分支使用临时策略覆写隔离验证，不修改默认提交配置；默认输出证据到 `outputs/paper_maturity/paper_trading_maturity_latest.json`。
 - `python scripts/verify_dashboard_http_smoke.py --base-url http://127.0.0.1:8000 --exercise-actions` 会通过 HTTP 检查 `/health`、`/dashboard`、`/dashboard/state` 的中文文案、关键中文字段、响应式布局契约和真实下单禁用边界，并安全调用模拟交易周期与运行备份端点。
 - `python scripts/verify_dashboard_chrome_visual.py --base-url http://127.0.0.1:8000` 会调用本机 Chrome headless 截取桌面和移动视口，检查截图尺寸、像素多样性、渲染后可见中文文案、旧英文界面文案禁用项和响应式布局契约；截图与 DOM HTML 只作为本地临时证据，提交到 GitHub 的默认证据是 `outputs/visual_acceptance/dashboard_chrome_visual_report.json`。
 - 控制台启动后会自动启动运行维护：默认每 300 秒采样一次健康状态，默认每天自动备份一次，并保留最近 30 份备份。

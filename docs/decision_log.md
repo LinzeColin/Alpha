@@ -16,7 +16,13 @@
 
 - 决策：订单候选循环默认刷新间隔为 300 秒。
 - 原因：用户要求候选单及时更新，同时必须保留风控与复核门槛。
-- 影响：FastAPI 控制台生命周期启动应用托管自动模拟交易循环，启动后立即运行一次，然后按配置间隔休眠。
+- 影响：FastAPI 控制台生命周期启动应用托管自动模拟交易循环，启动后立即运行一次，然后按配置间隔休眠；就绪检查会验证心跳新鲜、进程存活、`interval_seconds<=300`，以及 `next_run_at - last_run_completed_at` 与 300 秒调度契约一致。
+
+## 2026-06-13：测试不得污染真实运行心跳
+
+- 决策：自动循环单元测试必须使用临时 `agent_loop_status.json`，不得写入仓库默认 `runtime/agent_loop_status.json`。
+- 原因：默认运行心跳是 `/readiness/paper-trading` 和 `/readiness/soak` 的跨进程证据；测试写入 stopped/短间隔心跳会造成真实就绪误报失败。
+- 影响：`tests/test_agent_runtime.py` 已改用 `tmp_path` 心跳文件；`paper_readiness` 新增错误调度测试，确保 600 秒下一轮调度会被拒绝。
 
 ## 2026-06-13：候选单时效决定可操作性
 

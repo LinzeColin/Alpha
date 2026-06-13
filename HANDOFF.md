@@ -29,7 +29,7 @@
 - `PaperTradingLoop` 已具备现金/持仓/目标敞口约束感知：正常优先生成买入候选；若单标的仓位或总敞口超过 policy 上限，则优先生成“目标仓位再平衡”卖出候选；若现金不足以覆盖预计买入成交价、滑点和佣金但组合仍有可卖持仓，则生成现金回收减仓候选；两类卖单都会继续通过风控、审批队列、broker-ready ticket 和本地模拟成交。
 - 新增 `backend/app/services/paper_maturity.py` 和 `scripts/verify_paper_trading_maturity.py`：用临时本地状态验收连续模拟周期、目标仓位再平衡卖单、现金回收减仓、风控、审批队列、broker-ready ticket、5分钟 TTL 和真实下单禁用边界，并写入 `outputs/paper_maturity/paper_trading_maturity_latest.json`。
 - `scripts/start_alpha_dashboard.sh` 和 `scripts/stop_alpha_dashboard.sh` 修复了变量紧贴中文标点时的 zsh 解析问题。
-- 自动模拟交易循环和自动维护循环会分别写入 `runtime/agent_loop_status.json` 与 `runtime/ops_maintenance_status.json`；`/readiness/paper-trading` 和 `/readiness/soak` 可以读取新鲜心跳并校验进程仍存活，避免把已退出的 App 误判为就绪。
+- 自动模拟交易循环和自动维护循环会分别写入 `runtime/agent_loop_status.json` 与 `runtime/ops_maintenance_status.json`；`/readiness/paper-trading` 和 `/readiness/soak` 可以读取新鲜心跳并校验进程仍存活，避免把已退出的 App 误判为就绪；`/readiness/paper-trading` 还会验证 `next_run_at - last_run_completed_at` 与 300 秒刷新契约一致。
 - 自动维护循环每轮追加 `runtime/soak_readiness_history.jsonl`；`/readiness/soak/history` 和控制台“长运行预检”显示历史采样数、连续无失败采样数、连续完全通过采样数、最近失败时间和最近采样表。
 
 ## 关键决策
@@ -139,6 +139,8 @@ MOOMOO_API_HOME=runtime/moomoo_api_home .venv/bin/python -c "import json; from b
 目标敞口再平衡验证：在运行态 `TLT` 严重超配时，`python -m backend.app.services.paper_trading_loop --once` 生成 `TLT / 卖出 / 数量 1.165909`，策略显示“目标仓位再平衡 TLT”，风控通过、审批队列入队、模拟成交完成，现金回升到 `104.81`，`live_order_submission_enabled=false`。
 
 模拟交易成熟度验收：`python scripts/verify_paper_trading_maturity.py --cycles 3` 通过，报告覆盖连续正常周期、目标仓位再平衡卖单、现金回收减仓、风控、审批队列、经纪商就绪工单、5分钟 TTL 和真实下单禁用边界；现金回收分支使用临时策略覆写隔离验证，不修改默认提交配置；安全边界文案明确“不触发真实下单、不提交真实资金订单”。
+
+运行态 5 分钟调度验收：`open -g /Users/linzezhang/Downloads/Alpha.app` 启动后，`/agent/loop/status` 显示 `interval_seconds=300`、`last_run_completed_at=2026-06-13T09:16:20+00:00`、`next_run_at=2026-06-13T09:21:20+00:00`；`/readiness/paper-trading` 返回 `overall_status=healthy`、`pass_count=10`、`scheduled_delay_seconds=300`、有效候选单 `ticket_469b80ceb4e1`，真实下单边界仍为 false。
 
 运行态检查：普通沙箱内绑定 `127.0.0.1` 会触发权限限制；提权后本地 uvicorn HTTP smoke 已验证 `/dashboard`、`/health` 和 `/dashboard/state` 的中文文案、关键中文字段、10 条响应式布局契约和真实下单禁用边界，并安全调用 `/paper/run-once` 与 `/ops/backup`。本机 Chrome headless 已完成截图级视觉验收；由于 DOM HTML 和截图包含本机绝对路径，默认不提交 `.html/.png`，只提交 `outputs/visual_acceptance/dashboard_chrome_visual_report.json`。
 
