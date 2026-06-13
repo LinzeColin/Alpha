@@ -60,9 +60,9 @@ runtime/backups/
 configs/paper_broker.yaml
 ```
 
-默认 `provider: local_sandbox`，即本地沙盒模拟交易。外部 paper API provider 目前只有 fail-closed 适配入口；如误配为 `alpaca_paper`、`ibkr_paper`、`moomoo_paper` 或 `external_paper_api`，系统会显示未就绪原因并拒绝纸面下单，不会回退成真实资金下单。
+默认 `provider: local_sandbox`，即本地沙盒模拟交易。`alpaca_paper` 只有在 paper host allowlist、paper 环境变量凭据和显式启用开关全部通过后才会执行只读同步或提交纸面订单；`ibkr_paper`、`moomoo_paper` 或 `external_paper_api` 仍保持 fail-closed。任何外部 provider 都不会回退成真实资金下单。
 
-`alpaca_paper` 已具备受控适配器实现，但默认关闭。启用前必须确认 `base_url` 仍为 `https://paper-api.alpaca.markets`，设置 `ALPACA_PAPER_KEY_ID` 与 `ALPACA_PAPER_SECRET_KEY`，并显式把 `allow_external_paper_api` 和 `order_submission_enabled` 改为 `true`。当前只允许 `market/day` 纸面订单，不支持 live endpoint。
+`alpaca_paper` 已具备受控适配器实现，但默认关闭。启用前必须确认 `base_url` 仍为 `https://paper-api.alpaca.markets`，设置 `ALPACA_PAPER_KEY_ID` 与 `ALPACA_PAPER_SECRET_KEY`，并显式把 `allow_external_paper_api` 改为 `true`；只读同步还需要 `read_only_sync_enabled: true`，纸面订单提交还需要 `order_submission_enabled: true`。当前只允许 `market/day` 纸面订单，不支持 live endpoint。
 
 `.app` 格式入口已安装到：
 
@@ -87,6 +87,7 @@ POST /paper/run-once
 GET  /paper/portfolio
 GET  /paper/performance/history
 GET  /paper/broker/status
+GET  /paper/broker/external-snapshot
 GET  /broker/moomoo/status
 GET  /broker/moomoo/quote-snapshot
 POST /strategy/tournament/run
@@ -117,7 +118,7 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - 外部 API 不得触发真实资金下单。
 - Alpha 可以生成供用户审核的经纪商就绪订单工单，但不得自主提交真实资金订单。
 - 当前模拟交易执行层使用 `LocalSandboxPaperBrokerAdapter`；它返回类经纪商模拟回执，但不需要凭据，也不允许真实下单。
-- 纸面交易经纪商适配通过 `configs/paper_broker.yaml` 选择；默认本地沙盒可成交，Alpaca paper adapter 必须通过 paper host allowlist、paper 环境变量凭据和显式启用开关才会提交纸面订单；其他外部 provider 未配置完成时 fail-closed，并在控制台显示“外部纸面 API”“未就绪原因”和“下一步”。
+- 纸面交易经纪商适配通过 `configs/paper_broker.yaml` 选择；默认本地沙盒可成交，Alpaca paper adapter 必须通过 paper host allowlist、paper 环境变量凭据和显式启用开关才会执行只读同步或提交纸面订单；其他外部 provider 未配置完成时 fail-closed，并在控制台显示“外部纸面 API”“外部账户同步”“未就绪原因”和“下一步”。
 - 富途牛牛开放网关集成当前只做只读连接探测：检测当前 Python 环境是否可导入 `moomoo`/`futu` 接口包，并检测本机开放网关端口；不会解锁交易、不会读取或提交交易凭据、不会调用真实下单接口。
 - 审批队列默认使用 SQLite 持久化，支持在网页/API 中标记“已人工复核”“已拒绝”“工单已导出”；这些动作只更新本地审计状态，不会调用真实 broker 下单接口。
 - 已人工复核且仍在有效期内的工单可导出为机器 JSON 包或中文 CSV 人工录入表；过期工单不能复核或导出。
@@ -175,7 +176,7 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 
 - `LocalSandboxPaperBrokerAdapter` 默认使用“固定佣金与滑点模型”：买入按参考价上浮 5.00 基点成交，并计入每笔 1.00 AUD 模拟佣金。
 - Paper broker 会把模拟成交价、参考价、佣金、滑点和累计佣金写入组合状态与绩效历史。
-- 控制台的“模拟交易执行层”和“模拟绩效”会显示纸面交易提供方、适配器就绪、是否允许纸面下单、是否启用外部纸面 API、执行模型、模拟滑点、单笔佣金、累计佣金和最近成交成本。
+- 控制台的“模拟交易执行层”和“模拟绩效”会显示纸面交易提供方、适配器就绪、是否允许纸面下单、是否启用外部纸面 API、外部账户同步状态、外部账户权益、外部持仓数、外部最近订单数、执行模型、模拟滑点、单笔佣金、累计佣金和最近成交成本。
 - 该模型只影响本地模拟交易绩效，不调用真实经纪商下单接口。
 
 ## 富途牛牛开放网关只读探测
@@ -183,7 +184,9 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - `GET /broker/moomoo/status` 显示富途牛牛开放网关只读探测状态。
 - `GET /broker/moomoo/quote-snapshot` 在只读连接就绪时读取富途牛牛开放网关市场快照；未就绪时返回中文阻止原因。
 - `broker` 可选依赖安装官方 `moomoo-api` Python 软件开发包；当前本机验证版本为 `10.7.6708`。
+- 2026-06-13 本机只读验收已确认：`moomoo-api 10.7.6708` 可导入，OpenD `127.0.0.1:11111` 已连通，只读行情快照获取 `US.SPY`、`US.QQQ`、`US.TLT` 共 3 行；证据见 `outputs/moomoo_opend_readiness_20260613.json`。
 - 默认连接地址为 `127.0.0.1:11111`；可用 `MOOMOO_OPEND_HOST`、`MOOMOO_OPEND_PORT`、`MOOMOO_OPEND_TIMEOUT_SECONDS` 调整。
 - `ALPHA_MARKET_DATA_PROVIDER=moomoo_opend` 时，行情数据网关会把只读快照转换成本地价格缓存，用于模拟交易的价格路径。
 - 控制台的“富途牛牛开放网关（只读）”面板会显示接口包、软件开发包可导入、开放网关连接、只读就绪、只读行情快照、交易解锁、允许真实下单和禁止操作。
 - 该探测层只用于确认本机环境和只读行情是否可用；当前不会创建交易上下文、不会解锁交易、不会提交真实资金订单。
+- `moomoo_paper` 仍保持 fail-closed。安装 Moomoo、Moomoo OpenD 和 Moomoo API 只代表行情/网关前置条件满足，不代表 Alpha 可以自动提交 Moomoo 模拟或真实订单。

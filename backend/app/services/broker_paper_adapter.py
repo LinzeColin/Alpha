@@ -96,6 +96,10 @@ class PaperBrokerAdapter(Protocol):
         """Return a broker-like receipt for a risk-blocked or skipped paper order."""
         ...
 
+    def external_snapshot(self) -> dict:
+        """Return a safe external paper account snapshot when supported."""
+        ...
+
 
 def load_paper_broker_config(config_path: str | Path | None) -> dict:
     if config_path is None:
@@ -130,10 +134,10 @@ def build_paper_broker_adapter(
                 reason="external paper broker adapter disabled by safety config",
             )
         external = section.get("external_paper_api") or {}
-        if not isinstance(external, dict) or not external.get("order_submission_enabled", False):
+        if not isinstance(external, dict):
             return UnavailableExternalPaperBrokerAdapter(
                 requested_provider=provider,
-                reason="external paper broker paper order submission unavailable",
+                reason="external paper broker adapter not configured",
             )
         return AlpacaPaperBrokerAdapter.from_config(external)
     if provider in {"external_paper_api", "ibkr_paper", "moomoo_paper"}:
@@ -306,6 +310,14 @@ class LocalSandboxPaperBrokerAdapter:
             "paper_result": {"status": "skipped", "reason": reason},
         }
 
+    def external_snapshot(self) -> dict:
+        return _external_snapshot_unavailable(
+            provider="local_sandbox",
+            provider_zh="本地沙盒模拟交易",
+            reason="external paper broker read only sync unavailable",
+            reason_zh="本地沙盒不需要外部纸面账户同步。",
+        )
+
 
 @dataclass
 class UnavailableExternalPaperBrokerAdapter:
@@ -395,6 +407,14 @@ class UnavailableExternalPaperBrokerAdapter:
             "paper_result": {"status": "skipped", "reason": reason, "reason_zh": zh_reason(reason)},
         }
 
+    def external_snapshot(self) -> dict:
+        return _external_snapshot_unavailable(
+            provider=self.requested_provider,
+            provider_zh=_paper_provider_zh(self.requested_provider),
+            reason=self.reason,
+            reason_zh=zh_reason(self.reason),
+        )
+
 
 @dataclass
 class AlpacaPaperBrokerAdapter:
@@ -402,7 +422,10 @@ class AlpacaPaperBrokerAdapter:
     key_id_env: str = ALPACA_PAPER_KEY_ID_ENV
     secret_key_env: str = ALPACA_PAPER_SECRET_KEY_ENV
     timeout_seconds: float = 10.0
+    read_only_sync_enabled: bool = False
+    order_submission_enabled: bool = False
     http_post_json: Callable[[str, dict, dict, float], dict] | None = None
+    http_get_json: Callable[[str, dict, float], dict | list] | None = None
     adapter_id: str = "alpaca_paper_broker"
     broker_name: str = "Alpaca Paper"
 
@@ -413,11 +436,16 @@ class AlpacaPaperBrokerAdapter:
             key_id_env=str(config.get("key_id_env", ALPACA_PAPER_KEY_ID_ENV)),
             secret_key_env=str(config.get("secret_key_env", ALPACA_PAPER_SECRET_KEY_ENV)),
             timeout_seconds=float(config.get("timeout_seconds", 10.0)),
+            read_only_sync_enabled=bool(config.get("read_only_sync_enabled", False)),
+            order_submission_enabled=bool(config.get("order_submission_enabled", False)),
         )
 
     def status(self) -> dict:
         readiness, reason = self._readiness()
         credentials_present = self._credentials_present()
+        ready = readiness == "ready"
+        paper_order_enabled = ready and self.order_submission_enabled
+        read_only_ready = ready and self.read_only_sync_enabled
         return {
             "provider": "alpaca_paper",
             "provider_zh": _paper_provider_zh("alpaca_paper"),
@@ -442,14 +470,18 @@ class AlpacaPaperBrokerAdapter:
             "base_url": self.base_url,
             "paper_base_url_allowed": _is_allowed_alpaca_paper_base_url(self.base_url),
             "paper_base_url_allowed_zh": "是" if _is_allowed_alpaca_paper_base_url(self.base_url) else "否",
-            "paper_order_submission_enabled": readiness == "ready",
-            "paper_order_submission_enabled_zh": "是" if readiness == "ready" else "否",
-            "external_paper_api_enabled": readiness == "ready",
-            "external_paper_api_enabled_zh": "是" if readiness == "ready" else "否",
+            "read_only_sync_enabled": self.read_only_sync_enabled,
+            "read_only_sync_enabled_zh": "是" if self.read_only_sync_enabled else "否",
+            "read_only_sync_ready": read_only_ready,
+            "read_only_sync_ready_zh": "是" if read_only_ready else "否",
+            "paper_order_submission_enabled": paper_order_enabled,
+            "paper_order_submission_enabled_zh": "是" if paper_order_enabled else "否",
+            "external_paper_api_enabled": read_only_ready or paper_order_enabled,
+            "external_paper_api_enabled_zh": "是" if read_only_ready or paper_order_enabled else "否",
             "live_order_submission_enabled": False,
             "live_order_submission_enabled_zh": "否",
-            "supports_market_orders": readiness == "ready",
-            "supports_market_orders_zh": "是" if readiness == "ready" else "否",
+            "supports_market_orders": paper_order_enabled,
+            "supports_market_orders_zh": "是" if paper_order_enabled else "否",
             "supports_real_broker_place_order": False,
             "supports_real_broker_place_order_zh": "否",
             "reason": reason,
@@ -468,6 +500,12 @@ class AlpacaPaperBrokerAdapter:
         readiness, reason = self._readiness()
         if readiness != "ready":
             return self.skipped_receipt(order, reason=reason, source_ticket=source_ticket)
+        if not self.order_submission_enabled:
+            return self.skipped_receipt(
+                order,
+                reason="external paper broker paper order submission unavailable",
+                source_ticket=source_ticket,
+            )
 
         try:
             payload = _alpaca_order_payload(order, source_ticket=source_ticket)
@@ -480,20 +518,17 @@ class AlpacaPaperBrokerAdapter:
                 "reason_zh": f"{zh_reason('alpaca paper order rejected')}：{exc}",
                 "paper_result": {"status": "skipped", "reason": "alpaca paper order rejected", "reason_zh": zh_reason("alpaca paper order rejected")},
             }
-        headers = {
-            "APCA-API-KEY-ID": os.environ.get(self.key_id_env, ""),
-            "APCA-API-SECRET-KEY": os.environ.get(self.secret_key_env, ""),
-            "Content-Type": "application/json",
-        }
+        headers = self._headers()
         try:
             response = (self.http_post_json or _post_json)(f"{self.base_url}/v2/orders", payload, headers, self.timeout_seconds)
         except RuntimeError as exc:
+            safe_error = _redact_values(str(exc), self._credential_values())
             return {
                 **self._receipt_base(order, source_ticket=source_ticket),
                 "status": "skipped",
                 "status_zh": zh_status("skipped"),
                 "reason": "alpaca paper api request failed",
-                "reason_zh": f"{zh_reason('alpaca paper api request failed')}：{exc}",
+                "reason_zh": f"{zh_reason('alpaca paper api request failed')}：{safe_error}",
                 "paper_result": {"status": "skipped", "reason": "alpaca paper api request failed", "reason_zh": zh_reason("alpaca paper api request failed")},
             }
 
@@ -531,6 +566,62 @@ class AlpacaPaperBrokerAdapter:
             "paper_result": {"status": "skipped", "reason": reason, "reason_zh": zh_reason(reason)},
         }
 
+    def external_snapshot(self) -> dict:
+        readiness, reason = self._readiness()
+        if readiness != "ready":
+            return _external_snapshot_unavailable(
+                provider="alpaca_paper",
+                provider_zh=_paper_provider_zh("alpaca_paper"),
+                reason=reason,
+                reason_zh=zh_reason(reason),
+            )
+        if not self.read_only_sync_enabled:
+            return _external_snapshot_unavailable(
+                provider="alpaca_paper",
+                provider_zh=_paper_provider_zh("alpaca_paper"),
+                reason="external paper broker read only sync unavailable",
+                reason_zh=zh_reason("external paper broker read only sync unavailable"),
+            )
+        headers = self._headers()
+        try:
+            account = (self.http_get_json or _get_json)(f"{self.base_url}/v2/account", headers, self.timeout_seconds)
+            positions = (self.http_get_json or _get_json)(f"{self.base_url}/v2/positions", headers, self.timeout_seconds)
+            orders_url = f"{self.base_url}/v2/orders?status=all&limit=50"
+            orders = (self.http_get_json or _get_json)(orders_url, headers, self.timeout_seconds)
+        except RuntimeError as exc:
+            safe_error = _redact_values(str(exc), self._credential_values())
+            return {
+                **_external_snapshot_unavailable(
+                    provider="alpaca_paper",
+                    provider_zh=_paper_provider_zh("alpaca_paper"),
+                    reason="alpaca paper api request failed",
+                    reason_zh=f"{zh_reason('alpaca paper api request failed')}：{safe_error}",
+                ),
+                "read_only_sync_enabled": True,
+                "read_only_sync_enabled_zh": "是",
+            }
+        safe_account = _sanitize_alpaca_account(account if isinstance(account, dict) else {})
+        safe_positions = [_sanitize_alpaca_position(item) for item in positions] if isinstance(positions, list) else []
+        safe_orders = [_sanitize_alpaca_order_response(item) | {"status_zh": _alpaca_order_status_zh(str(item.get("status", "")))} for item in orders] if isinstance(orders, list) else []
+        return {
+            "status": "ready",
+            "status_zh": "已同步",
+            "provider": "alpaca_paper",
+            "provider_zh": _paper_provider_zh("alpaca_paper"),
+            "generated_at": _utc_now_iso(),
+            "base_url": self.base_url,
+            "read_only_sync_enabled": True,
+            "read_only_sync_enabled_zh": "是",
+            "live_order_submission_enabled": False,
+            "live_order_submission_enabled_zh": "否",
+            "account": safe_account,
+            "positions": safe_positions,
+            "recent_orders": safe_orders,
+            "position_count": len(safe_positions),
+            "recent_order_count": len(safe_orders),
+            "summary_zh": f"Alpaca 纸面账户同步完成：持仓 {len(safe_positions)} 个，最近订单 {len(safe_orders)} 条。",
+        }
+
     def _receipt_base(self, order: PaperOrder, *, source_ticket: dict | None) -> dict:
         status = self.status()
         return {
@@ -563,12 +654,22 @@ class AlpacaPaperBrokerAdapter:
     def _credentials_present(self) -> bool:
         return bool(os.environ.get(self.key_id_env) and os.environ.get(self.secret_key_env))
 
+    def _credential_values(self) -> tuple[str | None, str | None]:
+        return os.environ.get(self.key_id_env), os.environ.get(self.secret_key_env)
+
+    def _headers(self) -> dict:
+        return {
+            "APCA-API-KEY-ID": os.environ.get(self.key_id_env, ""),
+            "APCA-API-SECRET-KEY": os.environ.get(self.secret_key_env, ""),
+            "Content-Type": "application/json",
+        }
+
     def _readiness(self) -> tuple[str, str]:
         if not _is_allowed_alpaca_paper_base_url(self.base_url):
             return "not_configured", "external paper broker base url not allowed"
         if not self._credentials_present():
             return "not_configured", "external paper broker credentials missing"
-        return "ready", "alpaca paper order submitted"
+        return "ready", "alpaca paper adapter ready"
 
 
 def _external_provider_block_reason(section: dict) -> str:
@@ -649,13 +750,90 @@ def _post_json(url: str, payload: dict, headers: dict, timeout_seconds: float) -
             text = response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"HTTP {exc.code}: {_redact_alpaca_error(body)}") from exc
+        raise RuntimeError(f"HTTP {exc.code}: {_redact_values(body, _alpaca_header_redaction_values(headers))}") from exc
     except urllib.error.URLError as exc:
         raise RuntimeError(str(exc.reason)) from exc
     value = json.loads(text)
     if not isinstance(value, dict):
         raise RuntimeError("Alpaca paper API response is not an object")
     return value
+
+
+def _get_json(url: str, headers: dict, timeout_seconds: float) -> dict | list:
+    request = urllib.request.Request(url, headers=headers, method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            text = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"HTTP {exc.code}: {_redact_values(body, _alpaca_header_redaction_values(headers))}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(str(exc.reason)) from exc
+    value = json.loads(text)
+    if not isinstance(value, (dict, list)):
+        raise RuntimeError("Alpaca paper API response is not an object or list")
+    return value
+
+
+def _external_snapshot_unavailable(*, provider: str, provider_zh: str, reason: str, reason_zh: str) -> dict:
+    return {
+        "status": "not_configured",
+        "status_zh": zh_status("not_configured"),
+        "provider": provider,
+        "provider_zh": provider_zh,
+        "generated_at": _utc_now_iso(),
+        "read_only_sync_enabled": False,
+        "read_only_sync_enabled_zh": "否",
+        "live_order_submission_enabled": False,
+        "live_order_submission_enabled_zh": "否",
+        "reason": reason,
+        "reason_zh": reason_zh,
+        "account": {},
+        "positions": [],
+        "recent_orders": [],
+        "position_count": 0,
+        "recent_order_count": 0,
+        "summary_zh": reason_zh,
+    }
+
+
+def _sanitize_alpaca_account(account: dict) -> dict:
+    return {
+        "account_id_present": bool(account.get("id")),
+        "account_number_present": bool(account.get("account_number")),
+        "account_identifier_redacted_zh": "账户标识已隐藏",
+        "status": account.get("status"),
+        "status_zh": _alpaca_account_status_zh(str(account.get("status", ""))),
+        "currency": account.get("currency"),
+        "cash": _float_or_none(account.get("cash")),
+        "buying_power": _float_or_none(account.get("buying_power")),
+        "equity": _float_or_none(account.get("equity")),
+        "portfolio_value": _float_or_none(account.get("portfolio_value")),
+        "long_market_value": _float_or_none(account.get("long_market_value")),
+        "short_market_value": _float_or_none(account.get("short_market_value")),
+        "trading_blocked": bool(account.get("trading_blocked", False)),
+        "transfers_blocked": bool(account.get("transfers_blocked", False)),
+        "account_blocked": bool(account.get("account_blocked", False)),
+        "pattern_day_trader": bool(account.get("pattern_day_trader", False)),
+    }
+
+
+def _sanitize_alpaca_position(position: dict) -> dict:
+    return {
+        "symbol": position.get("symbol"),
+        "asset_class": position.get("asset_class"),
+        "side": position.get("side"),
+        "side_zh": {"long": "多头", "short": "空头"}.get(str(position.get("side")), "未知方向"),
+        "qty": _float_or_none(position.get("qty")),
+        "avg_entry_price": _float_or_none(position.get("avg_entry_price")),
+        "market_value": _float_or_none(position.get("market_value")),
+        "cost_basis": _float_or_none(position.get("cost_basis")),
+        "unrealized_pl": _float_or_none(position.get("unrealized_pl")),
+        "unrealized_plpc": _float_or_none(position.get("unrealized_plpc")),
+        "current_price": _float_or_none(position.get("current_price")),
+        "lastday_price": _float_or_none(position.get("lastday_price")),
+        "change_today": _float_or_none(position.get("change_today")),
+    }
 
 
 def _sanitize_alpaca_order_response(response: dict) -> dict:
@@ -687,11 +865,20 @@ def _sanitize_alpaca_order_response(response: dict) -> dict:
     return {key: value for key, value in response.items() if key in allowed_keys}
 
 
-def _redact_alpaca_error(text: str) -> str:
+def _alpaca_header_redaction_values(headers: dict) -> tuple[object, ...]:
+    return (
+        headers.get("APCA-API-KEY-ID"),
+        headers.get("APCA-API-SECRET-KEY"),
+        os.environ.get(ALPACA_PAPER_KEY_ID_ENV),
+        os.environ.get(ALPACA_PAPER_SECRET_KEY_ENV),
+    )
+
+
+def _redact_values(text: str, values: tuple[object, ...]) -> str:
     redacted = text
-    for value in (os.environ.get(ALPACA_PAPER_KEY_ID_ENV), os.environ.get(ALPACA_PAPER_SECRET_KEY_ENV)):
+    for value in values:
         if value:
-            redacted = redacted.replace(value, "[redacted]")
+            redacted = redacted.replace(str(value), "[redacted]")
     return redacted
 
 
@@ -728,3 +915,16 @@ def _alpaca_order_status_zh(status: str) -> str:
         "suspended": "已暂停",
         "calculated": "已计算",
     }.get(status, "未知订单状态")
+
+
+def _alpaca_account_status_zh(status: str) -> str:
+    return {
+        "ACTIVE": "正常",
+        "ACCOUNT_UPDATED": "账户已更新",
+        "APPROVAL_PENDING": "等待审批",
+        "APPROVED": "已审批",
+        "REJECTED": "已拒绝",
+        "ONBOARDING": "开户中",
+        "SUBMISSION_FAILED": "提交失败",
+        "DISABLED": "已停用",
+    }.get(status, "未知账户状态")

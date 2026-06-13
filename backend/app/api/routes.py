@@ -269,6 +269,12 @@ def paper_broker_status() -> dict:
     return build_paper_broker_adapter(paper_broker, config_path=PAPER_BROKER_CONFIG_PATH).status()
 
 
+@router.get("/paper/broker/external-snapshot")
+def paper_broker_external_snapshot() -> dict:
+    paper_broker = PaperBroker.load(PAPER_STATE_PATH)
+    return build_paper_broker_adapter(paper_broker, config_path=PAPER_BROKER_CONFIG_PATH).external_snapshot()
+
+
 @router.get("/broker/moomoo/status")
 def moomoo_broker_status() -> dict:
     return probe_moomoo_opend()
@@ -385,6 +391,7 @@ def dashboard_state() -> dict:
         "paper_portfolio": paper_portfolio(),
         "paper_performance": paper_performance_history(),
         "paper_broker_status": paper_broker_status(),
+        "paper_broker_external_snapshot": paper_broker_external_snapshot(),
         "moomoo_broker_status": moomoo_broker_status(),
         "moomoo_quote_snapshot": moomoo_quote_snapshot(),
         "strategy_tournament": strategy_tournament_run(),
@@ -966,8 +973,9 @@ def dashboard() -> str:
         </table>
       `;
     }
-    function renderBroker(broker) {
+    function renderBroker(broker, externalSnapshot = {}) {
       const latest = broker.latest_trade || {};
+      const externalAccount = externalSnapshot.account || {};
       const latestLine = latest.symbol ? `${latest.symbol} / ${displaySide(latest.side)} / 数量 ${displayValue(latest.quantity)} / 成交价 ${displayValue(latest.price)}` : '暂无';
       const latestCostLine = latest.symbol ? `佣金 ${Number(latest.commission || 0).toFixed(2)} / 滑点 ${Number(latest.slippage_bps || 0).toFixed(2)} 基点` : '暂无';
       document.getElementById('broker').innerHTML = `
@@ -983,6 +991,12 @@ def dashboard() -> str:
             <tr><th>需要凭据</th><td>${broker.credential_required_zh || displayBool(broker.credential_required)}</td></tr>
             <tr><th>允许纸面下单</th><td>${broker.paper_order_submission_enabled_zh || displayBool(broker.paper_order_submission_enabled)}</td></tr>
             <tr><th>外部纸面 API</th><td>${broker.external_paper_api_enabled_zh || displayBool(broker.external_paper_api_enabled)}</td></tr>
+            <tr><th>外部账户同步</th><td>${externalSnapshot.status_zh || '未配置'}</td></tr>
+            <tr><th>同步说明</th><td>${externalSnapshot.summary_zh || externalSnapshot.reason_zh || '无'}</td></tr>
+            <tr><th>外部账户权益</th><td>${externalAccount.equity === null || externalAccount.equity === undefined ? '无' : Number(externalAccount.equity).toFixed(2)}</td></tr>
+            <tr><th>外部持仓数</th><td>${externalSnapshot.position_count || 0}</td></tr>
+            <tr><th>外部订单数</th><td>${externalSnapshot.recent_order_count || 0}</td></tr>
+            <tr><th>外部同步时间</th><td>${displayTime(externalSnapshot.generated_at)}</td></tr>
             <tr><th>允许真实下单</th><td>${broker.live_order_submission_enabled_zh || displayBool(broker.live_order_submission_enabled)}</td></tr>
             <tr><th>未就绪原因</th><td>${broker.reason_zh || '无'}</td></tr>
             <tr><th>下一步</th><td>${broker.next_step_zh || '无'}</td></tr>
@@ -1111,7 +1125,7 @@ def dashboard() -> str:
         renderPortfolio(data.paper_portfolio || {});
         renderPaperPerformance(data.paper_performance || {});
         renderAgent(data.agent_status || {});
-        renderBroker(data.paper_broker_status || {});
+        renderBroker(data.paper_broker_status || {}, data.paper_broker_external_snapshot || {});
         renderMoomooBroker(data.moomoo_broker_status || {}, data.moomoo_quote_snapshot || {});
         renderMarketData(data.market_data || {});
         renderOpsHealth(data.ops_health || {});

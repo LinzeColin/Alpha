@@ -16,6 +16,8 @@ REQUIRED_DASHBOARD_TEXT = [
     "系统快照",
     "纸面交易提供方",
     "允许纸面下单",
+    "外部账户同步",
+    "同步说明",
     "长运行预检",
     "长运行历史",
     "审批队列",
@@ -39,6 +41,10 @@ REQUIRED_STATE_FIELDS = [
     ("paper_broker_status", "adapter_readiness_zh"),
     ("paper_broker_status", "paper_order_submission_enabled_zh"),
     ("paper_broker_status", "live_order_submission_enabled_zh"),
+    ("paper_broker_external_snapshot", "status_zh"),
+    ("paper_broker_external_snapshot", "provider_zh"),
+    ("paper_broker_external_snapshot", "summary_zh"),
+    ("paper_broker_external_snapshot", "live_order_submission_enabled_zh"),
     ("moomoo_broker_status", "mode_zh"),
     ("soak_readiness", "summary_zh"),
     ("soak_readiness_history", "summary_zh"),
@@ -159,6 +165,13 @@ def validate_dashboard_payloads(*, health: dict, dashboard_html: str, state: dic
         errors.append("模拟经纪商状态没有明确禁用真实下单。")
     if paper_broker.get("supports_real_broker_place_order") is not False:
         errors.append("模拟经纪商状态没有明确禁止真实经纪商下单。")
+
+    external_snapshot = state.get("paper_broker_external_snapshot") or {}
+    if external_snapshot.get("live_order_submission_enabled") is not False:
+        errors.append("外部纸面账户同步状态没有明确禁用真实下单。")
+    account_snapshot = external_snapshot.get("account") or {}
+    if "id" in account_snapshot or "account_number" in account_snapshot:
+        errors.append("外部纸面账户同步状态不应暴露账户原始标识。")
 
     moomoo = state.get("moomoo_broker_status") or {}
     if moomoo.get("live_order_submission_enabled") is not False:

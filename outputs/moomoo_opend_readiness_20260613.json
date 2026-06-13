@@ -1,0 +1,65 @@
+{
+  "evidence_type": "moomoo_opend_read_only_readiness",
+  "verified_at_utc": "2026-06-13T08:01:09+00:00",
+  "verified_at_local": "2026-06-13 18:01:09 Australia/Sydney",
+  "commands": [
+    "MOOMOO_API_HOME=runtime/moomoo_api_home .venv/bin/python -c \"import json; from backend.app.services.moomoo_broker_probe import probe_moomoo_opend; print(json.dumps(probe_moomoo_opend(), ensure_ascii=False, sort_keys=True, indent=2))\"",
+    "MOOMOO_API_HOME=runtime/moomoo_api_home .venv/bin/python -c \"import json; from backend.app.services.moomoo_broker_probe import probe_moomoo_quote_snapshot; print(json.dumps(probe_moomoo_quote_snapshot(), ensure_ascii=False, sort_keys=True, indent=2))\""
+  ],
+  "sandbox_note_zh": "普通沙箱内连接 127.0.0.1:11111 返回 PermissionError；提权后只读探测通过，因此该错误属于本地沙箱网络权限限制，不代表 OpenD 未启动。",
+  "api_package": {
+    "import_name": "moomoo",
+    "distribution_name": "moomoo-api",
+    "version": "10.7.6708",
+    "importable": true,
+    "importable_zh": "是"
+  },
+  "opend": {
+    "host": "127.0.0.1",
+    "port": 11111,
+    "connected": true,
+    "connected_zh": "是",
+    "status": "ready_read_only",
+    "status_zh": "只读探测就绪"
+  },
+  "quote_snapshot": {
+    "status": "ready",
+    "status_zh": "已获取",
+    "row_count": 3,
+    "symbols": [
+      "US.SPY",
+      "US.QQQ",
+      "US.TLT"
+    ],
+    "last_prices": {
+      "US.SPY": 741.75,
+      "US.QQQ": 721.34,
+      "US.TLT": 85.77
+    },
+    "source_update_times": {
+      "US.SPY": "2026-06-12 19:59:48.664",
+      "US.QQQ": "2026-06-12 20:01:36.677",
+      "US.TLT": "2026-06-12 20:01:37.477"
+    }
+  },
+  "safety_boundary": {
+    "credential_required_for_probe": false,
+    "trade_context_enabled": false,
+    "trade_unlock_required": false,
+    "live_order_submission_enabled": false,
+    "supports_real_broker_place_order": false,
+    "safe_operations_zh": [
+      "检测接口包",
+      "检测本机开放网关端口",
+      "打开只读行情连接",
+      "读取市场快照",
+      "关闭只读行情连接"
+    ],
+    "forbidden_operations_zh": [
+      "创建交易上下文",
+      "解锁交易",
+      "提交真实资金订单",
+      "修改真实账户"
+    ]
+  }
+}

@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
+import signal
 import struct
 import subprocess
 import sys
 import tempfile
+import time
 import zlib
 from html.parser import HTMLParser
 from pathlib import Path
@@ -36,6 +39,8 @@ REQUIRED_VISIBLE_RENDERED_TEXT = [
     "允许真实下单",
     "允许纸面下单",
     "纸面交易提供方",
+    "外部账户同步",
+    "外部持仓数",
     "队列存储",
     "安全边界",
     "模拟交易循环智能体",
@@ -146,7 +151,7 @@ def capture_viewport(
             f"--screenshot={screenshot_path}",
             url,
         ]
-        screenshot_result = _run_chrome(screenshot_cmd, timeout=timeout)
+        screenshot_result = _run_chrome(screenshot_cmd, timeout=timeout, artifact_path=screenshot_path)
         screenshot_timeout_recovered = bool(screenshot_result["timed_out"] and screenshot_path.exists())
         if screenshot_result["returncode"] != 0 and not screenshot_timeout_recovered:
             raise RuntimeError(_chrome_error(screenshot_result))
@@ -155,7 +160,7 @@ def capture_viewport(
             "--dump-dom",
             url,
         ]
-        dom_result = _run_chrome(dom_cmd, timeout=timeout)
+        dom_result = _run_chrome(dom_cmd, timeout=timeout, stdout_ready_text="</html>")
         dom_timeout_recovered = bool(dom_result["timed_out"] and dom_result["stdout"])
         if dom_result["returncode"] != 0 and not dom_timeout_recovered:
             raise RuntimeError(_chrome_error(dom_result))
@@ -308,26 +313,84 @@ def _resolve_chrome_path(path: str) -> str:
     raise RuntimeError(f"未找到 Chrome 可执行文件：{path}")
 
 
-def _run_chrome(command: list[str], *, timeout: float) -> dict:
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    timed_out = False
+def _run_chrome(
+    command: list[str],
+    *,
+    timeout: float,
+    artifact_path: Path | None = None,
+    stdout_ready_text: str | None = None,
+) -> dict:
+    with tempfile.NamedTemporaryFile("w+", encoding="utf-8", prefix="alpha-chrome-stdout-", delete=False) as stdout_file:
+        stdout_path = Path(stdout_file.name)
+    with tempfile.NamedTemporaryFile("w+", encoding="utf-8", prefix="alpha-chrome-stderr-", delete=False) as stderr_file:
+        stderr_path = Path(stderr_file.name)
     try:
-        stdout, stderr = process.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        timed_out = True
+        with stdout_path.open("w", encoding="utf-8") as stdout_handle, stderr_path.open("w", encoding="utf-8") as stderr_handle:
+            process = subprocess.Popen(
+                command,
+                stdout=stdout_handle,
+                stderr=stderr_handle,
+                text=True,
+                start_new_session=True,
+            )
+            timed_out = False
+            deadline = time.monotonic() + max(0.1, float(timeout))
+            while process.poll() is None and time.monotonic() < deadline:
+                stdout_handle.flush()
+                if artifact_path and artifact_path.exists() and artifact_path.stat().st_size >= MIN_SCREENSHOT_BYTES:
+                    timed_out = True
+                    _terminate_process_group(process)
+                    break
+                if stdout_ready_text and _file_contains(stdout_path, stdout_ready_text):
+                    timed_out = True
+                    _terminate_process_group(process)
+                    break
+                time.sleep(0.1)
+            if process.poll() is None:
+                timed_out = True
+                _terminate_process_group(process)
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                _kill_process_group(process)
+                process.wait(timeout=5)
+        stdout = stdout_path.read_text(encoding="utf-8", errors="replace")
+        stderr = stderr_path.read_text(encoding="utf-8", errors="replace")
+        return {
+            "returncode": process.returncode if process.returncode is not None else -9,
+            "stdout": stdout or "",
+            "stderr": stderr or "",
+            "timed_out": timed_out,
+            "command": command,
+        }
+    finally:
+        stdout_path.unlink(missing_ok=True)
+        stderr_path.unlink(missing_ok=True)
+
+
+def _file_contains(path: Path, needle: str) -> bool:
+    try:
+        return needle in path.read_text(encoding="utf-8", errors="ignore")
+    except FileNotFoundError:
+        return False
+
+
+def _terminate_process_group(process: subprocess.Popen) -> None:
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    except Exception:
         process.terminate()
-        try:
-            stdout, stderr = process.communicate(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            stdout, stderr = process.communicate()
-    return {
-        "returncode": process.returncode if process.returncode is not None else -9,
-        "stdout": stdout or "",
-        "stderr": stderr or "",
-        "timed_out": timed_out,
-        "command": command,
-    }
+
+
+def _kill_process_group(process: subprocess.Popen) -> None:
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return
+    except Exception:
+        process.kill()
 
 
 class _VisibleTextParser(HTMLParser):

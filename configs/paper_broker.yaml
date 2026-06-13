@@ -7,6 +7,7 @@ paper_broker:
   external_paper_api:
     provider: alpaca
     base_url: "https://paper-api.alpaca.markets"
+    read_only_sync_enabled: false
     order_submission_enabled: false
     credential_source: env_only
     key_id_env: "ALPACA_PAPER_KEY_ID"

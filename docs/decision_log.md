@@ -54,6 +54,18 @@
 - 原因：Alpaca 官方 paper 文档说明 paper 账户使用不同 key 和 paper base URL；订单 API 与 live 规格一致，因此必须靠 host allowlist 和显式配置阻断 live endpoint。
 - 影响：`AlpacaPaperBrokerAdapter` 支持 mock 验证的 `POST /v2/orders` paper 下单回执；未配置凭据、base URL 非 paper host、未显式启用时均 fail-closed，不会暴露 secret。
 
+## 2026-06-13：Alpaca Paper 只读同步与纸面下单分开开关
+
+- 决策：`alpaca_paper` 的账户、持仓和最近订单同步必须由 `read_only_sync_enabled` 单独开启；纸面订单提交仍必须由 `order_submission_enabled` 单独开启。
+- 原因：只读同步和纸面订单提交的风险不同，分开开关可以先验证账户可见性、中文控制台展示和凭据脱敏，再进入纸面订单 E2E。
+- 影响：新增 `/paper/broker/external-snapshot` 和控制台“外部账户同步”展示；账户原始 ID 与 account number 不进入返回快照，真实下单仍固定禁用。
+
+## 2026-06-13：Moomoo 本机安装只开放只读行情路径
+
+- 决策：即使本机已安装 Moomoo、Moomoo OpenD 和 `moomoo-api`，Alpha 当前也只把它作为只读行情和网关就绪来源，不把 `moomoo_paper` 自动升级为可下单 provider。
+- 原因：Moomoo 官方 paper 示例仍需要创建交易上下文并调用 `place_order(..., trd_env=TrdEnv.SIMULATE)`；这与项目当前“禁止提交可直接触发真实 broker place_order 路径”的安全扫描门槛冲突，必须作为单独受控适配器重新设计。
+- 影响：本机只读验收结果写入 `outputs/moomoo_opend_readiness_20260613.json`；`moomoo_paper` 继续 fail-closed，`live_order_submission_enabled=false`、`trade_context_enabled=false`。
+
 ## 2026-06-13：审批队列可交互但不执行真实下单
 
 - 决策：控制台可以把工单标记为已人工复核、已拒绝或工单已导出，但这些动作只更新本地状态。

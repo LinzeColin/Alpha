@@ -88,6 +88,14 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
     assert state["paper_broker_status"]["commission_per_order"] == 1.0
     assert state["paper_broker_status"]["slippage_bps"] == 5.0
     assert state["paper_broker_status"]["paper_trade_count"] == 1
+    assert state["paper_broker_external_snapshot"]["status"] == "not_configured"
+    assert state["paper_broker_external_snapshot"]["status_zh"] == "未就绪"
+    assert state["paper_broker_external_snapshot"]["provider_zh"] == "本地沙盒模拟交易"
+    assert state["paper_broker_external_snapshot"]["position_count"] == 0
+    assert state["paper_broker_external_snapshot"]["recent_order_count"] == 0
+    assert state["paper_broker_external_snapshot"]["live_order_submission_enabled"] is False
+    assert state["paper_broker_external_snapshot"]["live_order_submission_enabled_zh"] == "否"
+    assert state["paper_broker_external_snapshot"]["summary_zh"] == "本地沙盒不需要外部纸面账户同步。"
     assert state["moomoo_broker_status"]["provider_id"] == "moomoo_opend"
     assert state["moomoo_broker_status"]["mode_zh"] == "只读连接探测"
     assert state["moomoo_broker_status"]["live_order_submission_enabled"] is False
@@ -277,6 +285,12 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "适配器就绪" in html
     assert "允许纸面下单" in html
     assert "外部纸面 API" in html
+    assert "外部账户同步" in html
+    assert "同步说明" in html
+    assert "外部账户权益" in html
+    assert "外部持仓数" in html
+    assert "外部订单数" in html
+    assert "外部同步时间" in html
     assert "未就绪原因" in html
     assert "适配器" in html
     assert "本地沙盒模拟经纪商适配器" in html

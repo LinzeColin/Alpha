@@ -6,7 +6,7 @@ def test_dashboard_http_smoke_validation_accepts_chinese_safe_payloads():
         health={"status": "ok", "status_zh": "正常", "live_trading_enabled": False, "refresh_interval_seconds": 300},
         dashboard_html=(
             "Alpha 控制台 运行模拟交易周期 生成运行备份 刷新公共行情 系统快照 长运行预检 长运行历史 "
-            "审批队列 纸面交易提供方 允许纸面下单 富途牛牛开放网关（只读） /dashboard/state /paper/run-once /ops/backup "
+            "审批队列 纸面交易提供方 允许纸面下单 外部账户同步 同步说明 富途牛牛开放网关（只读） /dashboard/state /paper/run-once /ops/backup "
             "/market-data/refresh /orders/approval-queue/ owner-review reject mark-exported "
             "/broker-ticket/view /broker-ticket.csv * { box-sizing: border-box; overflow-x: hidden; "
             "flex-wrap: wrap; .header-actions { display: flex; flex-wrap: wrap; "
@@ -26,6 +26,14 @@ def test_dashboard_http_smoke_validation_accepts_chinese_safe_payloads():
                 "live_order_submission_enabled": False,
                 "live_order_submission_enabled_zh": "否",
                 "supports_real_broker_place_order": False,
+            },
+            "paper_broker_external_snapshot": {
+                "status_zh": "未就绪",
+                "provider_zh": "本地沙盒模拟交易",
+                "summary_zh": "本地沙盒不需要外部纸面账户同步。",
+                "live_order_submission_enabled": False,
+                "live_order_submission_enabled_zh": "否",
+                "account": {},
             },
             "moomoo_broker_status": {
                 "mode_zh": "只读连接探测",
@@ -57,6 +65,14 @@ def test_dashboard_http_smoke_validation_rejects_english_and_live_order_paths():
                 "live_order_submission_enabled": True,
                 "live_order_submission_enabled_zh": "是",
                 "supports_real_broker_place_order": False,
+            },
+            "paper_broker_external_snapshot": {
+                "status_zh": "未就绪",
+                "provider_zh": "本地沙盒模拟交易",
+                "summary_zh": "本地沙盒不需要外部纸面账户同步。",
+                "live_order_submission_enabled": False,
+                "live_order_submission_enabled_zh": "否",
+                "account": {},
             },
             "moomoo_broker_status": {
                 "mode_zh": "只读连接探测",
