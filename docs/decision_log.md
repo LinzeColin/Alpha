@@ -127,3 +127,11 @@ Decision: 已人工复核且仍在有效期内的候选单可以导出为 JSON/C
 Reason: 用户需要可操作的 broker-ready order ticket；同时真实资金执行边界必须留在 owner 的经纪商确认侧。
 
 Consequence: `/orders/approval-queue/{ticket_id}/broker-ticket` 和 `.csv` 提供标准化工单包，包含中文展示字段、CSV 行、安全提示和 `live_order_submission_enabled: false`。过期工单不能被复核或导出。
+
+## 2026-06-13: Strategy Tournament History Is Runtime Evidence
+
+Decision: 每次自动模拟交易周期都必须把策略锦标赛胜出结果追加到本地策略迭代历史，并向 dashboard/API 暴露策略稳定度。
+
+Reason: 单次策略锦标赛只能说明当前快照；成熟 paper trading 需要可恢复、可审计的策略迭代轨迹，用于观察胜出策略是否稳定漂移。
+
+Consequence: `PaperTradingLoop` 写入 `runtime/strategy_tournament_history.jsonl`；`GET /strategy/tournament/history` 和 dashboard “策略迭代历史”显示记录次数、最近胜出策略、连续胜出次数、稳定度、样本外收益、命中率、决策和行情质量。Owner-facing 字段提供 `*_zh` 中文展示值，raw enum 继续保留给自动化。

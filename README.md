@@ -34,6 +34,7 @@ scripts/check_alpha_ops.sh --backup
 runtime/approval_queue.sqlite3
 runtime/paper_portfolio.json
 runtime/market_data/latest_prices.csv
+runtime/strategy_tournament_history.jsonl
 runtime/backups/
 ```
 
@@ -60,6 +61,7 @@ POST /paper/run-once
 GET  /paper/portfolio
 GET  /paper/broker/status
 POST /strategy/tournament/run
+GET  /strategy/tournament/history
 GET  /agent/loop/status
 GET  /market-data/status
 POST /market-data/refresh
@@ -105,5 +107,12 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 ## 中文显示
 
 - 控制台页面、按钮、表格、状态、风险原因、执行层名称、策略名称、行情状态和本地命令摘要默认中文显示。
-- API 字段名、内部枚举、工单号、文件路径和股票代码保持机器可读格式，供测试、MCP、后续券商适配器和自动化流程稳定使用。
+- 策略迭代历史、自动循环状态、运行健康、维护状态、风控原因和工单导出包会提供中文展示字段，例如 `status_zh`、`reason_zh`、`winner_strategy_id_zh`、`winner_decision_zh`。
+- API 字段名、内部枚举、工单号、文件路径和股票代码保持机器可读格式，供测试、MCP、后续券商适配器和自动化流程稳定使用；面向 owner 的界面必须优先展示中文字段。
 - 新增界面或命令输出时必须补充中文展示映射；如确需展示 raw enum，必须同时给出中文标签或中文解释。
+
+## 策略迭代历史
+
+- `PaperTradingLoop` 每次自动模拟交易周期会把策略锦标赛结果追加写入 `runtime/strategy_tournament_history.jsonl`。
+- `GET /strategy/tournament/history` 汇总记录次数、最近胜出策略、连续胜出次数、最近稳定度和最近运行明细。
+- Dashboard 的“策略迭代历史”面板显示最近胜出策略、样本外收益、命中率、决策和行情质量，默认使用中文展示字段。

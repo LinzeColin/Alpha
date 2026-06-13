@@ -16,6 +16,7 @@ from backend.app.services.order_ticket import BrokerReadyOrderTicket, OrderInten
 from backend.app.services.paper_broker import PaperBroker, PaperOrder
 from backend.app.services.policy import GovernorPolicy
 from backend.app.services.risk import pre_trade_risk_check
+from backend.app.services.strategy_journal import append_strategy_tournament_history
 from backend.app.services.strategy_iteration import run_strategy_tournament
 
 
@@ -33,6 +34,7 @@ class PaperTradingLoop:
         paper_broker_adapter: PaperBrokerAdapter | None = None,
         paper_state_path: str | Path | None = None,
         market_data_gateway: MarketDataGateway | None = None,
+        strategy_history_path: str | Path | None = None,
         audit_sink: MemoryAuditSink | None = None,
         refresh_interval_seconds: int = DEFAULT_REFRESH_INTERVAL_SECONDS,
     ) -> None:
@@ -43,6 +45,7 @@ class PaperTradingLoop:
         self.paper_broker = paper_broker or (PaperBroker.load(self.paper_state_path) if self.paper_state_path else PaperBroker())
         self.paper_broker_adapter = paper_broker_adapter or LocalSandboxPaperBrokerAdapter(self.paper_broker)
         self.market_data_gateway = market_data_gateway
+        self.strategy_history_path = Path(strategy_history_path) if strategy_history_path else None
         self.audit_sink = audit_sink or MemoryAuditSink()
         self.refresh_interval_seconds = refresh_interval_seconds
 
@@ -50,6 +53,7 @@ class PaperTradingLoop:
         run_id = f"run_{uuid4().hex[:12]}"
         market_data = self._resolve_market_data()
         tournament = run_strategy_tournament(market_data.price_path)
+        strategy_journal = self._append_strategy_history(tournament, run_id=run_id, market_data=market_data.status)
         intent = self._generate_order_intent(run_id, tournament=tournament, price_path=market_data.price_path)
         risk_check = pre_trade_risk_check(intent.as_dict(), self.policy)
         ticket = BrokerReadyOrderTicket.from_intent(intent, risk_check).as_dict()
@@ -86,6 +90,7 @@ class PaperTradingLoop:
             reason=risk_check["reason"],
             payload={
                 "strategy_tournament": tournament,
+                "strategy_journal": strategy_journal,
                 "intent": intent.as_dict(),
                 "risk_check": risk_check,
                 "market_data": market_data.status,
@@ -104,6 +109,7 @@ class PaperTradingLoop:
             "intent": intent.as_dict(),
             "market_data": market_data.status,
             "strategy_tournament": tournament,
+            "strategy_journal": strategy_journal,
             "risk_check": risk_check,
             "approval_queue": queue_result,
             "paper_broker_adapter": self.paper_broker_adapter.status(),
@@ -150,10 +156,21 @@ class PaperTradingLoop:
             return self.market_data_gateway.resolve_price_path()
         return _static_market_data_snapshot(self.price_path)
 
+    def _append_strategy_history(self, tournament: dict, *, run_id: str, market_data: dict) -> dict:
+        if not self.strategy_history_path:
+            return {"status": "skipped", "status_zh": "已跳过", "reason_zh": "未配置策略迭代历史文件。"}
+        return append_strategy_tournament_history(
+            tournament,
+            history_path=self.strategy_history_path,
+            run_id=run_id,
+            market_data=market_data,
+        )
+
 
 def build_default_loop(
     queue_path: str | Path | None = None,
     paper_state_path: str | Path | None = None,
+    strategy_history_path: str | Path | None = None,
     interval_seconds: int = DEFAULT_REFRESH_INTERVAL_SECONDS,
 ) -> PaperTradingLoop:
     root = Path(__file__).resolve().parents[3]
@@ -165,6 +182,7 @@ def build_default_loop(
         approval_queue=ApprovalQueue(queue_path or root / "runtime" / "approval_queue.sqlite3"),
         paper_state_path=state_path,
         market_data_gateway=MarketDataGateway(root=root),
+        strategy_history_path=strategy_history_path or root / "runtime" / "strategy_tournament_history.jsonl",
         refresh_interval_seconds=interval_seconds,
     )
 

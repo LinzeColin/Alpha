@@ -13,6 +13,8 @@ STATUS_TEXT_ZH = {
     "queued": "已入队",
     "duplicate": "重复候选单",
     "skipped": "已跳过",
+    "written": "已写入",
+    "empty": "暂无记录",
     "filled": "模拟成交",
     "pending_owner_approval": "待人工确认",
     "fresh_pending_owner_approval": "有效，待人工确认",
@@ -252,6 +254,8 @@ def format_paper_cycle_summary_zh(result: dict) -> str:
     portfolio = result.get("paper_portfolio", {}) or {}
     adapter = result.get("paper_broker_adapter", {}) or {}
     market_data = result.get("market_data", {}) or {}
+    strategy_journal = result.get("strategy_journal", {}) or {}
+    latest_strategy_record = strategy_journal.get("latest_record", {}) or {}
 
     lines = [
         "Alpha 模拟交易周期摘要",
@@ -266,6 +270,11 @@ def format_paper_cycle_summary_zh(result: dict) -> str:
             f"{zh_order_type(intent.get('order_type'))} / {zh_time_in_force(intent.get('time_in_force'))}"
         ),
         f"策略：{zh_strategy_id(intent.get('strategy_id'))}",
+        (
+            "策略迭代："
+            f"{zh_status(strategy_journal.get('status'))} / "
+            f"胜出策略 {zh_strategy_id(latest_strategy_record.get('winner_strategy_id') or strategy_journal.get('latest_winner_strategy_id'))}"
+        ),
         (
             "行情数据："
             f"{zh_market_data_provider(market_data.get('provider'))} / "

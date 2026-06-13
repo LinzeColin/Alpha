@@ -16,6 +16,7 @@ from backend.app.services.ops_health import collect_ops_health, create_runtime_b
 from backend.app.services.ops_runtime import AUTO_OPS_MAINTENANCE
 from backend.app.services.paper_trading_loop import DEFAULT_REFRESH_INTERVAL_SECONDS, build_default_loop, latest_mark_prices
 from backend.app.services.paper_broker import PaperBroker
+from backend.app.services.strategy_journal import summarize_strategy_tournament_history
 from backend.app.services.strategy_iteration import run_strategy_tournament
 
 router = APIRouter()
@@ -26,6 +27,7 @@ DATA_PATH = ROOT / "data" / "sample_prices.csv"
 MARKET_DATA_CONFIG_PATH = ROOT / "configs" / "market_data.yaml"
 QUEUE_PATH = ROOT / "runtime" / "approval_queue.sqlite3"
 PAPER_STATE_PATH = ROOT / "runtime" / "paper_portfolio.json"
+STRATEGY_HISTORY_PATH = ROOT / "runtime" / "strategy_tournament_history.jsonl"
 PID_PATH = ROOT / "runtime" / "alpha_dashboard.pid"
 LOG_PATH = ROOT / "runtime" / "alpha_dashboard.log"
 
@@ -84,7 +86,11 @@ def backtest_run(payload: dict | None = None) -> dict:
 
 @router.post("/paper/run-once")
 def paper_run_once() -> dict:
-    loop = build_default_loop(queue_path=QUEUE_PATH, paper_state_path=PAPER_STATE_PATH)
+    loop = build_default_loop(
+        queue_path=QUEUE_PATH,
+        paper_state_path=PAPER_STATE_PATH,
+        strategy_history_path=STRATEGY_HISTORY_PATH,
+    )
     return loop.run_once()
 
 
@@ -203,6 +209,11 @@ def strategy_tournament_run() -> dict:
     return run_strategy_tournament(resolve_market_data().price_path)
 
 
+@router.get("/strategy/tournament/history")
+def strategy_tournament_history() -> dict:
+    return summarize_strategy_tournament_history(STRATEGY_HISTORY_PATH)
+
+
 @router.get("/market-data/status")
 def market_data_status() -> dict:
     return resolve_market_data().status
@@ -266,6 +277,7 @@ def dashboard_state() -> dict:
         "paper_portfolio": paper_portfolio(),
         "paper_broker_status": paper_broker_status(),
         "strategy_tournament": strategy_tournament_run(),
+        "strategy_journal": strategy_tournament_history(),
         "approval_queue": approval_queue(),
     }
 
@@ -345,6 +357,8 @@ def dashboard() -> str:
       queued: '已入队',
       duplicate: '重复候选单',
       skipped: '已跳过',
+      written: '已写入',
+      empty: '暂无记录',
       filled: '模拟成交',
       pending_owner_approval: '待人工确认',
       fresh_pending_owner_approval: '有效，待人工确认',
@@ -511,6 +525,7 @@ def dashboard() -> str:
       const marketData = data.market_data || {};
       const opsHealth = data.ops_health || {};
       const opsMaintenance = data.ops_maintenance || {};
+      const strategyJournal = data.strategy_journal || {};
       document.getElementById('metrics').innerHTML = [
         metric('智能体', pill(displayStatus(agent.status), 'ok')),
         metric('循环', pill(displayStatus(loop.status, '未知'), loop.error_count ? 'danger' : 'ok')),
@@ -525,6 +540,7 @@ def dashboard() -> str:
         metric('过期候选单', queueSummary.expired_pending_count || 0),
         metric('已复核', queueSummary.owner_reviewed_count || 0),
         metric('已导出工单', queueSummary.broker_ticket_exported_count || 0),
+        metric('策略稳定度', strategyJournal.stability_ratio_zh || '0.00%'),
         metric('队列存储', displayStorageBackend((queue.storage || {}).backend)),
         metric('刷新间隔', `${health.refresh_interval_seconds || 300} 秒`)
       ].join('');
@@ -668,6 +684,29 @@ def dashboard() -> str:
         <table><thead><tr><th>策略</th><th>标的</th><th>回看天数</th><th>收益</th><th>样本外收益</th><th>命中率</th><th>验证窗口</th><th>回撤</th><th>分数</th><th>决策</th></tr></thead><tbody>${rows}</tbody></table>
       `;
     }
+    function renderStrategyJournal(journal) {
+      const rows = (journal.recent || []).slice(-8).reverse().map(row => `
+        <tr>
+          <td>${displayValue(row.generated_at)}</td>
+          <td>${row.winner_strategy_id_zh || displayStrategyId(row.winner_strategy_id)}</td>
+          <td>${displayValue(row.winner_symbol)}</td>
+          <td>${Number((row.winner_oos_return || 0) * 100).toFixed(2)}%</td>
+          <td>${Number((row.winner_hit_rate || 0) * 100).toFixed(2)}%</td>
+          <td>${row.winner_decision_zh || displayStatus(row.winner_decision, '未知')}</td>
+          <td>${row.market_data_quality_zh || displayDataQuality(row.market_data_quality)}</td>
+        </tr>
+      `).join('');
+      return `
+        <h2>策略迭代历史</h2>
+        <div class="metric-grid">
+          ${metric('记录次数', journal.run_count || 0)}
+          ${metric('最近胜出策略', journal.latest_winner_strategy_id_zh || displayStrategyId(journal.latest_winner_strategy_id))}
+          ${metric('连续胜出次数', journal.current_winner_streak || 0)}
+          ${metric('最近稳定度', journal.stability_ratio_zh || '0.00%')}
+        </div>
+        <table><thead><tr><th>时间</th><th>胜出策略</th><th>标的</th><th>样本外收益</th><th>命中率</th><th>决策</th><th>行情质量</th></tr></thead><tbody>${rows || '<tr><td colspan="7" class="muted">暂无策略迭代历史</td></tr>'}</tbody></table>
+      `;
+    }
     function renderQueue(queue) {
       const storage = queue.storage || {};
       const rows = (queue.tickets || []).map(ticket => {
@@ -717,6 +756,7 @@ def dashboard() -> str:
         renderOpsHealth(data.ops_health || {});
         document.getElementById('opsHealth').insertAdjacentHTML('beforeend', renderOpsMaintenance(data.ops_maintenance || {}));
         renderTournament(data.strategy_tournament || {});
+        document.getElementById('tournament').insertAdjacentHTML('beforeend', renderStrategyJournal(data.strategy_journal || {}));
         renderQueue(data.approval_queue || {});
         document.getElementById('lastUpdated').textContent = '最近更新：' + new Date().toLocaleString('zh-CN');
       } catch (error) {

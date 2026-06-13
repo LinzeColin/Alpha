@@ -15,7 +15,7 @@
 | Paper broker visibility | 已实现 MVP | `/paper/broker/status` 和 dashboard "模拟交易执行层" 显示 adapter、模式、连接、凭据要求、是否允许真实下单、最新模拟成交 |
 | 操作及时性和时间有效性 | 已实现增强 MVP | `ApprovalQueue.summary()` 只把未过期的待人工确认候选单计为用户可操作；后端拒绝复核/导出过期工单；过期候选单保留用于审计 |
 | 稳定 webpage 交互平台入口 | 已实现增强 MVP | AppleScript `Alpha.app` 已安装到 Downloads、用户 Applications 和系统 `/Applications`；命令入口保留用于兼容 |
-| 全中文显示 | 已实现 MVP | 控制台标题、按钮、指标、表格、空状态、状态映射和启动/停止脚本提示均显示中文；API 机器字段和值保持稳定 |
-| 策略迭代 | 已实现增强 MVP | `run_strategy_tournament()` 使用 walk-forward 样本外收益、命中率、验证窗口和可交易选择对 momentum 候选排序 |
+| 全中文显示 | 已实现增强 MVP | 控制台标题、按钮、指标、表格、空状态、状态映射、启动/停止脚本提示、CLI 摘要、策略迭代历史、风险原因和工单导出包均提供中文展示；API 机器字段和值保持稳定，owner-facing 字段补 `*_zh` |
+| 策略迭代 | 已实现增强 MVP | `run_strategy_tournament()` 使用 walk-forward 样本外收益、命中率、验证窗口和可交易选择对 momentum 候选排序；每次 paper cycle 持久化 `runtime/strategy_tournament_history.jsonl` 并显示策略稳定度 |
 | `live_trading.enabled:true` | 已拒绝 | 提交默认值必须保持禁用 |
 | 全自动实盘真实下单 | 已拒绝 | 真实资金订单需要用户在 broker 侧确认 |

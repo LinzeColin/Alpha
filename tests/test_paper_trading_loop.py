@@ -9,7 +9,14 @@ def test_paper_loop_generates_ticket_and_fills_paper_order(tmp_path):
     policy = GovernorPolicy.load(Path("configs/trading_governor_policy.yaml"))
     queue = ApprovalQueue(tmp_path / "queue.json")
     state_path = tmp_path / "portfolio.json"
-    loop = PaperTradingLoop(policy=policy, price_path=Path("data/sample_prices.csv"), approval_queue=queue, paper_state_path=state_path)
+    strategy_history_path = tmp_path / "strategy_history.jsonl"
+    loop = PaperTradingLoop(
+        policy=policy,
+        price_path=Path("data/sample_prices.csv"),
+        approval_queue=queue,
+        paper_state_path=state_path,
+        strategy_history_path=strategy_history_path,
+    )
 
     result = loop.run_once()
 
@@ -33,7 +40,10 @@ def test_paper_loop_generates_ticket_and_fills_paper_order(tmp_path):
     assert result["approval_queue"]["ticket"]["broker_payload"]["client_order_id"] == result["intent"]["idempotency_key"]
     assert any(candidate["strategy_id"] == result["intent"]["strategy_id"] for candidate in result["strategy_tournament"]["candidates"])
     assert result["paper_portfolio"]["trade_count"] == 1
+    assert result["strategy_journal"]["status"] == "written"
+    assert result["strategy_journal"]["latest_record"]["winner_strategy_id"] == result["strategy_tournament"]["winner"]["strategy_id"]
     assert state_path.exists()
+    assert strategy_history_path.exists()
     assert len(queue.list_tickets()) == 1
 
 

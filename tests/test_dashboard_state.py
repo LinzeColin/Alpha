@@ -25,6 +25,7 @@ def _patch_fixture_market_data(monkeypatch, tmp_path):
 def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, monkeypatch):
     monkeypatch.setattr(routes, "QUEUE_PATH", tmp_path / "approval_queue.sqlite3")
     monkeypatch.setattr(routes, "PAPER_STATE_PATH", tmp_path / "paper_portfolio.json")
+    monkeypatch.setattr(routes, "STRATEGY_HISTORY_PATH", tmp_path / "strategy_tournament_history.jsonl")
     monkeypatch.setattr(routes, "DATA_PATH", Path("data/sample_prices.csv"))
     _patch_fixture_market_data(monkeypatch, tmp_path)
 
@@ -51,6 +52,12 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
     assert state["strategy_tournament"]["candidate_count"] > 0
     assert state["strategy_tournament"]["validation_summary"]["validated_count"] > 0
     assert "hit_rate" in state["strategy_tournament"]["winner"]
+    assert state["strategy_journal"]["status"] == "ready"
+    assert state["strategy_journal"]["run_count"] == 1
+    assert state["strategy_journal"]["latest_winner_strategy_id"] == run_result["strategy_tournament"]["winner"]["strategy_id"]
+    assert state["strategy_journal"]["latest_winner_strategy_id_zh"].startswith("动量策略 ")
+    assert state["strategy_journal"]["latest_winner_decision_zh"] == "可进入模拟交易"
+    assert state["strategy_journal"]["stability_ratio_zh"] == "100.00%"
     assert state["approval_queue"]["count"] == 1
     assert state["approval_queue"]["storage"]["backend"] == "sqlite"
     assert state["approval_queue"]["storage"]["durable"] is True
@@ -107,6 +114,7 @@ def test_owner_summary_counts_only_fresh_pending_tickets(tmp_path, monkeypatch):
 def test_approval_queue_review_actions_are_exposed_to_dashboard_state(tmp_path, monkeypatch):
     monkeypatch.setattr(routes, "QUEUE_PATH", tmp_path / "approval_queue.sqlite3")
     monkeypatch.setattr(routes, "PAPER_STATE_PATH", tmp_path / "paper_portfolio.json")
+    monkeypatch.setattr(routes, "STRATEGY_HISTORY_PATH", tmp_path / "strategy_tournament_history.jsonl")
     monkeypatch.setattr(routes, "DATA_PATH", Path("data/sample_prices.csv"))
     _patch_fixture_market_data(monkeypatch, tmp_path)
 
@@ -142,6 +150,9 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "系统快照" in html
     assert "模拟组合" in html
     assert "策略锦标赛" in html
+    assert "策略迭代历史" in html
+    assert "策略稳定度" in html
+    assert "连续胜出次数" in html
     assert "审批队列" in html
     assert "模拟交易执行层" in html
     assert "行情数据" in html
@@ -196,6 +207,8 @@ def test_python_display_locale_covers_runtime_statuses_and_live_reasons():
     assert zh_status("running_maintenance") == "正在维护"
     assert zh_status("degraded") == "需关注"
     assert zh_status("pass") == "通过"
+    assert zh_status("written") == "已写入"
+    assert zh_status("empty") == "暂无记录"
     assert zh_reason("live trading disabled by policy") == "策略已禁用真实资金交易"
     assert zh_reason("FailClosedLiveBroker never submits real orders") == "失败即关闭真实经纪商适配器不会提交真实订单"
 
@@ -203,6 +216,7 @@ def test_python_display_locale_covers_runtime_statuses_and_live_reasons():
 def test_paper_cycle_summary_is_chinese_for_human_cli(tmp_path, monkeypatch):
     monkeypatch.setattr(routes, "QUEUE_PATH", tmp_path / "approval_queue.sqlite3")
     monkeypatch.setattr(routes, "PAPER_STATE_PATH", tmp_path / "paper_portfolio.json")
+    monkeypatch.setattr(routes, "STRATEGY_HISTORY_PATH", tmp_path / "strategy_tournament_history.jsonl")
     monkeypatch.setattr(routes, "DATA_PATH", Path("data/sample_prices.csv"))
     _patch_fixture_market_data(monkeypatch, tmp_path)
 
@@ -211,6 +225,7 @@ def test_paper_cycle_summary_is_chinese_for_human_cli(tmp_path, monkeypatch):
 
     assert "Alpha 模拟交易周期摘要" in summary
     assert "候选订单：" in summary
+    assert "策略迭代：已写入" in summary
     assert "行情数据：" in summary
     assert "真实市场数据 否" in summary
     assert "风控：已通过风控，待人工确认（下单前风控检查通过）" in summary
