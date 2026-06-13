@@ -9,7 +9,7 @@ from uuid import uuid4
 from backend.app.services.approval_queue import ApprovalQueue
 from backend.app.services.audit import MemoryAuditSink
 from backend.app.services.backtest import load_price_fixture
-from backend.app.services.broker_paper_adapter import LocalSandboxPaperBrokerAdapter, PaperBrokerAdapter
+from backend.app.services.broker_paper_adapter import PaperBrokerAdapter, build_paper_broker_adapter
 from backend.app.services.display_locale import format_paper_cycle_summary_zh
 from backend.app.services.market_data_gateway import MarketDataGateway, MarketDataSnapshot, utc_now_iso as market_data_utc_now_iso
 from backend.app.services.order_ticket import BrokerReadyOrderTicket, OrderIntent, utc_now_iso
@@ -45,7 +45,7 @@ class PaperTradingLoop:
         self.approval_queue = approval_queue or ApprovalQueue()
         self.paper_state_path = Path(paper_state_path) if paper_state_path else None
         self.paper_broker = paper_broker or (PaperBroker.load(self.paper_state_path) if self.paper_state_path else PaperBroker())
-        self.paper_broker_adapter = paper_broker_adapter or LocalSandboxPaperBrokerAdapter(self.paper_broker)
+        self.paper_broker_adapter = paper_broker_adapter or build_paper_broker_adapter(self.paper_broker)
         self.market_data_gateway = market_data_gateway
         self.strategy_history_path = Path(strategy_history_path) if strategy_history_path else None
         self.performance_history_path = Path(performance_history_path) if performance_history_path else None
@@ -210,10 +210,13 @@ def build_default_loop(
     root = Path(__file__).resolve().parents[3]
     policy = GovernorPolicy.load(root / "configs" / "trading_governor_policy.yaml")
     state_path = Path(paper_state_path) if paper_state_path else root / "runtime" / "paper_portfolio.json"
+    paper_broker = PaperBroker.load(state_path) if state_path.exists() else PaperBroker()
     return PaperTradingLoop(
         policy=policy,
         price_path=root / "data" / "sample_prices.csv",
         approval_queue=ApprovalQueue(queue_path or root / "runtime" / "approval_queue.sqlite3"),
+        paper_broker=paper_broker,
+        paper_broker_adapter=build_paper_broker_adapter(paper_broker, config_path=root / "configs" / "paper_broker.yaml"),
         paper_state_path=state_path,
         market_data_gateway=market_data_gateway or MarketDataGateway(root=root),
         strategy_history_path=strategy_history_path or root / "runtime" / "strategy_tournament_history.jsonl",

@@ -6,7 +6,7 @@ def test_dashboard_http_smoke_validation_accepts_chinese_safe_payloads():
         health={"status": "ok", "status_zh": "正常", "live_trading_enabled": False, "refresh_interval_seconds": 300},
         dashboard_html=(
             "Alpha 控制台 运行模拟交易周期 生成运行备份 刷新公共行情 系统快照 长运行预检 长运行历史 "
-            "审批队列 富途牛牛开放网关（只读） /dashboard/state /paper/run-once /ops/backup "
+            "审批队列 纸面交易提供方 允许纸面下单 富途牛牛开放网关（只读） /dashboard/state /paper/run-once /ops/backup "
             "/market-data/refresh /orders/approval-queue/ owner-review reject mark-exported "
             "/broker-ticket/view /broker-ticket.csv * { box-sizing: border-box; overflow-x: hidden; "
             "flex-wrap: wrap; .header-actions { display: flex; flex-wrap: wrap; "
@@ -19,6 +19,10 @@ def test_dashboard_http_smoke_validation_accepts_chinese_safe_payloads():
             "market_data": {"source_kind_zh": "本地行情缓存"},
             "paper_broker_status": {
                 "mode_zh": "模拟交易",
+                "provider_zh": "本地沙盒模拟交易",
+                "adapter_readiness_zh": "就绪",
+                "paper_order_submission_enabled": True,
+                "paper_order_submission_enabled_zh": "是",
                 "live_order_submission_enabled": False,
                 "live_order_submission_enabled_zh": "否",
                 "supports_real_broker_place_order": False,

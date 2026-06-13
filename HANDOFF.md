@@ -21,6 +21,8 @@
 - 行情状态提供 `provider_zh`、`source_kind_zh`、`data_quality_zh`、`real_market_data_zh`、`refresh_error_zh` 等中文展示字段；控制台刷新失败优先显示中文错误兜底。
 - 经纪商工单 JSON 仍保留机器字段；默认 HTML 视图和 CSV 下载面向人工操作改为中文。
 - 富途牛牛开放网关仍只允许只读探测和只读行情快照；不得创建交易上下文、不得解锁交易、不得调用真实下单。
+- 新增 `configs/paper_broker.yaml` 和 `build_paper_broker_adapter()`；默认 `local_sandbox` 继续本地模拟成交，外部 `alpaca_paper`、`ibkr_paper`、`moomoo_paper`、`external_paper_api` 目前只返回中文未就绪状态并 fail-closed，不会提交纸面或真实资金订单。
+- 控制台“模拟交易执行层”已显示纸面交易提供方、适配器就绪、允许纸面下单、外部纸面 API、未就绪原因和下一步。
 - `scripts/start_alpha_dashboard.sh` 和 `scripts/stop_alpha_dashboard.sh` 修复了变量紧贴中文标点时的 zsh 解析问题。
 - 自动模拟交易循环和自动维护循环会分别写入 `runtime/agent_loop_status.json` 与 `runtime/ops_maintenance_status.json`；`/readiness/paper-trading` 和 `/readiness/soak` 可以读取新鲜心跳并校验进程仍存活，避免把已退出的 App 误判为就绪。
 - 自动维护循环每轮追加 `runtime/soak_readiness_history.jsonl`；`/readiness/soak/history` 和控制台“长运行预检”显示历史采样数、连续无失败采样数、连续完全通过采样数、最近失败时间和最近采样表。
@@ -47,8 +49,10 @@
 - `backend/app/services/soak_history.py`
 - `backend/app/services/runtime_status.py`
 - `backend/app/services/broker_ticket_export.py`
+- `backend/app/services/broker_paper_adapter.py`
 - `backend/app/services/strategy_iteration.py`
 - `backend/app/schemas/strategy_dsl.py`
+- `configs/paper_broker.yaml`
 - `scripts/start_alpha_dashboard.sh`
 - `scripts/stop_alpha_dashboard.sh`
 - `scripts/verify_chinese_display.py`
@@ -58,6 +62,7 @@
 - `tests/test_dashboard_state.py`
 - `tests/test_dashboard_chrome_visual.py`
 - `tests/test_broker_ticket_export.py`
+- `tests/test_broker_paper_adapter.py`
 - `tests/test_moomoo_broker_probe.py`
 - `tests/test_market_data_gateway.py`
 - `tests/test_agent_runtime.py`
@@ -81,17 +86,20 @@
 .venv/bin/python -m pytest tests/test_dashboard_chrome_visual.py tests/test_dashboard_http_smoke.py tests/test_dashboard_state.py tests/test_broker_ticket_export.py -q
 # 20 passed
 
+.venv/bin/python -m pytest tests/test_broker_paper_adapter.py tests/test_paper_trading_loop.py tests/test_dashboard_http_smoke.py tests/test_dashboard_state.py -q
+# 22 passed
+
 .venv/bin/python -m pytest tests -q
-# 79 passed
+# 81 passed
 
 .venv/bin/python scripts/verify_chinese_display.py
-# status_zh=通过, error_count=0
+# status_zh=通过, error_count=0, checked_state_key_count=17, checked_static_text_count=21
 
-python /Users/linzezhang/.codex/skills/webapp-testing/scripts/with_server.py --server ".venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8128" --port 8128 --timeout 60 -- .venv/bin/python scripts/verify_dashboard_http_smoke.py --base-url http://127.0.0.1:8128 --timeout 15 --exercise-actions
-# status_zh=通过, error_count=0, checked_layout_contract_count=10, exercised_action_count=2
+python /Users/linzezhang/.codex/skills/webapp-testing/scripts/with_server.py --server ".venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8131" --port 8131 --timeout 60 -- .venv/bin/python scripts/verify_dashboard_http_smoke.py --base-url http://127.0.0.1:8131 --timeout 15 --exercise-actions
+# status_zh=通过, error_count=0, checked_dashboard_text_count=11, checked_state_field_count=11, checked_layout_contract_count=10, exercised_action_count=2
 
-python /Users/linzezhang/.codex/skills/webapp-testing/scripts/with_server.py --server ".venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8130" --port 8130 --timeout 60 -- .venv/bin/python scripts/verify_dashboard_chrome_visual.py --base-url http://127.0.0.1:8130 --output-dir outputs/visual_acceptance --timeout 15 --virtual-time-budget-ms 4000
-# status_zh=通过, error_count=0, checked_viewport_count=2, desktop=1440x1000, mobile=390x844, visible_text_character_count约9690；macOS Chrome headless 已产出截图/DOM 后不自动退出，脚本已主动回收并记录 chrome_timeout_recovered=true
+python /Users/linzezhang/.codex/skills/webapp-testing/scripts/with_server.py --server ".venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8132" --port 8132 --timeout 60 -- .venv/bin/python scripts/verify_dashboard_chrome_visual.py --base-url http://127.0.0.1:8132 --output-dir outputs/visual_acceptance --timeout 15 --virtual-time-budget-ms 4000
+# status_zh=通过, error_count=0, checked_viewport_count=2, desktop=1440x1000, mobile=390x844, visible_text_character_count=9762；macOS Chrome headless 已产出截图/DOM 后不自动退出，脚本已主动回收并记录 chrome_timeout_recovered=true
 
 git diff --check
 # passed
@@ -109,12 +117,12 @@ rg -n "place_order|unlock_trade|submit_real|Open.*TradeContext|live_order_submis
 ## 未解决风险
 
 - 30 天长运行尚未完成，只能声明具备开始预检/观察运行条件。
-- 外部经纪商模拟接口尚未接入；当前是真实本机只读行情加本地沙盒模拟成交。
+- 外部经纪商真实 paper API 下单实现尚未接入；当前已具备 provider 配置入口和 fail-closed 壳，默认仍是真实本机只读行情加本地沙盒模拟成交。
 - GitHub `main` 可能与远端历史不一致，当前应优先推送备份分支，禁止强推。
 - 30 天长运行仍需要真实时间跨度的历史采样；当前心跳只证明 App/循环在当前进程下新鲜运行。
 
 ## 下一步
 
 1. 提交并推送长运行采样历史改动到 GitHub 备份分支，建议 `codex/alpha-soak-history-20260613`，不要强推 `main`。
-2. 继续补外部 broker paper API 适配调研和接口壳，但仍不得接入真实下单。
+2. 继续补外部 broker paper API 的真实 provider 实现前置条件：官方 paper API 文档、凭据隔离方案、纸面模式证明、只允许 paper endpoint 的回归测试。
 3. 继续积累真实 30 天长运行采样；每个异常必须进入运行健康/备份/恢复证据链。

@@ -121,10 +121,12 @@ AGENT_ID_TEXT_ZH = {
 
 ADAPTER_ID_TEXT_ZH = {
     "local_sandbox_paper_broker": "本地沙盒模拟经纪商适配器",
+    "external_paper_api_unavailable": "外部纸面交易 API 未就绪适配器",
 }
 
 BROKER_NAME_TEXT_ZH = {
     "Alpha Local Sandbox": "Alpha 本地沙盒",
+    "External Paper API": "外部纸面交易 API",
 }
 
 ACCOUNT_REF_TEXT_ZH = {
@@ -144,6 +146,9 @@ REASON_TEXT_ZH = {
     "insufficient paper cash": "模拟账户现金不足",
     "insufficient paper position": "模拟账户持仓不足",
     "live trading disabled by policy": "策略已禁用真实资金交易",
+    "external paper broker adapter not configured": "外部纸面交易 API 适配器尚未配置完成",
+    "external paper broker adapter disabled by safety config": "安全配置未允许外部纸面交易 API 适配器",
+    "external paper broker paper order submission unavailable": "外部纸面交易 API 当前不可提交纸面订单",
     "audit sink unavailable": "审计写入不可用",
     "broker health check failed": "经纪商健康检查失败",
     "policy checks passed": "策略检查通过",

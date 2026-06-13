@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.app.services.approval_queue import ApprovalQueue
-from backend.app.services.broker_paper_adapter import LocalSandboxPaperBrokerAdapter
+from backend.app.services.broker_paper_adapter import build_paper_broker_adapter
 from backend.app.services.market_data_gateway import MarketDataGateway
 from backend.app.services.moomoo_broker_probe import probe_moomoo_opend
 from backend.app.services.paper_broker import PaperBroker
@@ -68,7 +68,7 @@ def collect_ops_health(
         ),
         _check_approval_queue(queue_path),
         _check_paper_portfolio(paper_state_path),
-        _check_paper_broker_boundary(paper_state_path),
+        _check_paper_broker_boundary(paper_state_path, root=root),
         _check_moomoo_read_only_probe(moomoo_probe_status if moomoo_probe_status is not None else probe_moomoo_opend()),
         _check_market_data(gateway),
         _check_dashboard_process(pid_path, loop_snapshot=loop_snapshot),
@@ -322,9 +322,9 @@ def _check_paper_portfolio(paper_state_path: Path) -> dict:
     return _check("paper_portfolio", "模拟组合状态", "pass", "模拟组合可读取，且已有模拟成交记录。", snapshot)
 
 
-def _check_paper_broker_boundary(paper_state_path: Path) -> dict:
+def _check_paper_broker_boundary(paper_state_path: Path, *, root: Path) -> dict:
     broker = PaperBroker.load(paper_state_path) if paper_state_path.exists() else PaperBroker()
-    status = LocalSandboxPaperBrokerAdapter(broker).status()
+    status = build_paper_broker_adapter(broker, config_path=root / "configs" / "paper_broker.yaml").status()
     if status.get("live_order_submission_enabled"):
         return _check("live_order_boundary", "真实下单边界", "fail", "模拟执行层错误地允许真实下单。", status)
     return _check("live_order_boundary", "真实下单边界", "pass", "执行层保持模拟模式，真实下单禁用。", status)

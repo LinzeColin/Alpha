@@ -3,7 +3,7 @@
 | 需求 | 状态 | 当前实现 |
 |---|---:|---|
 | Agent 全自动模拟交易 | 已实现增强 MVP | FastAPI 应用托管的 `AutoPaperAgentRuntime` 会在控制台启动后立即运行，然后每 300 秒刷新一次；每次周期写入模拟组合绩效历史，并把模拟佣金/滑点计入权益；`PaperTradingLoop.run_forever()` 仍可用于命令行。 |
-| 经纪商模拟执行适配器 | 已实现增强 MVP | `PaperTradingLoop` 通过 `LocalSandboxPaperBrokerAdapter` 执行本地沙盒模拟订单，并返回类经纪商模拟回执；本地适配器默认使用固定佣金与滑点模型；外部经纪商模拟接口尚未接入。 |
+| 经纪商模拟执行适配器 | 已实现增强 MVP | `PaperTradingLoop` 通过 `configs/paper_broker.yaml` 和 `build_paper_broker_adapter()` 选择纸面交易适配器；默认 `LocalSandboxPaperBrokerAdapter` 执行本地沙盒模拟订单，并返回类经纪商模拟回执；本地适配器默认使用固定佣金与滑点模型；外部 paper API provider 已有 fail-closed 入口和中文状态，但真实 provider 下单实现仍未接入。 |
 | Agent 自动生成真实交易候选订单 | 已实现增强 MVP | 从可交易策略锦标赛候选中生成 `OrderIntent`；候选单只进入人工复核队列，不自动提交真实资金订单。 |
 | Agent 自动完成风险检查 | 已实现增强 MVP | 入队前执行 `pre_trade_risk_check()`，并强制检查名义金额限制。 |
 | Agent 自动进入审批队列 | 已实现增强 MVP | 使用 `ApprovalQueue.enqueue()` 入队；默认 SQLite 持久化；控制台/API 支持已人工复核、拒绝、工单已导出状态流。 |
@@ -14,7 +14,7 @@
 | 30 天运行健康与备份 | 已实现增强 MVP | `/ops/health`、`/ops/backup`、`/ops/maintenance/status`、`scripts/check_alpha_ops.sh` 和控制台“运行健康”显示自动循环、SQLite 审批队列、模拟组合、富途牛牛开放网关只读探测、行情质量、进程/日志、最近备份、自动维护状态和真实下单边界；自动循环和自动维护会写入本地心跳文件，供就绪检查跨进程验证；自动维护每轮追加 `runtime/soak_readiness_history.jsonl`，控制台显示连续无失败采样数。 |
 | 6月15日模拟交易交付就绪报告 | 已实现 MVP | `/readiness/paper-trading`、控制台“交付就绪”和 `python -m backend.app.services.paper_readiness` 逐项验证自动循环、策略迭代、模拟成交、`OrderIntent`、风控、审批队列、经纪商就绪工单、5分钟时效、本地 App 入口和真实下单边界，并标注 6月17日网页与本地应用入口目标。 |
 | 30 天长运行预检 | 已实现增强 MVP | `/readiness/soak`、`/readiness/soak/history`、控制台“长运行预检”、`scripts/check_alpha_soak.sh` 和 `python -m backend.app.services.soak_readiness` 聚合 App 入口、模拟交易交付就绪、5分钟循环、有效经纪商就绪工单、运行健康、自动维护、恢复备份和真实下单边界；历史摘要显示采样总数、连续无失败采样数、连续完全通过采样数、最近失败时间和最近采样记录；该报告只证明是否可以开始本地长运行，不等于已经完成 30 天验证。 |
-| 模拟执行层可见性 | 已实现增强 MVP | `/paper/broker/status` 和控制台“模拟交易执行层”显示适配器、模式、连接、凭据要求、是否允许真实下单、执行模型、模拟滑点、单笔佣金、累计佣金、最新模拟成交和最近成交成本。 |
+| 模拟执行层可见性 | 已实现增强 MVP | `/paper/broker/status` 和控制台“模拟交易执行层”显示纸面交易提供方、适配器就绪、模式、连接、凭据要求、是否允许纸面下单、是否启用外部纸面 API、是否允许真实下单、未就绪原因、下一步、执行模型、模拟滑点、单笔佣金、累计佣金、最新模拟成交和最近成交成本。 |
 | 富途牛牛开放网关本机集成 | 已实现只读行情 MVP | `/broker/moomoo/status`、`/broker/moomoo/quote-snapshot` 和控制台“富途牛牛开放网关（只读）”显示 Python 接口包、软件开发包可导入、开放网关本机端口、只读就绪、只读行情快照、交易解锁、真实下单禁用和禁止操作；当前不读取交易凭据、不创建交易上下文、不解锁交易、不调用真实下单。 |
 | 操作及时性和时间有效性 | 已实现增强 MVP | `ApprovalQueue.summary()` 只把未过期的待人工确认候选单计为用户可操作；后端拒绝复核/导出过期工单；过期候选单保留用于审计。 |
 | 稳定网页交互平台入口 | 已实现增强 MVP | AppleScript `Alpha.app` 已安装到 Downloads、用户 Applications 和系统 `/Applications`；命令入口保留用于兼容；`scripts/verify_dashboard_http_smoke.py --exercise-actions` 会通过 HTTP 检查 `/health`、`/dashboard` 和 `/dashboard/state` 的中文文案、关键状态、响应式布局契约和真实下单禁用边界，并安全调用模拟交易周期与运行备份端点；`scripts/verify_dashboard_chrome_visual.py` 已用本机 Chrome headless 验证桌面 1440×1000 和移动 390×844 截图、像素多样性、渲染后可见中文文案和旧英文 UI 禁用项。 |

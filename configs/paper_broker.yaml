@@ -1,0 +1,11 @@
+paper_broker:
+  provider: local_sandbox
+  allow_external_paper_api: false
+  safety:
+    live_order_submission_enabled: false
+    require_paper_mode: true
+  external_paper_api:
+    provider: none
+    order_submission_enabled: false
+    credential_source: env_only
+    notes_zh: "外部经纪商 paper API 适配器尚未启用；默认使用本地沙盒模拟交易。"

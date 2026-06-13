@@ -29,6 +29,10 @@ def test_paper_loop_generates_ticket_and_fills_paper_order(tmp_path):
     assert result["risk_check"]["allowed"] is True
     assert result["paper_order"]["status"] == "filled"
     assert result["paper_broker_adapter"]["adapter_id"] == "local_sandbox_paper_broker"
+    assert result["paper_broker_adapter"]["provider_zh"] == "本地沙盒模拟交易"
+    assert result["paper_broker_adapter"]["adapter_readiness_zh"] == "就绪"
+    assert result["paper_broker_adapter"]["paper_order_submission_enabled"] is True
+    assert result["paper_broker_adapter"]["external_paper_api_enabled"] is False
     assert result["paper_broker_adapter"]["live_order_submission_enabled"] is False
     assert result["broker_paper_order"]["status"] == "filled"
     assert result["broker_paper_order"]["mode"] == "paper"

@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from backend.app.schemas.strategy_dsl import validate_strategy
 from backend.app.services.agent_runtime import AUTO_PAPER_AGENT
 from backend.app.services.backtest import run_buy_and_hold_fixture
-from backend.app.services.broker_paper_adapter import LocalSandboxPaperBrokerAdapter
+from backend.app.services.broker_paper_adapter import build_paper_broker_adapter
 from backend.app.services.approval_queue import ApprovalQueue
 from backend.app.services.broker_ticket_export import (
     build_broker_ready_order_export,
@@ -35,6 +35,7 @@ ROOT = Path(__file__).resolve().parents[3]
 POLICY_PATH = ROOT / "configs" / "trading_governor_policy.yaml"
 DATA_PATH = ROOT / "data" / "sample_prices.csv"
 MARKET_DATA_CONFIG_PATH = ROOT / "configs" / "market_data.yaml"
+PAPER_BROKER_CONFIG_PATH = ROOT / "configs" / "paper_broker.yaml"
 QUEUE_PATH = ROOT / "runtime" / "approval_queue.sqlite3"
 PAPER_STATE_PATH = ROOT / "runtime" / "paper_portfolio.json"
 STRATEGY_HISTORY_PATH = ROOT / "runtime" / "strategy_tournament_history.jsonl"
@@ -264,7 +265,8 @@ def paper_performance_history() -> dict:
 
 @router.get("/paper/broker/status")
 def paper_broker_status() -> dict:
-    return LocalSandboxPaperBrokerAdapter(PaperBroker.load(PAPER_STATE_PATH)).status()
+    paper_broker = PaperBroker.load(PAPER_STATE_PATH)
+    return build_paper_broker_adapter(paper_broker, config_path=PAPER_BROKER_CONFIG_PATH).status()
 
 
 @router.get("/broker/moomoo/status")
@@ -544,6 +546,13 @@ def dashboard() -> str:
     const BROKER_TEXT = {
       'Alpha Local Sandbox': 'Alpha 本地沙盒'
     };
+    const PAPER_BROKER_PROVIDER_TEXT = {
+      local_sandbox: '本地沙盒模拟交易',
+      external_paper_api: '外部纸面交易 API',
+      alpaca_paper: 'Alpaca 纸面交易 API',
+      ibkr_paper: 'IBKR 纸面交易 API',
+      moomoo_paper: '富途牛牛纸面交易 API'
+    };
     const ACCOUNT_TEXT = {
       local_paper_account: '本地模拟账户'
     };
@@ -604,6 +613,9 @@ def dashboard() -> str:
     }
     function displayBrokerName(value) {
       return BROKER_TEXT[value] || displayValue(value, '未知执行层');
+    }
+    function displayPaperBrokerProvider(value) {
+      return PAPER_BROKER_PROVIDER_TEXT[value] || '未知纸面交易提供方';
     }
     function displayAccount(value) {
       return ACCOUNT_TEXT[value] || '本地账户';
@@ -962,12 +974,18 @@ def dashboard() -> str:
         <table>
           <tbody>
             <tr><th>适配器</th><td>${broker.adapter_id_zh || displayAdapterId(broker.adapter_id)}</td></tr>
+            <tr><th>纸面交易提供方</th><td>${broker.provider_zh || displayPaperBrokerProvider(broker.provider)}</td></tr>
+            <tr><th>适配器就绪</th><td>${broker.adapter_readiness_zh || displayStatus(broker.adapter_readiness, '未知')}</td></tr>
             <tr><th>名称</th><td>${broker.broker_name_zh || displayBrokerName(broker.broker_name)}</td></tr>
             <tr><th>账户</th><td>${broker.account_ref_zh || displayAccount(broker.account_ref)}</td></tr>
             <tr><th>模式</th><td>${broker.mode_zh || displayStatus(broker.mode)}</td></tr>
             <tr><th>连接</th><td>${broker.connected_zh || displayBool(broker.connected)}</td></tr>
             <tr><th>需要凭据</th><td>${broker.credential_required_zh || displayBool(broker.credential_required)}</td></tr>
+            <tr><th>允许纸面下单</th><td>${broker.paper_order_submission_enabled_zh || displayBool(broker.paper_order_submission_enabled)}</td></tr>
+            <tr><th>外部纸面 API</th><td>${broker.external_paper_api_enabled_zh || displayBool(broker.external_paper_api_enabled)}</td></tr>
             <tr><th>允许真实下单</th><td>${broker.live_order_submission_enabled_zh || displayBool(broker.live_order_submission_enabled)}</td></tr>
+            <tr><th>未就绪原因</th><td>${broker.reason_zh || '无'}</td></tr>
+            <tr><th>下一步</th><td>${broker.next_step_zh || '无'}</td></tr>
             <tr><th>执行模型</th><td>${broker.execution_model_zh || '未知执行模型'}</td></tr>
             <tr><th>模拟滑点</th><td>${Number(broker.slippage_bps || 0).toFixed(2)} 基点</td></tr>
             <tr><th>单笔佣金</th><td>${Number(broker.commission_per_order || 0).toFixed(2)}</td></tr>

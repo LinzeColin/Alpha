@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.app.services.approval_queue import ApprovalQueue
-from backend.app.services.broker_paper_adapter import LocalSandboxPaperBrokerAdapter
+from backend.app.services.broker_paper_adapter import build_paper_broker_adapter
 from backend.app.services.paper_broker import PaperBroker
 from backend.app.services.paper_performance import summarize_paper_performance_history
 from backend.app.services.runtime_status import read_persisted_runtime_snapshot
@@ -69,7 +69,7 @@ def collect_paper_trading_readiness(
         None,
     )
     paper_broker = PaperBroker.load(paper_state_path) if paper_state_path.exists() else PaperBroker()
-    paper_broker_status = LocalSandboxPaperBrokerAdapter(paper_broker).status()
+    paper_broker_status = build_paper_broker_adapter(paper_broker, config_path=root / "configs" / "paper_broker.yaml").status()
     strategy_summary = summarize_strategy_tournament_history(strategy_history_path)
     performance_summary = summarize_paper_performance_history(performance_history_path)
 

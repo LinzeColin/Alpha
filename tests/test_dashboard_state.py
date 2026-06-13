@@ -75,6 +75,11 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
     assert state["paper_performance"]["latest_execution_model_zh"] == "固定佣金与滑点模型"
     assert state["paper_broker_status"]["adapter_id"] == "local_sandbox_paper_broker"
     assert state["paper_broker_status"]["adapter_id_zh"] == "本地沙盒模拟经纪商适配器"
+    assert state["paper_broker_status"]["provider_zh"] == "本地沙盒模拟交易"
+    assert state["paper_broker_status"]["adapter_readiness_zh"] == "就绪"
+    assert state["paper_broker_status"]["paper_order_submission_enabled"] is True
+    assert state["paper_broker_status"]["paper_order_submission_enabled_zh"] == "是"
+    assert state["paper_broker_status"]["external_paper_api_enabled"] is False
     assert state["paper_broker_status"]["mode"] == "paper"
     assert state["paper_broker_status"]["mode_zh"] == "模拟交易"
     assert state["paper_broker_status"]["live_order_submission_enabled"] is False
@@ -267,6 +272,12 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "公共延迟行情缓存" in html
     assert "refresh_error_zh" in html
     assert "允许真实下单" in html
+    assert "纸面交易提供方" in html
+    assert "本地沙盒模拟交易" in html
+    assert "适配器就绪" in html
+    assert "允许纸面下单" in html
+    assert "外部纸面 API" in html
+    assert "未就绪原因" in html
     assert "适配器" in html
     assert "本地沙盒模拟经纪商适配器" in html
     assert "模拟交易循环智能体" in html

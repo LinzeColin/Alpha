@@ -54,6 +54,14 @@ runtime/strategy_tournament_history.jsonl
 runtime/backups/
 ```
 
+纸面交易经纪商适配配置在：
+
+```text
+configs/paper_broker.yaml
+```
+
+默认 `provider: local_sandbox`，即本地沙盒模拟交易。外部 paper API provider 目前只有 fail-closed 适配入口；如误配为 `alpaca_paper`、`ibkr_paper`、`moomoo_paper` 或 `external_paper_api`，系统会显示未就绪原因并拒绝纸面下单，不会回退成真实资金下单。
+
 `.app` 格式入口已安装到：
 
 ```text
@@ -107,6 +115,7 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - 外部 API 不得触发真实资金下单。
 - Alpha 可以生成供用户审核的经纪商就绪订单工单，但不得自主提交真实资金订单。
 - 当前模拟交易执行层使用 `LocalSandboxPaperBrokerAdapter`；它返回类经纪商模拟回执，但不需要凭据，也不允许真实下单。
+- 纸面交易经纪商适配通过 `configs/paper_broker.yaml` 选择；默认本地沙盒可成交，外部 paper API 适配器未配置完成时 fail-closed，并在控制台显示“外部纸面 API”“未就绪原因”和“下一步”。
 - 富途牛牛开放网关集成当前只做只读连接探测：检测当前 Python 环境是否可导入 `moomoo`/`futu` 接口包，并检测本机开放网关端口；不会解锁交易、不会读取或提交交易凭据、不会调用真实下单接口。
 - 审批队列默认使用 SQLite 持久化，支持在网页/API 中标记“已人工复核”“已拒绝”“工单已导出”；这些动作只更新本地审计状态，不会调用真实 broker 下单接口。
 - 已人工复核且仍在有效期内的工单可导出为机器 JSON 包或中文 CSV 人工录入表；过期工单不能复核或导出。
@@ -164,7 +173,7 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 
 - `LocalSandboxPaperBrokerAdapter` 默认使用“固定佣金与滑点模型”：买入按参考价上浮 5.00 基点成交，并计入每笔 1.00 AUD 模拟佣金。
 - Paper broker 会把模拟成交价、参考价、佣金、滑点和累计佣金写入组合状态与绩效历史。
-- 控制台的“模拟交易执行层”和“模拟绩效”会显示执行模型、模拟滑点、单笔佣金、累计佣金和最近成交成本。
+- 控制台的“模拟交易执行层”和“模拟绩效”会显示纸面交易提供方、适配器就绪、是否允许纸面下单、是否启用外部纸面 API、执行模型、模拟滑点、单笔佣金、累计佣金和最近成交成本。
 - 该模型只影响本地模拟交易绩效，不调用真实经纪商下单接口。
 
 ## 富途牛牛开放网关只读探测
