@@ -95,3 +95,11 @@ Decision: Paper trading and dashboard reads should resolve prices through `Marke
 Reason: Strategy iteration and paper trading need a clear path from fixture data toward real public market data while staying reliable when the external source is unavailable.
 
 Consequence: Alpha now supports a cache-first market data gateway with optional Stooq public delayed CSV refresh. Dashboard/API surfaces show provider, source kind, quality, latest date, prices, cache age, and fallback status. External refresh failure falls back to local data and does not enable any live trading behavior.
+
+## 2026-06-13: 30-Day Ops Health Requires Local Evidence
+
+Decision: Alpha should expose a local ops health check and one-click runtime backup before claiming 30-day unattended paper-trading readiness.
+
+Reason: A five-minute automatic loop can appear healthy while the queue, process, logs, backups, or paper portfolio are stale or missing. The owner needs direct evidence that the system is still generating timely candidates and can be recovered after restart.
+
+Consequence: `/ops/health`, `/ops/backup`, `scripts/check_alpha_ops.sh`, and the dashboard "运行健康" panel now summarize automatic loop cadence, SQLite queue durability, paper portfolio state, market data quality, process/log status, latest backup, and the real-money execution boundary.

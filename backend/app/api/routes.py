@@ -11,6 +11,7 @@ from backend.app.services.approval_queue import ApprovalQueue
 from backend.app.services.policy import GovernorPolicy
 from backend.app.services.live_broker import FailClosedLiveBroker, LiveOrderIntent
 from backend.app.services.market_data_gateway import MarketDataGateway, MarketDataSnapshot
+from backend.app.services.ops_health import collect_ops_health, create_runtime_backup
 from backend.app.services.paper_trading_loop import DEFAULT_REFRESH_INTERVAL_SECONDS, build_default_loop, latest_mark_prices
 from backend.app.services.paper_broker import PaperBroker
 from backend.app.services.strategy_iteration import run_strategy_tournament
@@ -23,6 +24,8 @@ DATA_PATH = ROOT / "data" / "sample_prices.csv"
 MARKET_DATA_CONFIG_PATH = ROOT / "configs" / "market_data.yaml"
 QUEUE_PATH = ROOT / "runtime" / "approval_queue.sqlite3"
 PAPER_STATE_PATH = ROOT / "runtime" / "paper_portfolio.json"
+PID_PATH = ROOT / "runtime" / "alpha_dashboard.pid"
+LOG_PATH = ROOT / "runtime" / "alpha_dashboard.log"
 
 
 @router.get("/health")
@@ -195,11 +198,39 @@ def market_data_refresh() -> dict:
         return status
 
 
+@router.get("/ops/health")
+def ops_health() -> dict:
+    return collect_ops_health(
+        root=ROOT,
+        queue_path=QUEUE_PATH,
+        paper_state_path=PAPER_STATE_PATH,
+        pid_path=PID_PATH,
+        log_path=LOG_PATH,
+        market_data_gateway=build_market_data_gateway(),
+        loop_snapshot=AUTO_PAPER_AGENT.snapshot(),
+    )
+
+
+@router.post("/ops/backup")
+def ops_backup() -> dict:
+    backup = create_runtime_backup(
+        root=ROOT,
+        queue_path=QUEUE_PATH,
+        paper_state_path=PAPER_STATE_PATH,
+        market_data_cache_path=build_market_data_gateway().cache_path,
+        pid_path=PID_PATH,
+        log_path=LOG_PATH,
+    )
+    backup["health_after_backup"] = ops_health()
+    return backup
+
+
 @router.get("/dashboard/state")
 def dashboard_state() -> dict:
     return {
         "health": health(),
         "market_data": market_data_status(),
+        "ops_health": ops_health(),
         "owner_summary": owner_summary(),
         "agent_status": agent_status(),
         "paper_portfolio": paper_portfolio(),
@@ -253,6 +284,7 @@ def dashboard() -> str:
     </div>
     <div>
       <button onclick="runCycle()">运行模拟交易周期</button>
+      <button class="secondary" onclick="backupRuntime()">生成运行备份</button>
       <button class="secondary" onclick="refreshMarketData()">刷新公共行情</button>
       <button class="secondary" onclick="loadState()">刷新</button>
     </div>
@@ -267,6 +299,7 @@ def dashboard() -> str:
       <section><h2>智能体状态</h2><div id="agent"></div></section>
       <section><h2>模拟交易执行层</h2><div id="broker"></div></section>
       <section><h2>行情数据</h2><div id="marketData"></div></section>
+      <section><h2>运行健康</h2><div id="opsHealth"></div></section>
     </div>
     <section><h2>策略锦标赛</h2><div id="tournament"></div></section>
     <section><h2>审批队列</h2><div id="queue"></div></section>
@@ -303,6 +336,12 @@ def dashboard() -> str:
       blocked: '已阻止',
       unchanged: '未变化',
       updated: '已更新',
+      healthy: '健康',
+      degraded: '需关注',
+      unhealthy: '不可用',
+      pass: '通过',
+      warn: '需关注',
+      fail: '失败',
       unknown: '未知'
     };
     const CAPABILITY_TEXT = {
@@ -433,9 +472,11 @@ def dashboard() -> str:
       const agent = data.agent_status || {};
       const loop = agent.loop || {};
       const marketData = data.market_data || {};
+      const opsHealth = data.ops_health || {};
       document.getElementById('metrics').innerHTML = [
         metric('智能体', pill(displayStatus(agent.status), 'ok')),
         metric('循环', pill(displayStatus(loop.status, '未知'), loop.error_count ? 'danger' : 'ok')),
+        metric('运行健康', pill(displayStatus(opsHealth.overall_status, '未知'), opsHealth.fail_count ? 'danger' : (opsHealth.warn_count ? 'warn' : 'ok'))),
         metric('行情源', displayMarketDataSource(marketData.source_kind)),
         metric('行情质量', pill(displayDataQuality(marketData.data_quality), marketData.real_market_data ? 'ok' : 'warn')),
         metric('最新行情日', displayValue(marketData.latest_date)),
@@ -459,6 +500,30 @@ def dashboard() -> str:
           ${metric('总权益', Number(portfolio.total_equity || 0).toFixed(2))}
         </div>
         <table><thead><tr><th>标的</th><th>数量</th><th>标记价</th><th>市值</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="muted">暂无模拟持仓</td></tr>'}</tbody></table>
+      `;
+    }
+    function renderOpsHealth(opsHealth) {
+      const checks = opsHealth.checks || [];
+      const rows = checks.map(check => {
+        const kind = check.status === 'fail' ? 'danger' : (check.status === 'warn' ? 'warn' : 'ok');
+        return `<tr><td>${check.title_zh || '未知检查'}</td><td>${pill(displayStatus(check.status), kind)}</td><td>${check.message_zh || ''}</td></tr>`;
+      }).join('');
+      const latestBackup = opsHealth.latest_backup || {};
+      document.getElementById('opsHealth').innerHTML = `
+        <div class="metric-grid">
+          ${metric('总体状态', pill(displayStatus(opsHealth.overall_status), opsHealth.fail_count ? 'danger' : (opsHealth.warn_count ? 'warn' : 'ok')))}
+          ${metric('通过', opsHealth.pass_count || 0)}
+          ${metric('需关注', opsHealth.warn_count || 0)}
+          ${metric('失败', opsHealth.fail_count || 0)}
+        </div>
+        <table>
+          <tbody>
+            <tr><th>最近备份</th><td>${displayValue(latestBackup.backup_path)}</td></tr>
+            <tr><th>备份时间</th><td>${displayValue(latestBackup.created_at)}</td></tr>
+            <tr><th>安全边界</th><td>${displayValue(opsHealth.safety_boundary && opsHealth.safety_boundary.message_zh)}</td></tr>
+          </tbody>
+        </table>
+        <table><thead><tr><th>检查项</th><th>状态</th><th>说明</th></tr></thead><tbody>${rows || '<tr><td colspan="3" class="muted">暂无健康检查结果</td></tr>'}</tbody></table>
       `;
     }
     function renderMarketData(marketData) {
@@ -584,6 +649,7 @@ def dashboard() -> str:
         renderAgent(data.agent_status || {});
         renderBroker(data.paper_broker_status || {});
         renderMarketData(data.market_data || {});
+        renderOpsHealth(data.ops_health || {});
         renderTournament(data.strategy_tournament || {});
         renderQueue(data.approval_queue || {});
         document.getElementById('lastUpdated').textContent = '最近更新：' + new Date().toLocaleString('zh-CN');
@@ -598,6 +664,15 @@ def dashboard() -> str:
     async function refreshMarketData() {
       document.getElementById('lastUpdated').textContent = '正在刷新公共行情...';
       await fetch('/market-data/refresh', { method: 'POST' });
+      await loadState();
+    }
+    async function backupRuntime() {
+      document.getElementById('lastUpdated').textContent = '正在生成运行备份...';
+      const response = await fetch('/ops/backup', { method: 'POST' });
+      if (!response.ok) {
+        document.getElementById('lastUpdated').textContent = '运行备份失败：请查看后台日志。';
+        return;
+      }
       await loadState();
     }
     async function ticketAction(ticketId, action) {

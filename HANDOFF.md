@@ -36,6 +36,9 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - `/orders/approval-queue`, `/owner/summary`, `/agent/status`, and dashboard state expose approval queue storage status.
 - Market data now flows through `MarketDataGateway`: cache-first, fixture fallback, optional Stooq public delayed CSV refresh, and visible dashboard/API source quality.
 - `/market-data/status`, `/market-data/refresh`, and dashboard "行情数据" expose provider, source kind, data quality, latest date, latest prices, cache age, and refresh status.
+- `/ops/health`, `/ops/backup`, `scripts/check_alpha_ops.sh`, and dashboard "运行健康" now expose 30-day E-Safe operational evidence: loop cadence, SQLite queue durability, paper portfolio state, market data quality, process/log status, latest backup, and live-order safety boundary.
+- Runtime backups are written locally under `runtime/backups/alpha_state_*/` and include a SQLite approval queue snapshot, paper portfolio, available market-data cache, PID, log tail, and manifest.
+- `scripts/start_alpha_dashboard.sh` now performs a post-health-check stability confirmation before reporting startup success.
 - AppleScript `Alpha.app` is installed at `/Users/linzezhang/Downloads/Alpha.app`, `/Users/linzezhang/Applications/Alpha.app`, and `/Applications/Alpha.app`.
 - GitHub connector backup now contains the core runtime/dashboard/code/test changes from this run.
 - Repo launcher exists at `outputs/applications/Alpha.command`; an older external copy was observed at `/Users/linzezhang/Downloads/applicatioins/Alpha.command`.
@@ -61,6 +64,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - `configs/trading_governor_policy.yaml`
 - `backend/app/services/paper_trading_loop.py`
 - `backend/app/services/market_data_gateway.py`
+- `backend/app/services/ops_health.py`
 - `backend/app/services/strategy_iteration.py`
 - `backend/app/services/paper_broker.py`
 - `backend/app/services/agent_runtime.py`
@@ -76,6 +80,8 @@ python -m pytest tests -q
 python -m backend.app.services.paper_trading_loop --once
 python -m backend.app.services.paper_trading_loop --once --json
 curl http://127.0.0.1:8000/market-data/status
+curl http://127.0.0.1:8000/ops/health
+scripts/check_alpha_ops.sh --backup
 ```
 
 Latest validation:
@@ -113,6 +119,17 @@ SQLite approval queue validation -> ticket persists across `ApprovalQueue` insta
 Full Chinese display validation -> dashboard HTML/user-facing mappings include Chinese agent/adapter/order/risk labels; CLI summary hides raw status IDs while preserving --json for automation
 Market data gateway validation -> fixture fallback, mocked Stooq refresh, paper loop market_data status, and dashboard market data panel covered by tests
 Real Stooq refresh attempt -> sandbox DNS blocked; non-sandbox reached TLS but failed local Python certificate verification (`CERTIFICATE_VERIFY_FAILED`); fallback remained functional
+Ops health target tests -> .venv/bin/python -m pytest tests/test_ops_health.py tests/test_dashboard_state.py -q -> 8 passed
+Full regression after ops health -> .venv/bin/python -m pytest tests -q -> 35 passed
+CLI ops health -> scripts/check_alpha_ops.sh reported stale PID as unavailable before service restart; this exposed a real stale-runtime condition
+CLI runtime backup -> scripts/check_alpha_ops.sh --backup generated runtime/backups/alpha_state_20260613T023557Z
+Foreground uvicorn loop verification -> /agent/loop/status returned enabled=true, task_running=true, interval_seconds=300, run_count=1, error_count=0, next_run_at populated, latest ticket pending_owner_approval, broker_paper_order_status=filled
+Ops health API verification -> /ops/health returned overall_status=degraded, pass_count=6, warn_count=2, fail_count=0; warnings were fixture market data and stale startup-script PID while the app-managed loop was running
+Ops backup API verification -> POST /ops/backup generated runtime/backups/alpha_state_20260613T023753Z and health_after_backup retained fail_count=0
+Dashboard Browser verification -> title Alpha 控制台, lang zh-CN, 运行健康/生成运行备份/总体状态/安全边界/检查项 visible, forbidden English phrases=[], browserErrors=[]
+Start script hardening -> scripts/start_alpha_dashboard.sh now rechecks PID and /health one second after initial readiness before reporting success
+Diff hygiene -> git diff --check -> passed
+Safety scan -> no new real broker place_order path; committed live-order defaults and runtime boundary remain disabled
 ```
 
 ## Unresolved Risks
@@ -121,11 +138,12 @@ Real Stooq refresh attempt -> sandbox DNS blocked; non-sandbox reached TLS but f
 - This machine's current Python SSL trust chain blocked live Stooq refresh during validation; do not disable SSL verification by default.
 - External broker paper API integration is not connected yet; local sandbox paper adapter abstraction now exists.
 - Dashboard is local MVP only.
-- Approval queue is SQLite-backed locally, but still needs production-grade backup/rotation and multi-process contention hardening before long unattended runs.
+- Approval queue is SQLite-backed locally and now has manual backup, but still needs scheduled backup rotation and multi-process contention hardening before long unattended runs.
+- The current execution environment may reclaim `nohup` background servers between tool calls; foreground uvicorn verified the app runtime, and the start script now detects post-health-check instability, but final `.app` long-run verification should be done from the user's normal macOS session.
 - Real broker live order submission remains intentionally out of scope.
 - Strategy tournament is still fixture-level; it now has simple walk-forward/OOS metrics, but not multi-year OOS, cost-model, slippage-model, or walk-forward portfolio validation.
 - Local `git push -u origin main` is blocked by missing HTTPS credentials (`could not read Username`); GitHub connector synced core runtime files, but older `docs/seed_pack/**` and `docs/task_pack_seed/**` still need a normal authenticated push or follow-up connector sync.
 
 ## Next Step
 
-Authenticate GitHub CLI/HTTPS push or continue connector-based sync, then implement a concrete broker paper/read-only adapter for the user's chosen broker, or add long-run monitoring/backups for the 30-day paper trading run.
+Authenticate GitHub CLI/HTTPS push or continue connector-based sync, then implement scheduled ops backup/rotation plus a concrete broker paper/read-only adapter for the user's chosen broker.

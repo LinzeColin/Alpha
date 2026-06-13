@@ -36,6 +36,8 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
     assert state["health"]["refresh_interval_seconds"] == 300
     assert state["market_data"]["latest_date"] is not None
     assert state["market_data"]["real_market_data"] is False
+    assert state["ops_health"]["safety_boundary"]["live_order_submission_enabled"] is False
+    assert state["ops_health"]["check_count"] >= 1
     assert state["agent_status"]["status"] == "ready"
     assert state["paper_portfolio"]["trade_count"] == 1
     assert state["paper_broker_status"]["adapter_id"] == "local_sandbox_paper_broker"
@@ -132,7 +134,9 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "审批队列" in html
     assert "模拟交易执行层" in html
     assert "行情数据" in html
+    assert "运行健康" in html
     assert "刷新公共行情" in html
+    assert "生成运行备份" in html
     assert "行情源" in html
     assert "行情质量" in html
     assert "真实市场数据" in html
@@ -154,6 +158,9 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "标记已导出" in html
     assert "待人工确认" in html
     assert "最近更新：" in html
+    assert "总体状态" in html
+    assert "安全边界" in html
+    assert "检查项" in html
 
     assert "Alpha Dashboard" not in html
     assert "Run Paper Cycle" not in html

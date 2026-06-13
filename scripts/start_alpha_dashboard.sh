@@ -80,6 +80,20 @@ if [[ "$READY" != "1" ]]; then
   exit 1
 fi
 
+sleep 1
+if ! kill -0 "$(cat "$DASHBOARD_PID_FILE")" 2>/dev/null; then
+  echo "Alpha 控制台健康检查后进程已退出。"
+  tail -n 80 "$DASHBOARD_LOG_FILE" || true
+  rm -f "$DASHBOARD_PID_FILE"
+  exit 1
+fi
+if ! curl -fsS "http://127.0.0.1:8000/health" >/dev/null 2>&1; then
+  echo "Alpha 控制台健康检查后不再响应。"
+  tail -n 80 "$DASHBOARD_LOG_FILE" || true
+  rm -f "$DASHBOARD_PID_FILE"
+  exit 1
+fi
+
 if [[ "$OPEN_BROWSER" != "0" ]] && command -v open >/dev/null 2>&1; then
   open "$URL"
 fi

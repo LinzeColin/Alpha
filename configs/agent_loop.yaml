@@ -3,7 +3,7 @@ paper_trading_loop:
   refresh_interval_seconds: 300
   default_strategy_id: "fixture_momentum_v0"
   order_ticket_ttl_seconds: 300
-  queue_path: "runtime/approval_queue.json"
+  queue_path: "runtime/approval_queue.sqlite3"
   paper_state_path: "runtime/paper_portfolio.json"
   managed_by: "fastapi_lifespan_runtime"
 

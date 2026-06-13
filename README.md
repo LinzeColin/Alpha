@@ -22,6 +22,8 @@ python -m backend.app.services.paper_trading_loop --once --json
 ```bash
 scripts/start_alpha_dashboard.sh
 scripts/stop_alpha_dashboard.sh
+scripts/check_alpha_ops.sh
+scripts/check_alpha_ops.sh --backup
 ```
 
 控制台启动后，FastAPI 应用生命周期会启动自动模拟交易智能体运行时：立即运行一次模拟交易周期，然后每 300 秒刷新一次。
@@ -32,6 +34,7 @@ scripts/stop_alpha_dashboard.sh
 runtime/approval_queue.sqlite3
 runtime/paper_portfolio.json
 runtime/market_data/latest_prices.csv
+runtime/backups/
 ```
 
 `.app` 格式入口已安装到：
@@ -60,6 +63,8 @@ POST /strategy/tournament/run
 GET  /agent/loop/status
 GET  /market-data/status
 POST /market-data/refresh
+GET  /ops/health
+POST /ops/backup
 GET  /orders/approval-queue
 POST /orders/approval-queue/{ticket_id}/owner-review
 POST /orders/approval-queue/{ticket_id}/reject
@@ -75,6 +80,14 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - Alpha 可以生成供用户审核的经纪商就绪订单工单，但不得自主提交真实资金订单。
 - 当前模拟交易执行层使用 `LocalSandboxPaperBrokerAdapter`；它返回 broker-like paper receipt，但不需要凭据，也不允许真实下单。
 - 审批队列默认使用 SQLite 持久化，支持在网页/API 中标记“已人工复核”“已拒绝”“工单已导出”；这些动作只更新本地审计状态，不会调用真实 broker 下单接口。
+
+## 运行健康与备份
+
+- `GET /ops/health` 汇总自动循环、SQLite 审批队列、模拟组合、模拟执行层边界、行情数据、控制台进程、日志和最近备份状态。
+- `POST /ops/backup` 会在 `runtime/backups/` 下生成一次本地运行状态备份，包含审批队列快照、模拟组合、行情缓存、PID 和日志尾部。
+- `scripts/check_alpha_ops.sh` 输出中文健康检查摘要；加 `--json` 可输出机器 JSON。
+- `scripts/check_alpha_ops.sh --backup` 可在终端生成一次本地运行状态备份。
+- 健康检查和备份只覆盖模拟交易与工单状态，不会提交真实资金订单。
 
 ## 行情数据
 
