@@ -1,0 +1,60 @@
+diff --git a/tests/test_dashboard_state.py b/tests/test_dashboard_state.py
+index 6665030..a56638c 100644
+--- a/tests/test_dashboard_state.py
++++ b/tests/test_dashboard_state.py
+@@ -26,6 +26,7 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
+     monkeypatch.setattr(routes, "QUEUE_PATH", tmp_path / "approval_queue.sqlite3")
+     monkeypatch.setattr(routes, "PAPER_STATE_PATH", tmp_path / "paper_portfolio.json")
+     monkeypatch.setattr(routes, "STRATEGY_HISTORY_PATH", tmp_path / "strategy_tournament_history.jsonl")
++    monkeypatch.setattr(routes, "PAPER_PERFORMANCE_PATH", tmp_path / "paper_performance_history.jsonl")
+     monkeypatch.setattr(routes, "DATA_PATH", Path("data/sample_prices.csv"))
+     _patch_fixture_market_data(monkeypatch, tmp_path)
+ 
+@@ -45,6 +46,11 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
+     assert state["ops_maintenance"]["backup_interval_seconds"] > 0
+     assert state["agent_status"]["status"] == "ready"
+     assert state["paper_portfolio"]["trade_count"] == 1
++    assert state["paper_performance"]["status"] == "ready"
++    assert state["paper_performance"]["run_count"] == 1
++    assert state["paper_performance"]["latest_total_equity"] == state["paper_portfolio"]["total_equity"]
++    assert state["paper_performance"]["total_return_zh"] == "0.00%"
++    assert state["paper_performance"]["current_drawdown_zh"] == "0.00%"
+     assert state["paper_broker_status"]["adapter_id"] == "local_sandbox_paper_broker"
+     assert state["paper_broker_status"]["mode"] == "paper"
+     assert state["paper_broker_status"]["live_order_submission_enabled"] is False
+@@ -115,6 +121,7 @@ def test_approval_queue_review_actions_are_exposed_to_dashboard_state(tmp_path,
+     monkeypatch.setattr(routes, "QUEUE_PATH", tmp_path / "approval_queue.sqlite3")
+     monkeypatch.setattr(routes, "PAPER_STATE_PATH", tmp_path / "paper_portfolio.json")
+     monkeypatch.setattr(routes, "STRATEGY_HISTORY_PATH", tmp_path / "strategy_tournament_history.jsonl")
++    monkeypatch.setattr(routes, "PAPER_PERFORMANCE_PATH", tmp_path / "paper_performance_history.jsonl")
+     monkeypatch.setattr(routes, "DATA_PATH", Path("data/sample_prices.csv"))
+     _patch_fixture_market_data(monkeypatch, tmp_path)
+ 
+@@ -149,6 +156,11 @@ def test_dashboard_html_uses_chinese_user_visible_text():
+     assert "运行模拟交易周期" in html
+     assert "系统快照" in html
+     assert "模拟组合" in html
++    assert "模拟绩效" in html
++    assert "模拟收益率" in html
++    assert "累计收益率" in html
++    assert "最大回撤" in html
++    assert "权益高水位" in html
+     assert "策略锦标赛" in html
+     assert "策略迭代历史" in html
+     assert "策略稳定度" in html
+@@ -217,6 +229,7 @@ def test_paper_cycle_summary_is_chinese_for_human_cli(tmp_path, monkeypatch):
+     monkeypatch.setattr(routes, "QUEUE_PATH", tmp_path / "approval_queue.sqlite3")
+     monkeypatch.setattr(routes, "PAPER_STATE_PATH", tmp_path / "paper_portfolio.json")
+     monkeypatch.setattr(routes, "STRATEGY_HISTORY_PATH", tmp_path / "strategy_tournament_history.jsonl")
++    monkeypatch.setattr(routes, "PAPER_PERFORMANCE_PATH", tmp_path / "paper_performance_history.jsonl")
+     monkeypatch.setattr(routes, "DATA_PATH", Path("data/sample_prices.csv"))
+     _patch_fixture_market_data(monkeypatch, tmp_path)
+ 
+@@ -226,6 +239,7 @@ def test_paper_cycle_summary_is_chinese_for_human_cli(tmp_path, monkeypatch):
+     assert "Alpha 模拟交易周期摘要" in summary
+     assert "候选订单：" in summary
+     assert "策略迭代：已写入" in summary
++    assert "模拟绩效：累计收益 0.00%" in summary
+     assert "行情数据：" in summary
+     assert "真实市场数据 否" in summary
+     assert "风控：已通过风控，待人工确认（下单前风控检查通过）" in summary
