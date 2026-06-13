@@ -1,0 +1,191 @@
+diff --git a/backend/app/services/paper_performance.py b/backend/app/services/paper_performance.py
+new file mode 100644
+index 0000000..f82a0be
+--- /dev/null
++++ b/backend/app/services/paper_performance.py
+@@ -0,0 +1,185 @@
++from __future__ import annotations
++
++import json
++from datetime import datetime, timezone
++from pathlib import Path
++
++from backend.app.services.display_locale import zh_data_quality, zh_market_data_source, zh_side, zh_strategy_id
++
++
++DEFAULT_INITIAL_EQUITY = 10_000.0
++DEFAULT_MAX_PERFORMANCE_HISTORY_ROWS = 10_000
++
++
++def utc_now_iso() -> str:
++    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
++
++
++def append_paper_performance_history(
++    portfolio: dict,
++    *,
++    history_path: str | Path,
++    run_id: str,
++    market_data: dict | None = None,
++    intent: dict | None = None,
++    broker_receipt: dict | None = None,
++    initial_equity: float = DEFAULT_INITIAL_EQUITY,
++    max_rows: int = DEFAULT_MAX_PERFORMANCE_HISTORY_ROWS,
++) -> dict:
++    path = Path(history_path)
++    path.parent.mkdir(parents=True, exist_ok=True)
++    market = market_data or {}
++    intent = intent or {}
++    receipt = broker_receipt or {}
++    latest_trade = portfolio.get("latest_trade") or {}
++    positions = portfolio.get("positions") or []
++    record = _localized_record(
++        {
++            "run_id": run_id,
++            "generated_at": utc_now_iso(),
++            "total_equity": _round_money(portfolio.get("total_equity", 0)),
++            "cash": _round_money(portfolio.get("cash", 0)),
++            "positions_value": _round_money(portfolio.get("positions_value", 0)),
++            "position_count": len(positions),
++            "trade_count": int(portfolio.get("trade_count", 0) or 0),
++            "latest_trade_symbol": latest_trade.get("symbol") or receipt.get("symbol") or intent.get("symbol"),
++            "latest_trade_side": latest_trade.get("side") or receipt.get("side") or intent.get("side"),
++            "latest_trade_quantity": latest_trade.get("quantity") or receipt.get("quantity") or intent.get("quantity"),
++            "latest_trade_price": latest_trade.get("price") or receipt.get("average_fill_price") or intent.get("estimated_price"),
++            "strategy_id": intent.get("strategy_id"),
++            "broker_order_id": receipt.get("broker_order_id"),
++            "paper_order_status": receipt.get("status"),
++            "market_data_source_kind": market.get("source_kind"),
++            "market_data_quality": market.get("data_quality"),
++            "market_data_latest_date": market.get("latest_date"),
++            "real_market_data": bool(market.get("real_market_data", False)),
++        },
++        initial_equity=initial_equity,
++    )
++    rows = _read_jsonl(path)
++    rows.append(record)
++    if max_rows > 0:
++        rows = rows[-max_rows:]
++    path.write_text("\n".join(json.dumps(row, ensure_ascii=False, sort_keys=True) for row in rows) + "\n", encoding="utf-8")
++    summary = summarize_paper_performance_history(path, initial_equity=initial_equity)
++    return {
++        "status": "written",
++        "status_zh": "已写入",
++        "path": str(path),
++        "row_count": len(rows),
++        "latest_record": record,
++        "summary": summary,
++    }
++
++
++def summarize_paper_performance_history(
++    history_path: str | Path,
++    *,
++    initial_equity: float = DEFAULT_INITIAL_EQUITY,
++    limit: int = 20,
++) -> dict:
++    path = Path(history_path)
++    rows = _read_jsonl(path)
++    recent = rows[-limit:] if limit > 0 else rows
++    localized_recent = [_localized_record(row, initial_equity=initial_equity) for row in recent]
++    latest = _localized_record(rows[-1], initial_equity=initial_equity) if rows else {}
++    previous = rows[-2] if len(rows) >= 2 else None
++    latest_equity = float(latest.get("total_equity", 0) or 0)
++    previous_equity = float(previous.get("total_equity", initial_equity) if previous else initial_equity)
++    latest_change = latest_equity - previous_equity if latest else 0.0
++    latest_change_ratio = latest_change / previous_equity if previous_equity else 0.0
++    drawdown = _drawdown_stats(rows)
++    total_return = (latest_equity / initial_equity - 1.0) if latest and initial_equity else 0.0
++    return {
++        "status": "ready" if rows else "empty",
++        "status_zh": "就绪" if rows else "暂无记录",
++        "path": str(path),
++        "exists": path.exists(),
++        "run_count": len(rows),
++        "recent_count": len(recent),
++        "initial_equity": _round_money(initial_equity),
++        "latest_total_equity": _round_money(latest_equity),
++        "latest_cash": latest.get("cash") if latest else 0,
++        "latest_positions_value": latest.get("positions_value") if latest else 0,
++        "latest_trade_count": latest.get("trade_count") if latest else 0,
++        "latest_change": _round_money(latest_change),
++        "latest_change_ratio": round(latest_change_ratio, 6),
++        "latest_change_zh": _signed_money_zh(latest_change),
++        "latest_change_ratio_zh": _percent_zh(latest_change_ratio),
++        "total_return": round(total_return, 6),
++        "total_return_zh": _percent_zh(total_return),
++        "equity_high_watermark": drawdown["high_watermark"],
++        "max_drawdown": drawdown["max_drawdown"],
++        "max_drawdown_zh": _percent_zh(drawdown["max_drawdown"]),
++        "current_drawdown": drawdown["current_drawdown"],
++        "current_drawdown_zh": _percent_zh(drawdown["current_drawdown"]),
++        "latest_generated_at": latest.get("generated_at") if latest else None,
++        "latest_strategy_id": latest.get("strategy_id") if latest else None,
++        "latest_strategy_id_zh": latest.get("strategy_id_zh") if latest else None,
++        "latest_trade_symbol": latest.get("latest_trade_symbol") if latest else None,
++        "latest_trade_side_zh": latest.get("latest_trade_side_zh") if latest else None,
++        "recent": localized_recent,
++    }
++
++
++def _localized_record(record: dict | None, *, initial_equity: float) -> dict:
++    if not record:
++        return {}
++    localized = dict(record)
++    total_equity = float(localized.get("total_equity", 0) or 0)
++    return_ratio = (total_equity / initial_equity - 1.0) if initial_equity else 0.0
++    localized["total_return"] = round(return_ratio, 6)
++    localized["total_return_zh"] = _percent_zh(return_ratio)
++    localized["strategy_id_zh"] = zh_strategy_id(localized.get("strategy_id"))
++    localized["latest_trade_side_zh"] = zh_side(localized.get("latest_trade_side"))
++    localized["market_data_source_kind_zh"] = zh_market_data_source(localized.get("market_data_source_kind"))
++    localized["market_data_quality_zh"] = zh_data_quality(localized.get("market_data_quality"))
++    localized["real_market_data_zh"] = "是" if localized.get("real_market_data") else "否"
++    return localized
++
++
++def _drawdown_stats(rows: list[dict]) -> dict:
++    high_watermark = 0.0
++    max_drawdown = 0.0
++    current_drawdown = 0.0
++    for row in rows:
++        equity = float(row.get("total_equity", 0) or 0)
++        high_watermark = max(high_watermark, equity)
++        if high_watermark <= 0:
++            continue
++        current_drawdown = equity / high_watermark - 1.0
++        max_drawdown = min(max_drawdown, current_drawdown)
++    return {
++        "high_watermark": _round_money(high_watermark),
++        "max_drawdown": round(max_drawdown, 6),
++        "current_drawdown": round(current_drawdown, 6),
++    }
++
++
++def _read_jsonl(path: Path) -> list[dict]:
++    if not path.exists():
++        return []
++    rows = []
++    for line in path.read_text(encoding="utf-8").splitlines():
++        if not line.strip():
++            continue
++        try:
++            value = json.loads(line)
++        except json.JSONDecodeError:
++            continue
++        if isinstance(value, dict):
++            rows.append(value)
++    return rows
++
++
++def _round_money(value: object) -> float:
++    return round(float(value or 0), 2)
++
++
++def _percent_zh(value: float) -> str:
++    return f"{value * 100:.2f}%"
++
++
++def _signed_money_zh(value: float) -> str:
++    prefix = "+" if value > 0 else ""
++    return f"{prefix}{value:.2f}"
