@@ -82,7 +82,7 @@
 .venv/bin/python scripts/verify_chinese_display.py
 # status_zh=通过, error_count=0
 
-python /Users/linzezhang/.codex/skills/webapp-testing/scripts/with_server.py --server ".venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8125" --port 8125 --timeout 60 -- .venv/bin/python scripts/verify_dashboard_http_smoke.py --base-url http://127.0.0.1:8125 --exercise-actions
+python /Users/linzezhang/.codex/skills/webapp-testing/scripts/with_server.py --server ".venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8127" --port 8127 --timeout 60 -- .venv/bin/python scripts/verify_dashboard_http_smoke.py --base-url http://127.0.0.1:8127 --exercise-actions
 # status_zh=通过, error_count=0, checked_layout_contract_count=10, exercised_action_count=2
 
 git diff --check
@@ -93,7 +93,7 @@ git diff --check
 
 短周期运行验证：`ALPHA_MARKET_DATA_PROVIDER=moomoo_opend` 下启动 `AutoPaperAgentRuntime` 与 `AutoOpsMaintenanceRuntime` 各完成 1 轮；`runtime/soak_readiness_history.jsonl` 写入 1 条采样，`consecutive_no_fail_count=1`、`latest_fail_count=0`、`completion_status_zh=观察运行中`、`live_order_submission_enabled=false`。该验证只使用本机富途牛牛开放网关只读行情/本地模拟交易，不创建交易上下文、不解锁交易、不提交真实订单。
 
-运行态检查：普通沙箱内绑定 `127.0.0.1` 会触发权限限制；提权后本地 uvicorn HTTP smoke 已验证 `/dashboard`、`/health` 和 `/dashboard/state` 的中文文案、关键中文字段、10 条响应式布局契约和真实下单禁用边界，并安全调用 `/paper/run-once` 与 `/ops/backup`。当前环境可导入 Playwright，但缺少 Playwright Chromium 二进制，系统 Chrome headless 会被关闭，因此尚未完成截图级视觉验收；后续若需要最终视觉证据，建议安装浏览器测试依赖或用 Browser/Chrome 工具打开 `http://127.0.0.1:8000/dashboard` 再截屏。
+运行态检查：普通沙箱内绑定 `127.0.0.1` 会触发权限限制；提权后本地 uvicorn HTTP smoke 已验证 `/dashboard`、`/health` 和 `/dashboard/state` 的中文文案、关键中文字段、10 条响应式布局契约和真实下单禁用边界，并安全调用 `/paper/run-once` 与 `/ops/backup`。当前环境未安装 Playwright/Chromium，因此尚未完成截图级视觉验收；后续若需要最终视觉证据，建议安装浏览器测试依赖或用 Browser/Chrome 工具打开 `http://127.0.0.1:8000/dashboard` 再截屏。
 
 ## 未解决风险
 
