@@ -64,6 +64,26 @@ STORAGE_BACKEND_TEXT_ZH = {
     "memory": "内存",
 }
 
+MARKET_DATA_PROVIDER_TEXT_ZH = {
+    "cache_or_fixture": "本地缓存优先",
+    "stooq": "Stooq 公共延迟行情",
+    "direct_file": "直接文件",
+}
+
+MARKET_DATA_SOURCE_TEXT_ZH = {
+    "public_cache": "公共延迟行情缓存",
+    "local_cache": "本地行情缓存",
+    "fixture": "样例数据",
+    "local_file": "本地文件",
+}
+
+DATA_QUALITY_TEXT_ZH = {
+    "fresh": "新鲜",
+    "stale": "过期",
+    "sample": "样例",
+    "missing": "缺失",
+}
+
 AGENT_ID_TEXT_ZH = {
     "paper_trading_loop": "模拟交易循环智能体",
 }
@@ -138,6 +158,24 @@ def zh_storage_backend(value: object) -> str:
     return STORAGE_BACKEND_TEXT_ZH.get(str(value), "未知存储")
 
 
+def zh_market_data_provider(value: object) -> str:
+    if value is None or value == "":
+        return "未知行情源"
+    return MARKET_DATA_PROVIDER_TEXT_ZH.get(str(value), "未知行情源")
+
+
+def zh_market_data_source(value: object) -> str:
+    if value is None or value == "":
+        return "未知数据源"
+    return MARKET_DATA_SOURCE_TEXT_ZH.get(str(value), "未知数据源")
+
+
+def zh_data_quality(value: object) -> str:
+    if value is None or value == "":
+        return "未知质量"
+    return DATA_QUALITY_TEXT_ZH.get(str(value), "未知质量")
+
+
 def zh_agent_id(value: object) -> str:
     if value is None or value == "":
         return "未知智能体"
@@ -195,6 +233,7 @@ def format_paper_cycle_summary_zh(result: dict) -> str:
     broker_order = result.get("broker_paper_order", {}) or {}
     portfolio = result.get("paper_portfolio", {}) or {}
     adapter = result.get("paper_broker_adapter", {}) or {}
+    market_data = result.get("market_data", {}) or {}
 
     lines = [
         "Alpha 模拟交易周期摘要",
@@ -209,6 +248,14 @@ def format_paper_cycle_summary_zh(result: dict) -> str:
             f"{zh_order_type(intent.get('order_type'))} / {zh_time_in_force(intent.get('time_in_force'))}"
         ),
         f"策略：{zh_strategy_id(intent.get('strategy_id'))}",
+        (
+            "行情数据："
+            f"{zh_market_data_provider(market_data.get('provider'))} / "
+            f"{zh_market_data_source(market_data.get('source_kind'))} / "
+            f"质量 {zh_data_quality(market_data.get('data_quality'))} / "
+            f"真实市场数据 {'是' if market_data.get('real_market_data') else '否'} / "
+            f"最新日期 {market_data.get('latest_date') or '无'}"
+        ),
         f"风控：{zh_status(risk.get('status'))}（{zh_reason(risk.get('reason'))}）",
         (
             "审批队列："

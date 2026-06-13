@@ -34,6 +34,8 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - Approval queue export is non-executing: export requires prior owner review and records `live_order_submission_enabled: false`; risk-blocked tickets cannot be reviewed/exported.
 - Approval queue now uses SQLite by default at `runtime/approval_queue.sqlite3`; `.json` paths remain supported for compatibility and one-time sibling migration.
 - `/orders/approval-queue`, `/owner/summary`, `/agent/status`, and dashboard state expose approval queue storage status.
+- Market data now flows through `MarketDataGateway`: cache-first, fixture fallback, optional Stooq public delayed CSV refresh, and visible dashboard/API source quality.
+- `/market-data/status`, `/market-data/refresh`, and dashboard "行情数据" expose provider, source kind, data quality, latest date, latest prices, cache age, and refresh status.
 - AppleScript `Alpha.app` is installed at `/Users/linzezhang/Downloads/Alpha.app`, `/Users/linzezhang/Applications/Alpha.app`, and `/Applications/Alpha.app`.
 - GitHub connector backup now contains the core runtime/dashboard/code/test changes from this run.
 - Repo launcher exists at `outputs/applications/Alpha.command`; an older external copy was observed at `/Users/linzezhang/Downloads/applicatioins/Alpha.command`.
@@ -58,6 +60,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - `docs/decision_log.md`
 - `configs/trading_governor_policy.yaml`
 - `backend/app/services/paper_trading_loop.py`
+- `backend/app/services/market_data_gateway.py`
 - `backend/app/services/strategy_iteration.py`
 - `backend/app/services/paper_broker.py`
 - `backend/app/services/agent_runtime.py`
@@ -72,6 +75,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 python -m pytest tests -q
 python -m backend.app.services.paper_trading_loop --once
 python -m backend.app.services.paper_trading_loop --once --json
+curl http://127.0.0.1:8000/market-data/status
 ```
 
 Latest validation:
@@ -107,11 +111,14 @@ External app launchers -> /Users/linzezhang/Downloads/Alpha.app, /Users/linzezha
 Approval queue review actions -> pending ticket can be marked owner_reviewed, then broker_ticket_exported; exported ticket records live_order_submission_enabled=false
 SQLite approval queue validation -> ticket persists across `ApprovalQueue` instances, owner review/export survives reload, and storage status reports backend=sqlite durable=true
 Full Chinese display validation -> dashboard HTML/user-facing mappings include Chinese agent/adapter/order/risk labels; CLI summary hides raw status IDs while preserving --json for automation
+Market data gateway validation -> fixture fallback, mocked Stooq refresh, paper loop market_data status, and dashboard market data panel covered by tests
+Real Stooq refresh attempt -> sandbox DNS blocked; non-sandbox reached TLS but failed local Python certificate verification (`CERTIFICATE_VERIFY_FAILED`); fallback remained functional
 ```
 
 ## Unresolved Risks
 
-- Current market data is fixture-only.
+- Market data gateway exists, but default mode remains cache/fixture fallback; Stooq refresh is public delayed data and not broker-grade real-time market data.
+- This machine's current Python SSL trust chain blocked live Stooq refresh during validation; do not disable SSL verification by default.
 - External broker paper API integration is not connected yet; local sandbox paper adapter abstraction now exists.
 - Dashboard is local MVP only.
 - Approval queue is SQLite-backed locally, but still needs production-grade backup/rotation and multi-process contention hardening before long unattended runs.
@@ -121,4 +128,4 @@ Full Chinese display validation -> dashboard HTML/user-facing mappings include C
 
 ## Next Step
 
-Authenticate GitHub CLI/HTTPS push or continue connector-based sync, then implement a concrete broker paper/read-only adapter for the user's chosen broker or add real market data ingestion.
+Authenticate GitHub CLI/HTTPS push or continue connector-based sync, then implement a concrete broker paper/read-only adapter for the user's chosen broker, or add long-run monitoring/backups for the 30-day paper trading run.

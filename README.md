@@ -31,6 +31,7 @@ scripts/stop_alpha_dashboard.sh
 ```text
 runtime/approval_queue.sqlite3
 runtime/paper_portfolio.json
+runtime/market_data/latest_prices.csv
 ```
 
 `.app` 格式入口已安装到：
@@ -57,6 +58,8 @@ GET  /paper/portfolio
 GET  /paper/broker/status
 POST /strategy/tournament/run
 GET  /agent/loop/status
+GET  /market-data/status
+POST /market-data/refresh
 GET  /orders/approval-queue
 POST /orders/approval-queue/{ticket_id}/owner-review
 POST /orders/approval-queue/{ticket_id}/reject
@@ -73,7 +76,14 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - 当前模拟交易执行层使用 `LocalSandboxPaperBrokerAdapter`；它返回 broker-like paper receipt，但不需要凭据，也不允许真实下单。
 - 审批队列默认使用 SQLite 持久化，支持在网页/API 中标记“已人工复核”“已拒绝”“工单已导出”；这些动作只更新本地审计状态，不会调用真实 broker 下单接口。
 
+## 行情数据
+
+- 默认配置在 `configs/market_data.yaml`。
+- 默认模式为 `cache_or_fixture`：优先读取本地行情缓存；缓存缺失时回退到 `data/sample_prices.csv`，并在控制台标记为“样例数据”。
+- `POST /market-data/refresh` 会尝试刷新 Stooq 公共延迟行情缓存；外部网络或数据源失败时不阻塞系统，会回退到本地数据并在 dashboard 显示刷新失败。
+- Stooq 数据源用于研究和模拟交易，不是券商级实时行情源。
+
 ## 中文显示
 
-- 控制台页面、按钮、表格、状态、风险原因、执行层名称、策略名称和本地命令摘要默认中文显示。
+- 控制台页面、按钮、表格、状态、风险原因、执行层名称、策略名称、行情状态和本地命令摘要默认中文显示。
 - API 字段名、内部枚举、工单号、文件路径和股票代码保持机器可读格式，供测试、MCP、后续券商适配器和自动化流程稳定使用。

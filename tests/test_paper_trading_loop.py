@@ -14,6 +14,9 @@ def test_paper_loop_generates_ticket_and_fills_paper_order(tmp_path):
     result = loop.run_once()
 
     assert result["refresh_interval_seconds"] == DEFAULT_REFRESH_INTERVAL_SECONDS
+    assert result["market_data"]["source_kind"] == "local_file"
+    assert result["market_data"]["data_quality"] == "sample"
+    assert result["market_data"]["real_market_data"] is False
     assert result["risk_check"]["allowed"] is True
     assert result["paper_order"]["status"] == "filled"
     assert result["paper_broker_adapter"]["adapter_id"] == "local_sandbox_paper_broker"

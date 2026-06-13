@@ -87,3 +87,11 @@ Decision: The default runtime approval queue should persist to `runtime/approval
 Reason: A five-minute autonomous paper loop will create repeated order candidates. The queue must survive dashboard restarts and support reliable owner actions without rewriting a whole JSON file on every transition.
 
 Consequence: `ApprovalQueue` chooses SQLite for `.sqlite`, `.sqlite3`, and `.db` paths, keeps JSON compatibility for `.json`, and exposes storage status to `/orders/approval-queue`, `/owner/summary`, `/agent/status`, and the dashboard.
+
+## 2026-06-13: Market Data Gateway Is Observable And Fail-Soft
+
+Decision: Paper trading and dashboard reads should resolve prices through `MarketDataGateway` instead of directly depending on the sample CSV.
+
+Reason: Strategy iteration and paper trading need a clear path from fixture data toward real public market data while staying reliable when the external source is unavailable.
+
+Consequence: Alpha now supports a cache-first market data gateway with optional Stooq public delayed CSV refresh. Dashboard/API surfaces show provider, source kind, quality, latest date, prices, cache age, and fallback status. External refresh failure falls back to local data and does not enable any live trading behavior.

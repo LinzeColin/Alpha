@@ -10,6 +10,7 @@ from backend.app.services.broker_paper_adapter import LocalSandboxPaperBrokerAda
 from backend.app.services.approval_queue import ApprovalQueue
 from backend.app.services.policy import GovernorPolicy
 from backend.app.services.live_broker import FailClosedLiveBroker, LiveOrderIntent
+from backend.app.services.market_data_gateway import MarketDataGateway, MarketDataSnapshot
 from backend.app.services.paper_trading_loop import DEFAULT_REFRESH_INTERVAL_SECONDS, build_default_loop, latest_mark_prices
 from backend.app.services.paper_broker import PaperBroker
 from backend.app.services.strategy_iteration import run_strategy_tournament
@@ -19,6 +20,7 @@ router = APIRouter()
 ROOT = Path(__file__).resolve().parents[3]
 POLICY_PATH = ROOT / "configs" / "trading_governor_policy.yaml"
 DATA_PATH = ROOT / "data" / "sample_prices.csv"
+MARKET_DATA_CONFIG_PATH = ROOT / "configs" / "market_data.yaml"
 QUEUE_PATH = ROOT / "runtime" / "approval_queue.sqlite3"
 PAPER_STATE_PATH = ROOT / "runtime" / "paper_portfolio.json"
 
@@ -32,6 +34,14 @@ def health() -> dict:
         "kill_switch_active": False,
         "refresh_interval_seconds": DEFAULT_REFRESH_INTERVAL_SECONDS,
     }
+
+
+def build_market_data_gateway() -> MarketDataGateway:
+    return MarketDataGateway(root=ROOT, config_path=MARKET_DATA_CONFIG_PATH)
+
+
+def resolve_market_data() -> MarketDataSnapshot:
+    return build_market_data_gateway().resolve_price_path()
 
 
 @router.get("/owner/summary")
@@ -57,7 +67,9 @@ def strategy_validate(payload: dict) -> dict:
 @router.post("/backtest/run")
 def backtest_run(payload: dict | None = None) -> dict:
     payload = payload or {}
-    metrics = run_buy_and_hold_fixture(DATA_PATH, initial_capital=float(payload.get("initial_capital", 10000)))
+    market_data = resolve_market_data()
+    metrics = run_buy_and_hold_fixture(market_data.price_path, initial_capital=float(payload.get("initial_capital", 10000)))
+    metrics["market_data"] = market_data.status
     return {"run_id": "fixture_bt_001", "metrics": metrics}
 
 
@@ -151,7 +163,8 @@ def agent_loop_status() -> dict:
 
 @router.get("/paper/portfolio")
 def paper_portfolio() -> dict:
-    return PaperBroker.load(PAPER_STATE_PATH).portfolio_snapshot(latest_mark_prices(DATA_PATH))
+    market_data = resolve_market_data()
+    return PaperBroker.load(PAPER_STATE_PATH).portfolio_snapshot(latest_mark_prices(market_data.price_path))
 
 
 @router.get("/paper/broker/status")
@@ -161,13 +174,32 @@ def paper_broker_status() -> dict:
 
 @router.post("/strategy/tournament/run")
 def strategy_tournament_run() -> dict:
-    return run_strategy_tournament(DATA_PATH)
+    return run_strategy_tournament(resolve_market_data().price_path)
+
+
+@router.get("/market-data/status")
+def market_data_status() -> dict:
+    return resolve_market_data().status
+
+
+@router.post("/market-data/refresh")
+def market_data_refresh() -> dict:
+    gateway = build_market_data_gateway()
+    try:
+        return gateway.refresh_public_stooq_cache()
+    except Exception as exc:
+        status = gateway.resolve_price_path(force_refresh=False).status
+        status["refresh_attempted"] = True
+        status["refresh_succeeded"] = False
+        status["refresh_error"] = str(exc)
+        return status
 
 
 @router.get("/dashboard/state")
 def dashboard_state() -> dict:
     return {
         "health": health(),
+        "market_data": market_data_status(),
         "owner_summary": owner_summary(),
         "agent_status": agent_status(),
         "paper_portfolio": paper_portfolio(),
@@ -221,6 +253,7 @@ def dashboard() -> str:
     </div>
     <div>
       <button onclick="runCycle()">运行模拟交易周期</button>
+      <button class="secondary" onclick="refreshMarketData()">刷新公共行情</button>
       <button class="secondary" onclick="loadState()">刷新</button>
     </div>
   </header>
@@ -233,6 +266,7 @@ def dashboard() -> str:
       <section><h2>模拟组合</h2><div id="portfolio"></div></section>
       <section><h2>智能体状态</h2><div id="agent"></div></section>
       <section><h2>模拟交易执行层</h2><div id="broker"></div></section>
+      <section><h2>行情数据</h2><div id="marketData"></div></section>
     </div>
     <section><h2>策略锦标赛</h2><div id="tournament"></div></section>
     <section><h2>审批队列</h2><div id="queue"></div></section>
@@ -293,6 +327,23 @@ def dashboard() -> str:
     const SIDE_TEXT = { buy: '买入', sell: '卖出' };
     const ORDER_TYPE_TEXT = { market: '市价单' };
     const TIME_IN_FORCE_TEXT = { day: '当日有效' };
+    const MARKET_DATA_PROVIDER_TEXT = {
+      cache_or_fixture: '本地缓存优先',
+      stooq: 'Stooq 公共延迟行情',
+      direct_file: '直接文件'
+    };
+    const MARKET_DATA_SOURCE_TEXT = {
+      public_cache: '公共延迟行情缓存',
+      local_cache: '本地行情缓存',
+      fixture: '样例数据',
+      local_file: '本地文件'
+    };
+    const DATA_QUALITY_TEXT = {
+      fresh: '新鲜',
+      stale: '过期',
+      sample: '样例',
+      missing: '缺失'
+    };
     const REASON_TEXT = {
       'pre-trade risk checks passed': '下单前风控检查通过',
       'kill switch active': '总开关已触发',
@@ -339,6 +390,15 @@ def dashboard() -> str:
       if (value === null || value === undefined || value === '') return '无';
       return REASON_TEXT[value] || '未知原因';
     }
+    function displayMarketDataProvider(value) {
+      return MARKET_DATA_PROVIDER_TEXT[value] || '未知行情源';
+    }
+    function displayMarketDataSource(value) {
+      return MARKET_DATA_SOURCE_TEXT[value] || '未知数据源';
+    }
+    function displayDataQuality(value) {
+      return DATA_QUALITY_TEXT[value] || '未知质量';
+    }
     function displayStrategyId(value) {
       if (!value) return '无';
       const raw = String(value);
@@ -372,9 +432,13 @@ def dashboard() -> str:
       const health = data.health || {};
       const agent = data.agent_status || {};
       const loop = agent.loop || {};
+      const marketData = data.market_data || {};
       document.getElementById('metrics').innerHTML = [
         metric('智能体', pill(displayStatus(agent.status), 'ok')),
         metric('循环', pill(displayStatus(loop.status, '未知'), loop.error_count ? 'danger' : 'ok')),
+        metric('行情源', displayMarketDataSource(marketData.source_kind)),
+        metric('行情质量', pill(displayDataQuality(marketData.data_quality), marketData.real_market_data ? 'ok' : 'warn')),
+        metric('最新行情日', displayValue(marketData.latest_date)),
         metric('模拟权益', Number(portfolio.total_equity || 0).toFixed(2)),
         metric('模拟交易数', portfolio.trade_count || 0),
         metric('有效候选单', queueSummary.fresh_pending_count || queue.count || 0),
@@ -395,6 +459,29 @@ def dashboard() -> str:
           ${metric('总权益', Number(portfolio.total_equity || 0).toFixed(2))}
         </div>
         <table><thead><tr><th>标的</th><th>数量</th><th>标记价</th><th>市值</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="muted">暂无模拟持仓</td></tr>'}</tbody></table>
+      `;
+    }
+    function renderMarketData(marketData) {
+      const latestPrices = marketData.latest_prices || {};
+      const priceRows = Object.entries(latestPrices).map(([symbol, price]) => `<tr><td>${symbol}</td><td>${price}</td></tr>`).join('');
+      const refreshStatus = marketData.refresh_attempted
+        ? (marketData.refresh_succeeded ? '刷新成功' : '刷新失败：公共行情源不可用，已回退到本地数据。')
+        : '尚未尝试刷新';
+      document.getElementById('marketData').innerHTML = `
+        <table>
+          <tbody>
+            <tr><th>提供方</th><td>${displayMarketDataProvider(marketData.provider)}</td></tr>
+            <tr><th>来源</th><td>${displayMarketDataSource(marketData.source_kind)}</td></tr>
+            <tr><th>质量</th><td>${pill(displayDataQuality(marketData.data_quality), marketData.real_market_data ? 'ok' : 'warn')}</td></tr>
+            <tr><th>真实市场数据</th><td>${displayBool(marketData.real_market_data)}</td></tr>
+            <tr><th>最新日期</th><td>${displayValue(marketData.latest_date)}</td></tr>
+            <tr><th>标的数量</th><td>${marketData.symbol_count || 0}</td></tr>
+            <tr><th>缓存年龄</th><td>${marketData.cache_age_seconds === null || marketData.cache_age_seconds === undefined ? '无缓存' : marketData.cache_age_seconds + ' 秒'}</td></tr>
+            <tr><th>价格文件</th><td>${displayValue(marketData.price_path)}</td></tr>
+            <tr><th>刷新状态</th><td>${refreshStatus}</td></tr>
+          </tbody>
+        </table>
+        <table><thead><tr><th>标的</th><th>最新收盘价</th></tr></thead><tbody>${priceRows || '<tr><td colspan="2" class="muted">暂无行情价格</td></tr>'}</tbody></table>
       `;
     }
     function renderAgent(agent) {
@@ -496,6 +583,7 @@ def dashboard() -> str:
         renderPortfolio(data.paper_portfolio || {});
         renderAgent(data.agent_status || {});
         renderBroker(data.paper_broker_status || {});
+        renderMarketData(data.market_data || {});
         renderTournament(data.strategy_tournament || {});
         renderQueue(data.approval_queue || {});
         document.getElementById('lastUpdated').textContent = '最近更新：' + new Date().toLocaleString('zh-CN');
@@ -505,6 +593,11 @@ def dashboard() -> str:
     }
     async function runCycle() {
       await fetch('/paper/run-once', { method: 'POST' });
+      await loadState();
+    }
+    async function refreshMarketData() {
+      document.getElementById('lastUpdated').textContent = '正在刷新公共行情...';
+      await fetch('/market-data/refresh', { method: 'POST' });
       await loadState();
     }
     async function ticketAction(ticketId, action) {

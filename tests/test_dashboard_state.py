@@ -6,16 +6,36 @@ from backend.app.services.display_locale import format_paper_cycle_summary_zh
 from backend.app.services.approval_queue import ApprovalQueue
 
 
+def _patch_fixture_market_data(monkeypatch, tmp_path):
+    config = tmp_path / "market_data.yaml"
+    config.write_text(
+        "\n".join(
+            [
+                'provider: "cache_or_fixture"',
+                'symbols: ["SPY", "QQQ", "TLT"]',
+                f'cache_path: "{tmp_path / "missing_market_cache.csv"}"',
+                'fixture_path: "data/sample_prices.csv"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(routes, "MARKET_DATA_CONFIG_PATH", config)
+
+
 def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, monkeypatch):
     monkeypatch.setattr(routes, "QUEUE_PATH", tmp_path / "approval_queue.sqlite3")
     monkeypatch.setattr(routes, "PAPER_STATE_PATH", tmp_path / "paper_portfolio.json")
     monkeypatch.setattr(routes, "DATA_PATH", Path("data/sample_prices.csv"))
+    _patch_fixture_market_data(monkeypatch, tmp_path)
 
     run_result = routes.paper_run_once()
     state = routes.dashboard_state()
 
     assert run_result["status"] == "completed"
+    assert run_result["market_data"]["source_kind"] in {"fixture", "public_cache", "local_cache"}
     assert state["health"]["refresh_interval_seconds"] == 300
+    assert state["market_data"]["latest_date"] is not None
+    assert state["market_data"]["real_market_data"] is False
     assert state["agent_status"]["status"] == "ready"
     assert state["paper_portfolio"]["trade_count"] == 1
     assert state["paper_broker_status"]["adapter_id"] == "local_sandbox_paper_broker"
@@ -82,6 +102,7 @@ def test_approval_queue_review_actions_are_exposed_to_dashboard_state(tmp_path, 
     monkeypatch.setattr(routes, "QUEUE_PATH", tmp_path / "approval_queue.sqlite3")
     monkeypatch.setattr(routes, "PAPER_STATE_PATH", tmp_path / "paper_portfolio.json")
     monkeypatch.setattr(routes, "DATA_PATH", Path("data/sample_prices.csv"))
+    _patch_fixture_market_data(monkeypatch, tmp_path)
 
     run_result = routes.paper_run_once()
     ticket_id = run_result["approval_queue"]["ticket"]["ticket_id"]
@@ -110,6 +131,12 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "策略锦标赛" in html
     assert "审批队列" in html
     assert "模拟交易执行层" in html
+    assert "行情数据" in html
+    assert "刷新公共行情" in html
+    assert "行情源" in html
+    assert "行情质量" in html
+    assert "真实市场数据" in html
+    assert "公共延迟行情缓存" in html
     assert "允许真实下单" in html
     assert "适配器" in html
     assert "本地沙盒模拟经纪商适配器" in html
@@ -140,12 +167,15 @@ def test_paper_cycle_summary_is_chinese_for_human_cli(tmp_path, monkeypatch):
     monkeypatch.setattr(routes, "QUEUE_PATH", tmp_path / "approval_queue.sqlite3")
     monkeypatch.setattr(routes, "PAPER_STATE_PATH", tmp_path / "paper_portfolio.json")
     monkeypatch.setattr(routes, "DATA_PATH", Path("data/sample_prices.csv"))
+    _patch_fixture_market_data(monkeypatch, tmp_path)
 
     result = routes.paper_run_once()
     summary = format_paper_cycle_summary_zh(result)
 
     assert "Alpha 模拟交易周期摘要" in summary
     assert "候选订单：" in summary
+    assert "行情数据：" in summary
+    assert "真实市场数据 否" in summary
     assert "风控：已通过风控，待人工确认（下单前风控检查通过）" in summary
     assert "执行层：本地沙盒模拟经纪商适配器" in summary
     assert "安全边界：本周期只执行模拟交易并生成待人工确认工单，不会提交真实资金订单。" in summary

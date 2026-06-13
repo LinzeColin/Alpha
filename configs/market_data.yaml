@@ -1,0 +1,10 @@
+provider: "cache_or_fixture"
+symbols:
+  - "SPY"
+  - "QQQ"
+  - "TLT"
+cache_path: "runtime/market_data/latest_prices.csv"
+fixture_path: "data/sample_prices.csv"
+max_cache_age_seconds: 86400
+network_timeout_seconds: 10
+stooq_base_url: "https://stooq.com/q/d/l/"

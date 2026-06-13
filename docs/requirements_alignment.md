@@ -10,6 +10,7 @@
 | Agent 自动生成 broker-ready order ticket | 已实现增强 MVP | `BrokerReadyOrderTicket` 包含 `expires_at`；控制台/API 标注有效与过期候选单 |
 | 每 5 分钟更新一次 | 已实现增强 MVP | 服务、`configs/agent_loop.yaml`、应用运行时、控制台 JS 刷新和候选单 TTL 均使用 `refresh_interval_seconds: 300` |
 | Web dashboard | 已实现增强 MVP | `/dashboard`、`/dashboard/state`、`/agent/loop/status`、`/paper/portfolio`、`/strategy/tournament/run`；队列表显示可操作性/时效性/剩余秒数、SQLite 存储状态，并提供中文复核、拒绝、导出操作；策略表显示样本外收益/命中率/验证窗口 |
+| Market data gateway | 已实现 MVP | `MarketDataGateway` 默认缓存优先，缺失时回退到样例数据；`/market-data/status` 和 dashboard 显示行情来源、质量、最新日期、最新价格；`/market-data/refresh` 可尝试刷新 Stooq 公共延迟行情缓存 |
 | Paper broker visibility | 已实现 MVP | `/paper/broker/status` 和 dashboard "模拟交易执行层" 显示 adapter、模式、连接、凭据要求、是否允许真实下单、最新模拟成交 |
 | 操作及时性和时间有效性 | 已实现增强 MVP | `ApprovalQueue.summary()` 只把未过期的待人工确认候选单计为用户可操作；过期候选单保留用于审计 |
 | 稳定 webpage 交互平台入口 | 已实现增强 MVP | AppleScript `Alpha.app` 已安装到 Downloads、用户 Applications 和系统 `/Applications`；命令入口保留用于兼容 |

@@ -11,6 +11,7 @@ from backend.app.services.audit import MemoryAuditSink
 from backend.app.services.backtest import load_price_fixture
 from backend.app.services.broker_paper_adapter import LocalSandboxPaperBrokerAdapter, PaperBrokerAdapter
 from backend.app.services.display_locale import format_paper_cycle_summary_zh
+from backend.app.services.market_data_gateway import MarketDataGateway, MarketDataSnapshot, utc_now_iso as market_data_utc_now_iso
 from backend.app.services.order_ticket import BrokerReadyOrderTicket, OrderIntent, utc_now_iso
 from backend.app.services.paper_broker import PaperBroker, PaperOrder
 from backend.app.services.policy import GovernorPolicy
@@ -31,6 +32,7 @@ class PaperTradingLoop:
         paper_broker: PaperBroker | None = None,
         paper_broker_adapter: PaperBrokerAdapter | None = None,
         paper_state_path: str | Path | None = None,
+        market_data_gateway: MarketDataGateway | None = None,
         audit_sink: MemoryAuditSink | None = None,
         refresh_interval_seconds: int = DEFAULT_REFRESH_INTERVAL_SECONDS,
     ) -> None:
@@ -40,13 +42,15 @@ class PaperTradingLoop:
         self.paper_state_path = Path(paper_state_path) if paper_state_path else None
         self.paper_broker = paper_broker or (PaperBroker.load(self.paper_state_path) if self.paper_state_path else PaperBroker())
         self.paper_broker_adapter = paper_broker_adapter or LocalSandboxPaperBrokerAdapter(self.paper_broker)
+        self.market_data_gateway = market_data_gateway
         self.audit_sink = audit_sink or MemoryAuditSink()
         self.refresh_interval_seconds = refresh_interval_seconds
 
     def run_once(self) -> dict:
         run_id = f"run_{uuid4().hex[:12]}"
-        tournament = run_strategy_tournament(self.price_path)
-        intent = self._generate_order_intent(run_id, tournament=tournament)
+        market_data = self._resolve_market_data()
+        tournament = run_strategy_tournament(market_data.price_path)
+        intent = self._generate_order_intent(run_id, tournament=tournament, price_path=market_data.price_path)
         risk_check = pre_trade_risk_check(intent.as_dict(), self.policy)
         ticket = BrokerReadyOrderTicket.from_intent(intent, risk_check).as_dict()
         queue_result = self.approval_queue.enqueue(ticket)
@@ -70,7 +74,7 @@ class PaperTradingLoop:
             if self.paper_state_path:
                 self.paper_broker.save(self.paper_state_path)
 
-        mark_prices = latest_mark_prices(self.price_path)
+        mark_prices = latest_mark_prices(market_data.price_path)
         portfolio = self.paper_broker.portfolio_snapshot(mark_prices)
 
         self.audit_sink.write(
@@ -84,6 +88,7 @@ class PaperTradingLoop:
                 "strategy_tournament": tournament,
                 "intent": intent.as_dict(),
                 "risk_check": risk_check,
+                "market_data": market_data.status,
                 "broker_paper_receipt": broker_paper_receipt,
                 "paper_result": paper_result,
                 "paper_portfolio": portfolio,
@@ -97,6 +102,7 @@ class PaperTradingLoop:
             "refresh_interval_seconds": self.refresh_interval_seconds,
             "next_refresh_in_seconds": self.refresh_interval_seconds,
             "intent": intent.as_dict(),
+            "market_data": market_data.status,
             "strategy_tournament": tournament,
             "risk_check": risk_check,
             "approval_queue": queue_result,
@@ -116,8 +122,8 @@ class PaperTradingLoop:
                 print(format_paper_cycle_summary_zh(result), flush=True)
             time.sleep(self.refresh_interval_seconds)
 
-    def _generate_order_intent(self, run_id: str, *, tournament: dict) -> OrderIntent:
-        df = load_price_fixture(self.price_path)
+    def _generate_order_intent(self, run_id: str, *, tournament: dict, price_path: str | Path | None = None) -> OrderIntent:
+        df = load_price_fixture(price_path or self.price_path)
         latest_prices = df.sort_values("date").groupby("symbol").tail(1).copy()
         max_notional = float(self.policy.data.get("risk_limits", {}).get("max_order_value_aud", 0))
         candidates = latest_prices[latest_prices["close"] <= max_notional].sort_values("close", ascending=False)
@@ -139,6 +145,11 @@ class PaperTradingLoop:
             ttl_seconds=self.refresh_interval_seconds,
         )
 
+    def _resolve_market_data(self) -> MarketDataSnapshot:
+        if self.market_data_gateway:
+            return self.market_data_gateway.resolve_price_path()
+        return _static_market_data_snapshot(self.price_path)
+
 
 def build_default_loop(
     queue_path: str | Path | None = None,
@@ -153,6 +164,7 @@ def build_default_loop(
         price_path=root / "data" / "sample_prices.csv",
         approval_queue=ApprovalQueue(queue_path or root / "runtime" / "approval_queue.sqlite3"),
         paper_state_path=state_path,
+        market_data_gateway=MarketDataGateway(root=root),
         refresh_interval_seconds=interval_seconds,
     )
 
@@ -161,6 +173,36 @@ def latest_mark_prices(price_path: str | Path) -> dict[str, float]:
     df = load_price_fixture(price_path)
     latest_prices = df.sort_values("date").groupby("symbol").tail(1)
     return {str(row["symbol"]): float(row["close"]) for _, row in latest_prices.iterrows()}
+
+
+def _static_market_data_snapshot(price_path: str | Path) -> MarketDataSnapshot:
+    path = Path(price_path)
+    df = load_price_fixture(path)
+    latest = df.sort_values("date").groupby("symbol").tail(1)
+    latest_prices = {str(row["symbol"]): round(float(row["close"]), 4) for _, row in latest.iterrows()}
+    latest_date = latest["date"].max()
+    status = {
+        "provider": "direct_file",
+        "source_kind": "local_file",
+        "data_quality": "sample",
+        "real_market_data": False,
+        "price_path": str(path),
+        "cache_path": None,
+        "fixture_path": str(path),
+        "cache_exists": False,
+        "cache_age_seconds": None,
+        "max_cache_age_seconds": None,
+        "symbols": sorted(str(symbol) for symbol in df["symbol"].unique()),
+        "symbol_count": int(df["symbol"].nunique()),
+        "row_count": int(len(df)),
+        "latest_date": latest_date.date().isoformat() if hasattr(latest_date, "date") else str(latest_date),
+        "latest_prices": latest_prices,
+        "refresh_attempted": False,
+        "refresh_succeeded": False,
+        "refresh_error": None,
+        "generated_at": market_data_utc_now_iso(),
+    }
+    return MarketDataSnapshot(price_path=path, status=status)
 
 
 def main() -> None:
