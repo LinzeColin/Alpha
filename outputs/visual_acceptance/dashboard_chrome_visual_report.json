@@ -1,5 +1,5 @@
 {
-  "base_url": "http://127.0.0.1:8135",
+  "base_url": "http://127.0.0.1:8000",
   "checked_viewport_count": 2,
   "chrome_path": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
   "error_count": 0,
@@ -11,6 +11,7 @@
   "viewports": [
     {
       "chrome_timeout_recovered": true,
+      "dom_fallback_used": false,
       "dom_path": "outputs/visual_acceptance/dashboard_desktop.html",
       "dom_timeout_recovered": true,
       "error_count": 0,
@@ -20,19 +21,20 @@
         "bit_depth": 8,
         "channels": 3,
         "color_type": 2,
-        "file_size_bytes": 196433,
+        "file_size_bytes": 198286,
         "height": 1000,
-        "unique_sample_count": 224,
+        "unique_sample_count": 221,
         "width": 1440
       },
       "screenshot_path": "outputs/visual_acceptance/dashboard_desktop.png",
       "screenshot_timeout_recovered": true,
       "viewport": "desktop",
-      "visible_text_character_count": 9825,
+      "visible_text_character_count": 9780,
       "width": 1440
     },
     {
       "chrome_timeout_recovered": true,
+      "dom_fallback_used": false,
       "dom_path": "outputs/visual_acceptance/dashboard_mobile.html",
       "dom_timeout_recovered": true,
       "error_count": 0,
@@ -42,15 +44,15 @@
         "bit_depth": 8,
         "channels": 3,
         "color_type": 2,
-        "file_size_bytes": 71023,
+        "file_size_bytes": 70705,
         "height": 844,
-        "unique_sample_count": 360,
+        "unique_sample_count": 351,
         "width": 390
       },
       "screenshot_path": "outputs/visual_acceptance/dashboard_mobile.png",
       "screenshot_timeout_recovered": true,
       "viewport": "mobile",
-      "visible_text_character_count": 9824,
+      "visible_text_character_count": 9782,
       "width": 390
     }
   ]
