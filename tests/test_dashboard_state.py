@@ -286,6 +286,10 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "待人工确认" in html
     assert "最近更新：" in html
     assert "function displayTime" in html
+    assert ".header-actions { display: flex; flex-wrap: wrap;" in html
+    assert "@media (max-width: 720px)" in html
+    assert "section { background: #ffffff; border: 1px solid #d8ddd2; border-radius: 8px; padding: 16px; min-width: 0; overflow-x: auto;" in html
+    assert "table { width: 100%; min-width: 620px;" in html
     assert "总体状态" in html
     assert "安全边界" in html
     assert "检查项" in html

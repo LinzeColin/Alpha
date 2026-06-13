@@ -53,6 +53,19 @@ REQUIRED_DASHBOARD_ENDPOINT_REFERENCES = [
     "/broker-ticket.csv",
 ]
 
+REQUIRED_LAYOUT_CONTRACTS = [
+    ("全局盒模型", "* { box-sizing: border-box;"),
+    ("页面禁止整体横向溢出", "overflow-x: hidden;"),
+    ("顶部栏允许换行", "flex-wrap: wrap;"),
+    ("按钮组可换行", ".header-actions { display: flex; flex-wrap: wrap;"),
+    ("卡片局部横向滚动", "section { background: #ffffff; border: 1px solid #d8ddd2; border-radius: 8px; padding: 16px; min-width: 0; overflow-x: auto;"),
+    ("宽表格稳定最小宽度", "table { width: 100%; min-width: 620px;"),
+    ("表格单元格允许断词", "overflow-wrap: anywhere;"),
+    ("移动端断点", "@media (max-width: 720px)"),
+    ("移动端单列内容网格", ".grid-two { grid-template-columns: minmax(0, 1fr);"),
+    ("移动端按钮可伸缩", ".header-actions button { flex: 1 1 140px;"),
+]
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="验证 Alpha 控制台 HTTP 中文显示和安全边界。")
@@ -94,6 +107,7 @@ def main() -> int:
         "status_zh": "通过" if not errors else "失败",
         "checked_dashboard_text_count": len(REQUIRED_DASHBOARD_TEXT),
         "checked_endpoint_reference_count": len(REQUIRED_DASHBOARD_ENDPOINT_REFERENCES),
+        "checked_layout_contract_count": len(REQUIRED_LAYOUT_CONTRACTS),
         "checked_state_field_count": len(REQUIRED_STATE_FIELDS),
         "exercised_action_count": len(action_results),
         "error_count": len(errors),
@@ -122,6 +136,9 @@ def validate_dashboard_payloads(*, health: dict, dashboard_html: str, state: dic
     for endpoint in REQUIRED_DASHBOARD_ENDPOINT_REFERENCES:
         if endpoint not in dashboard_html:
             errors.append(f"控制台缺少交互端点引用：{endpoint}")
+    for label, css in REQUIRED_LAYOUT_CONTRACTS:
+        if css not in dashboard_html:
+            errors.append(f"控制台缺少布局规则：{label}")
 
     refresh_interval = health.get("refresh_interval_seconds")
     if refresh_interval != 300:

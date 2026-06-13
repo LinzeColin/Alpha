@@ -8,7 +8,11 @@ def test_dashboard_http_smoke_validation_accepts_chinese_safe_payloads():
             "Alpha 控制台 运行模拟交易周期 生成运行备份 刷新公共行情 系统快照 长运行预检 长运行历史 "
             "审批队列 富途牛牛开放网关（只读） /dashboard/state /paper/run-once /ops/backup "
             "/market-data/refresh /orders/approval-queue/ owner-review reject mark-exported "
-            "/broker-ticket/view /broker-ticket.csv"
+            "/broker-ticket/view /broker-ticket.csv * { box-sizing: border-box; overflow-x: hidden; "
+            "flex-wrap: wrap; .header-actions { display: flex; flex-wrap: wrap; "
+            "section { background: #ffffff; border: 1px solid #d8ddd2; border-radius: 8px; padding: 16px; min-width: 0; overflow-x: auto; "
+            "table { width: 100%; min-width: 620px; overflow-wrap: anywhere; @media (max-width: 720px) "
+            ".grid-two { grid-template-columns: minmax(0, 1fr); .header-actions button { flex: 1 1 140px;"
         ),
         state={
             "health": {"status_zh": "正常"},
@@ -67,6 +71,7 @@ def test_dashboard_http_smoke_validation_rejects_english_and_live_order_paths():
 
     assert any("旧英文文案" in error for error in errors)
     assert any("模拟经纪商状态没有明确禁用真实下单" in error for error in errors)
+    assert any("布局规则" in error for error in errors)
 
 
 def test_dashboard_http_smoke_validation_accepts_safe_action_results():

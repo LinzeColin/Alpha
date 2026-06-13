@@ -17,7 +17,7 @@
 | 模拟执行层可见性 | 已实现增强 MVP | `/paper/broker/status` 和控制台“模拟交易执行层”显示适配器、模式、连接、凭据要求、是否允许真实下单、执行模型、模拟滑点、单笔佣金、累计佣金、最新模拟成交和最近成交成本。 |
 | 富途牛牛开放网关本机集成 | 已实现只读行情 MVP | `/broker/moomoo/status`、`/broker/moomoo/quote-snapshot` 和控制台“富途牛牛开放网关（只读）”显示 Python 接口包、软件开发包可导入、开放网关本机端口、只读就绪、只读行情快照、交易解锁、真实下单禁用和禁止操作；当前不读取交易凭据、不创建交易上下文、不解锁交易、不调用真实下单。 |
 | 操作及时性和时间有效性 | 已实现增强 MVP | `ApprovalQueue.summary()` 只把未过期的待人工确认候选单计为用户可操作；后端拒绝复核/导出过期工单；过期候选单保留用于审计。 |
-| 稳定网页交互平台入口 | 已实现增强 MVP | AppleScript `Alpha.app` 已安装到 Downloads、用户 Applications 和系统 `/Applications`；命令入口保留用于兼容；`scripts/verify_dashboard_http_smoke.py --exercise-actions` 会通过 HTTP 检查 `/health`、`/dashboard` 和 `/dashboard/state` 的中文文案、关键状态和真实下单禁用边界，并安全调用模拟交易周期与运行备份端点。 |
+| 稳定网页交互平台入口 | 已实现增强 MVP | AppleScript `Alpha.app` 已安装到 Downloads、用户 Applications 和系统 `/Applications`；命令入口保留用于兼容；`scripts/verify_dashboard_http_smoke.py --exercise-actions` 会通过 HTTP 检查 `/health`、`/dashboard` 和 `/dashboard/state` 的中文文案、关键状态、响应式布局契约和真实下单禁用边界，并安全调用模拟交易周期与运行备份端点。 |
 | 全中文显示 | 已实现增强 MVP | 控制台标题、按钮、指标、表格、空状态、状态映射、启动/停止脚本提示、命令行摘要、策略迭代历史、策略锦标赛候选、模拟经纪商状态/回执、模拟绩效、风险原因、中文工单导出表、FastAPI 元信息、HTTP 错误说明、所有者摘要、审批队列时效/存储状态和富途牛牛下一步提示均提供中文展示；API 机器字段和值保持稳定，所有者可见字段补 `*_zh`；`scripts/verify_chinese_display.py` 和 `scripts/verify_dashboard_http_smoke.py` 作为中文显示审计门槛。 |
 | 策略迭代 | 已实现增强 MVP | `run_strategy_tournament()` 使用 walk-forward 样本外收益、命中率、验证窗口和可交易选择对 momentum 候选排序；每次模拟交易周期持久化 `runtime/strategy_tournament_history.jsonl` 并显示策略稳定度。 |
 | `live_trading.enabled:true` | 已拒绝 | 提交默认值必须保持禁用。 |

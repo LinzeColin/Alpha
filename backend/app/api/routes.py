@@ -402,16 +402,19 @@ def dashboard() -> str:
   <title>Alpha 控制台</title>
   <style>
     :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    body { margin: 0; background: #f5f6f3; color: #1d1f21; }
-    header { padding: 18px 28px; border-bottom: 1px solid #d8ddd2; background: #ffffff; display: flex; justify-content: space-between; gap: 16px; align-items: center; position: sticky; top: 0; z-index: 2; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f5f6f3; color: #1d1f21; overflow-x: hidden; }
+    header { padding: 18px 28px; border-bottom: 1px solid #d8ddd2; background: #ffffff; display: flex; justify-content: space-between; gap: 16px; align-items: center; position: sticky; top: 0; z-index: 2; flex-wrap: wrap; }
+    .header-title { min-width: 220px; }
+    .header-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
     h1 { margin: 0; font-size: 22px; font-weight: 750; }
     h2 { margin: 0 0 12px; font-size: 15px; }
     main { padding: 20px 28px 28px; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
-    section { background: #ffffff; border: 1px solid #d8ddd2; border-radius: 8px; padding: 16px; }
-    button { border: 1px solid #1d1f21; background: #1d1f21; color: #fff; border-radius: 6px; padding: 9px 12px; cursor: pointer; font-weight: 650; }
+    section { background: #ffffff; border: 1px solid #d8ddd2; border-radius: 8px; padding: 16px; min-width: 0; overflow-x: auto; }
+    button { border: 1px solid #1d1f21; background: #1d1f21; color: #fff; border-radius: 6px; padding: 9px 12px; cursor: pointer; font-weight: 650; min-height: 38px; max-width: 100%; }
     button.secondary { background: #fff; color: #1d1f21; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th, td { padding: 9px 8px; border-bottom: 1px solid #eceee8; text-align: left; vertical-align: top; }
+    table { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 9px 8px; border-bottom: 1px solid #eceee8; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
     th { color: #5c6258; font-size: 12px; letter-spacing: 0; }
     pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.45; margin: 0; }
     .status { font-size: 13px; color: #555; }
@@ -425,15 +428,26 @@ def dashboard() -> str:
     .danger { background: #fde7e7; color: #9b1c1c; }
     .grid-two { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
     .muted { color: #6a7166; }
+    @media (max-width: 720px) {
+      header { padding: 14px; align-items: stretch; }
+      .header-title { width: 100%; min-width: 0; }
+      .header-actions { width: 100%; justify-content: stretch; }
+      .header-actions button { flex: 1 1 140px; }
+      main { padding: 12px; gap: 12px; }
+      section { padding: 12px; }
+      .grid-two { grid-template-columns: minmax(0, 1fr); }
+      .metric-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+      .metric .value { font-size: 18px; line-height: 1.25; }
+    }
   </style>
 </head>
 <body>
   <header>
-    <div>
+    <div class="header-title">
       <h1>Alpha 控制台</h1>
       <div class="status" id="lastUpdated">正在加载</div>
     </div>
-    <div>
+    <div class="header-actions">
       <button onclick="runCycle()">运行模拟交易周期</button>
       <button class="secondary" onclick="backupRuntime()">生成运行备份</button>
       <button class="secondary" onclick="refreshMarketData()">刷新公共行情</button>
