@@ -22,6 +22,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - Dashboard startup now starts the app-managed `AutoPaperAgentRuntime`: one immediate paper cycle, then 300-second refreshes.
 - `/agent/loop/status` exposes automatic loop state, run count, last result summary, next run time, and errors.
 - `scripts/start_alpha_dashboard.sh` now performs a startup health check and removes stale pid files on failure.
+- Approval queue now derives ticket freshness from `expires_at`; only fresh `pending_owner_approval` tickets count as owner-actionable.
 - GitHub connector backup now contains the core runtime/dashboard/code/test changes from this run.
 - Repo launcher exists at `outputs/applications/Alpha.command`; an older external copy was observed at `/Users/linzezhang/Downloads/applicatioins/Alpha.command`.
 
@@ -69,6 +70,7 @@ scripts/start_alpha_dashboard.sh -> starts the local dashboard, app-managed pape
 scripts/stop_alpha_dashboard.sh -> waits for uvicorn shutdown and releases port 8000 cleanly
 uvicorn foreground runtime check -> /agent/loop/status showed enabled=true, task_running=true, interval_seconds=300, run_count=1, next_run_at populated, error_count=0
 Browser visual verification -> unavailable in current Codex Browser plugin session; API/HTML smoke used as fallback
+freshness validation -> pytest 20 passed; isolated paper loop generated ticket.expires_at matching intent.expires_at
 Dashboard HTML/API fallback -> contains System Snapshot, Paper Portfolio, Strategy Tournament, Approval Queue, Run Paper Cycle, and 300000ms refresh
 Repo launcher -> outputs/applications/Alpha.command exists and is executable
 External legacy launcher observed -> /Users/linzezhang/Downloads/applicatioins/Alpha.command exists and is executable
