@@ -183,3 +183,27 @@ Decision: Moomoo OpenD 集成第一阶段只做本机只读探测，检查 Pytho
 Reason: 用户已在本机安装 Moomoo、Moomoo OpenD 和 API；Alpha 需要把这个环境纳入 dashboard 可观测性。但在没有完成账户读取、paper API 边界、权限分离和长运行验证之前，不能把真实 broker 接入 agent 自动执行链路。
 
 Consequence: `/broker/moomoo/status` 和 dashboard “Moomoo OpenD”面板显示 API 包、OpenD 连接、只读就绪、交易解锁、真实下单禁用、安全操作和禁止操作。该探测层不读取交易凭据，不调用 `place_order`，也不改变 committed 默认真实下单禁用边界。
+
+## 2026-06-13: Moomoo Quote Snapshot Is Read-Only
+
+Decision: Moomoo SDK 接入可以使用 `OpenQuoteContext` 读取市场快照，但不得创建交易上下文、不得解锁交易、不得调用真实下单方法。
+
+Reason: 用户已安装 Moomoo OpenD 和 API，Alpha 需要验证本机 broker data path 是否可用；只读行情快照能提高 dashboard 真实性，同时不跨过人工 broker 确认边界。
+
+Consequence: `/broker/moomoo/quote-snapshot` 和 dashboard Moomoo 面板显示只读行情状态与最近价；SDK 日志 HOME 固定到项目 `runtime/moomoo_api_home`，避免写入用户真实主目录。返回结构显式包含 `trade_context_enabled=false` 和 `live_order_submission_enabled=false`。
+
+## 2026-06-13: Long-Run Soak Readiness Is A Start Gate
+
+Decision: Alpha must expose a dedicated local long-run soak preflight before claiming the system is ready to start a 30-day unattended paper-trading run.
+
+Reason: `/readiness/paper-trading` proves the paper-trading delivery chain, while `/ops/health` proves operational health. The owner still needs one launch-focused surface that answers whether the local App entry, automatic loop, fresh broker-ready ticket, maintenance task, backup/recovery evidence, and safety boundary are all ready to begin a long-running soak.
+
+Consequence: `/readiness/soak`, dashboard “长运行预检”, `scripts/check_alpha_soak.sh`, and `python -m backend.app.services.soak_readiness` now produce a Chinese 30-day soak preflight report. This report is a start gate only; it does not mean Alpha has already completed a 30-day run.
+
+## 2026-06-13: Moomoo Quote Snapshot Is Read-Only
+
+Decision: Moomoo OpenD market snapshots may be exposed only through a read-only quote context and must never create a trade context.
+
+Reason: The dashboard needs fresher local broker-adjacent market visibility, but broker integration must preserve the manual execution boundary and avoid credential or trade unlock paths.
+
+Consequence: `/broker/moomoo/quote-snapshot` and dashboard “只读行情快照” show market snapshot rows only after the read-only probe is ready. The response always records `trade_context_enabled: false` and `live_order_submission_enabled: false`, and forbidden operations include creating a trade context, unlocking trading, and submitting real-money orders.

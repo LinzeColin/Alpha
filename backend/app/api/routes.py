@@ -17,13 +17,14 @@ from backend.app.services.display_locale import zh_owner_action, zh_reason, zh_s
 from backend.app.services.policy import GovernorPolicy
 from backend.app.services.live_broker import FailClosedLiveBroker, LiveOrderIntent
 from backend.app.services.market_data_gateway import MarketDataGateway, MarketDataSnapshot
-from backend.app.services.moomoo_broker_probe import probe_moomoo_opend
+from backend.app.services.moomoo_broker_probe import probe_moomoo_opend, probe_moomoo_quote_snapshot
 from backend.app.services.ops_health import collect_ops_health, create_runtime_backup
 from backend.app.services.ops_runtime import AUTO_OPS_MAINTENANCE
 from backend.app.services.paper_readiness import collect_paper_trading_readiness
 from backend.app.services.paper_trading_loop import DEFAULT_REFRESH_INTERVAL_SECONDS, build_default_loop, latest_mark_prices
 from backend.app.services.paper_broker import PaperBroker
 from backend.app.services.paper_performance import summarize_paper_performance_history
+from backend.app.services.soak_readiness import collect_soak_readiness
 from backend.app.services.strategy_journal import summarize_strategy_tournament_history
 from backend.app.services.strategy_iteration import run_strategy_tournament
 
@@ -247,6 +248,11 @@ def moomoo_broker_status() -> dict:
     return probe_moomoo_opend()
 
 
+@router.get("/broker/moomoo/quote-snapshot")
+def moomoo_quote_snapshot() -> dict:
+    return probe_moomoo_quote_snapshot()
+
+
 @router.post("/strategy/tournament/run")
 def strategy_tournament_run() -> dict:
     return run_strategy_tournament(resolve_market_data().price_path)
@@ -320,6 +326,16 @@ def paper_trading_readiness() -> dict:
     )
 
 
+@router.get("/readiness/soak")
+def soak_readiness() -> dict:
+    return collect_soak_readiness(
+        root=ROOT,
+        ops_health_report=ops_health(),
+        paper_readiness_report=paper_trading_readiness(),
+        maintenance_snapshot=AUTO_OPS_MAINTENANCE.snapshot(),
+    )
+
+
 @router.get("/dashboard/state")
 def dashboard_state() -> dict:
     return {
@@ -328,12 +344,14 @@ def dashboard_state() -> dict:
         "ops_health": ops_health(),
         "ops_maintenance": ops_maintenance_status(),
         "paper_readiness": paper_trading_readiness(),
+        "soak_readiness": soak_readiness(),
         "owner_summary": owner_summary(),
         "agent_status": agent_status(),
         "paper_portfolio": paper_portfolio(),
         "paper_performance": paper_performance_history(),
         "paper_broker_status": paper_broker_status(),
         "moomoo_broker_status": moomoo_broker_status(),
+        "moomoo_quote_snapshot": moomoo_quote_snapshot(),
         "strategy_tournament": strategy_tournament_run(),
         "strategy_journal": strategy_tournament_history(),
         "approval_queue": approval_queue(),
@@ -403,6 +421,7 @@ def dashboard() -> str:
       <section><h2>行情数据</h2><div id="marketData"></div></section>
       <section><h2>运行健康</h2><div id="opsHealth"></div></section>
       <section><h2>交付就绪</h2><div id="paperReadiness"></div></section>
+      <section><h2>长运行预检</h2><div id="soakReadiness"></div></section>
     </div>
     <section><h2>策略锦标赛</h2><div id="tournament"></div></section>
     <section><h2>审批队列</h2><div id="queue"></div></section>
@@ -595,6 +614,8 @@ def dashboard() -> str:
       const opsHealth = data.ops_health || {};
       const opsMaintenance = data.ops_maintenance || {};
       const paperReadiness = data.paper_readiness || {};
+      const soakReadiness = data.soak_readiness || {};
+      const moomooQuote = data.moomoo_quote_snapshot || {};
       const strategyJournal = data.strategy_journal || {};
       const paperPerformance = data.paper_performance || {};
       document.getElementById('metrics').innerHTML = [
@@ -602,9 +623,11 @@ def dashboard() -> str:
         metric('循环', pill(displayStatus(loop.status, '未知'), loop.error_count ? 'danger' : 'ok')),
         metric('运行健康', pill(displayStatus(opsHealth.overall_status, '未知'), opsHealth.fail_count ? 'danger' : (opsHealth.warn_count ? 'warn' : 'ok'))),
         metric('交付就绪', pill(paperReadiness.overall_status_zh || displayStatus(paperReadiness.overall_status, '未知'), paperReadiness.fail_count ? 'danger' : (paperReadiness.warn_count ? 'warn' : 'ok'))),
+        metric('长运行预检', pill(soakReadiness.overall_status_zh || displayStatus(soakReadiness.overall_status, '未知'), soakReadiness.fail_count ? 'danger' : (soakReadiness.warn_count ? 'warn' : 'ok'))),
         metric('自动维护', pill(displayStatus(opsMaintenance.status, '未知'), opsMaintenance.error_count ? 'danger' : (opsMaintenance.task_running ? 'ok' : 'warn'))),
         metric('行情源', displayMarketDataSource(marketData.source_kind)),
         metric('Moomoo OpenD', pill(moomoo.status_zh || displayStatus(moomoo.status, '未知'), moomoo.read_only_ready ? 'ok' : 'warn')),
+        metric('Moomoo 行情', pill(moomooQuote.status_zh || displayStatus(moomooQuote.status, '未知'), moomooQuote.status === 'ready' ? 'ok' : 'warn')),
         metric('行情质量', pill(displayDataQuality(marketData.data_quality), marketData.real_market_data ? 'ok' : 'warn')),
         metric('最新行情日', displayValue(marketData.latest_date)),
         metric('模拟权益', Number(portfolio.total_equity || 0).toFixed(2)),
@@ -707,6 +730,29 @@ def dashboard() -> str:
         <table><thead><tr><th>交付项</th><th>状态</th><th>证据说明</th></tr></thead><tbody>${rows || '<tr><td colspan="3" class="muted">暂无就绪检查结果</td></tr>'}</tbody></table>
       `;
     }
+    function renderSoakReadiness(readiness) {
+      const checks = readiness.checks || [];
+      const rows = checks.map(check => {
+        const kind = check.status === 'fail' ? 'danger' : (check.status === 'warn' ? 'warn' : 'ok');
+        return `<tr><td>${check.title_zh || '未知预检'}</td><td>${pill(check.status_zh || displayStatus(check.status), kind)}</td><td>${check.message_zh || ''}</td></tr>`;
+      }).join('');
+      document.getElementById('soakReadiness').innerHTML = `
+        <div class="metric-grid">
+          ${metric('总体状态', pill(readiness.overall_status_zh || displayStatus(readiness.overall_status), readiness.fail_count ? 'danger' : (readiness.warn_count ? 'warn' : 'ok')))}
+          ${metric('目标周期', readiness.target_days_zh || '30 天')}
+          ${metric('通过', readiness.pass_count || 0)}
+          ${metric('需关注', readiness.warn_count || 0)}
+          ${metric('失败', readiness.fail_count || 0)}
+        </div>
+        <table>
+          <tbody>
+            <tr><th>结论</th><td>${readiness.summary_zh || '无'}</td></tr>
+            <tr><th>安全边界</th><td>${displayValue(readiness.safety_boundary && readiness.safety_boundary.message_zh)}</td></tr>
+          </tbody>
+        </table>
+        <table><thead><tr><th>预检项</th><th>状态</th><th>说明</th></tr></thead><tbody>${rows || '<tr><td colspan="3" class="muted">暂无长运行预检结果</td></tr>'}</tbody></table>
+      `;
+    }
     function renderOpsMaintenance(opsMaintenance) {
       const summary = opsMaintenance.last_result_summary || {};
       const kind = opsMaintenance.error_count ? 'danger' : (opsMaintenance.task_running ? 'ok' : 'warn');
@@ -803,10 +849,13 @@ def dashboard() -> str:
         </table>
       `;
     }
-    function renderMoomooBroker(status) {
+    function renderMoomooBroker(status, quoteSnapshot) {
       const packageInfo = status.package || {};
       const connection = status.opend_connection || {};
       const kind = status.read_only_ready ? 'ok' : 'warn';
+      const quotes = quoteSnapshot.quotes || [];
+      const quoteRows = quotes.map(quote => `<tr><td>${displayValue(quote.code)}</td><td>${displayValue(quote.name)}</td><td>${displayValue(quote.last_price)}</td><td>${displayValue(quote.update_time)}</td></tr>`).join('');
+      const quoteKind = quoteSnapshot.status === 'ready' ? 'ok' : 'warn';
       document.getElementById('moomooBroker').innerHTML = `
         <table>
           <tbody>
@@ -816,7 +865,8 @@ def dashboard() -> str:
             <tr><th>下一步</th><td>${status.next_step_zh || '暂无'}</td></tr>
             <tr><th>OpenD 地址</th><td>${displayValue(status.host)}:${displayValue(status.port)}</td></tr>
             <tr><th>OpenD 连接</th><td>${status.opend_connected_zh || displayBool(status.opend_connected)}</td></tr>
-            <tr><th>API 包</th><td>${status.package_available_zh || displayBool(status.package_available)} / ${displayValue(packageInfo.import_name, '未发现')} / ${displayValue(packageInfo.version, '未知版本')}</td></tr>
+            <tr><th>API 包</th><td>${status.package_installed_zh || displayBool(status.package_installed)} / ${displayValue(packageInfo.import_name, '未发现')} / ${displayValue(packageInfo.version, '未知版本')}</td></tr>
+            <tr><th>SDK 可导入</th><td>${status.package_importable_zh || displayBool(status.package_importable)}</td></tr>
             <tr><th>只读就绪</th><td>${status.read_only_ready_zh || displayBool(status.read_only_ready)}</td></tr>
             <tr><th>探测需凭据</th><td>${status.credential_required_for_probe_zh || displayBool(status.credential_required_for_probe)}</td></tr>
             <tr><th>交易解锁</th><td>${status.trade_unlock_required_zh || displayBool(status.trade_unlock_required)}</td></tr>
@@ -825,6 +875,10 @@ def dashboard() -> str:
             <tr><th>禁止操作</th><td>${(status.forbidden_operations_zh || []).join('，') || '无'}</td></tr>
             <tr><th>连接错误</th><td>${connection.error_zh || '无'}</td></tr>
           </tbody>
+        </table>
+        <table>
+          <thead><tr><th colspan="4">只读行情快照 ${pill(quoteSnapshot.status_zh || displayStatus(quoteSnapshot.status, '未知'), quoteKind)}</th></tr></thead>
+          <tbody>${quoteRows || `<tr><td colspan="4">${quoteSnapshot.message_zh || '暂无行情快照'}</td></tr>`}</tbody>
         </table>
       `;
     }
@@ -910,10 +964,11 @@ def dashboard() -> str:
         renderPaperPerformance(data.paper_performance || {});
         renderAgent(data.agent_status || {});
         renderBroker(data.paper_broker_status || {});
-        renderMoomooBroker(data.moomoo_broker_status || {});
+        renderMoomooBroker(data.moomoo_broker_status || {}, data.moomoo_quote_snapshot || {});
         renderMarketData(data.market_data || {});
         renderOpsHealth(data.ops_health || {});
         renderPaperReadiness(data.paper_readiness || {});
+        renderSoakReadiness(data.soak_readiness || {});
         document.getElementById('opsHealth').insertAdjacentHTML('beforeend', renderOpsMaintenance(data.ops_maintenance || {}));
         renderTournament(data.strategy_tournament || {});
         document.getElementById('tournament').insertAdjacentHTML('beforeend', renderStrategyJournal(data.strategy_journal || {}));

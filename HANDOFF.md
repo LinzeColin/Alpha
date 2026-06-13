@@ -37,6 +37,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - Paper trading execution now flows through `LocalSandboxPaperBrokerAdapter`, which returns broker-like paper receipts without credentials or real order submission.
 - `/paper/broker/status` and the dashboard "模拟交易执行层" section expose paper adapter status, mode, connection, credential requirement, live-order disabled state, trade count, and latest simulated fill.
 - `/broker/moomoo/status` and the dashboard "Moomoo OpenD" section now expose local Moomoo OpenD read-only probe status: Python API package availability, local OpenD port, read-only readiness, trade unlock disabled state, and real-order submission disabled state.
+- `/broker/moomoo/quote-snapshot` and dashboard "只读行情快照" now expose read-only Moomoo market snapshots when the read-only probe is ready; this path records `trade_context_enabled: false` and `live_order_submission_enabled: false`.
 - Approval queue now has owner-facing review transitions: `owner_reviewed`, `owner_rejected`, and `broker_ticket_exported`, exposed through API routes and Chinese dashboard buttons.
 - Approval queue export is non-executing: export requires prior owner review and records `live_order_submission_enabled: false`; risk-blocked tickets cannot be reviewed/exported.
 - Broker-ready order tickets now have manual-only JSON/CSV export packages at `/orders/approval-queue/{ticket_id}/broker-ticket` and `/broker-ticket.csv`, plus a Chinese owner-facing HTML view at `/broker-ticket/view`.
@@ -51,6 +52,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - Dashboard startup now also starts the app-managed `AutoOpsMaintenanceRuntime`: health sampling every 300 seconds, stale-backup creation, backup rotation, and JSONL health history.
 - `/ops/maintenance/status` exposes automatic maintenance state, run count, backup count, next maintenance time, history file, retention config, and Chinese display fields.
 - `/readiness/paper-trading`, dashboard "交付就绪", and `python -m backend.app.services.paper_readiness` now expose a 6月20日 paper-trading delivery readiness report covering automatic loop, strategy iteration, paper execution, OrderIntent, risk checks, approval queue, broker-ready ticket, five-minute freshness, local App entry, and real-order boundary.
+- `/readiness/soak`, dashboard "长运行预检", `scripts/check_alpha_soak.sh`, and `python -m backend.app.services.soak_readiness` now expose a 30-day local soak start-gate report covering App entries, paper readiness, 5-minute loop, fresh broker-ready tickets, ops health, automatic maintenance, recovery backup, and live-order boundary.
 - Owner-facing API/status surfaces now include non-breaking Chinese display fields such as `status_zh`, `reason_zh`, `enabled_zh`, and `task_running_zh`; raw machine fields remain stable.
 - Chinese display coverage includes FastAPI/OpenAPI metadata, owner summary actions, approval queue storage/freshness/actionability, HTTP error detail, and Moomoo OpenD next-step guidance.
 - `AGENTS.md` now records the product rule: user-visible dashboard, App/script output, statuses, risk reasons, and owner-facing messages must default to Chinese.
@@ -69,12 +71,14 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - User-visible runtime surfaces must display Chinese; API field names, enum values, ticket IDs, paths, and symbols stay machine-readable and stable.
 - Owner-facing API errors must return a stable machine `code` plus Chinese `message_zh`.
 - Paper-trading delivery readiness is a separate gate from ops health; do not claim June 20 readiness unless `/readiness/paper-trading` has no failing items under the app-managed runtime.
+- Long-run soak readiness is a start gate, not proof that Alpha has already completed a 30-day run.
 - If a raw machine value must be shown to the owner, show it with a Chinese label or adjacent Chinese explanation.
 - Paper execution adapters may be broker-like, but committed defaults must stay local sandbox or broker paper/read-only only.
 - Dashboard approval actions update local ticket state only; they do not call any real broker order endpoint.
 - Default durable runtime state is local-first: SQLite approval queue plus JSON paper portfolio.
 - Raw JSON/CSV broker-ticket outputs remain available for automation and manual broker import, but the default dashboard owner view must be Chinese HTML.
 - Moomoo OpenD integration starts as a read-only environment probe only; it must not create an unlocked trade context or call any real order method.
+- Moomoo quote snapshot may use a read-only quote context only; no trade context, trade unlock, credentials, or real order method may be introduced on that path.
 
 ## Files To Read First
 
@@ -115,11 +119,14 @@ curl http://127.0.0.1:8000/strategy/tournament/history
 curl http://127.0.0.1:8000/ops/health
 curl http://127.0.0.1:8000/ops/maintenance/status
 curl http://127.0.0.1:8000/readiness/paper-trading
+curl http://127.0.0.1:8000/readiness/soak
 curl http://127.0.0.1:8000/orders/approval-queue/{ticket_id}/broker-ticket
 curl http://127.0.0.1:8000/orders/approval-queue/{ticket_id}/broker-ticket/view
 curl http://127.0.0.1:8000/orders/approval-queue/{ticket_id}/broker-ticket.csv
 scripts/check_alpha_ops.sh --backup
 python -m backend.app.services.paper_readiness
+scripts/check_alpha_soak.sh
+python -m backend.app.services.soak_readiness
 ```
 
 Latest validation:
@@ -232,6 +239,17 @@ Paper readiness safety scan -> no new real broker place_order/unlock_trade path;
 Paper readiness runtime verification -> foreground FastAPI app on 127.0.0.1:8000 returned `/readiness/paper-trading` overall_status_zh=已就绪, pass/warn/fail=10/0/0 after app-managed loop generated fresh runtime evidence
 Dashboard Chinese status marker verification -> `/dashboard` returned 200 and contained 交付就绪/交付日期/交付项/运行状态/交易状态; forbidden legacy phrases Alpha Dashboard and Run Paper Cycle were absent
 Dashboard Chinese title reinforcement -> dashboard now labels the relevant panels as 智能体运行状态 and 模拟交易状态（模拟交易执行层）
+Long-run soak readiness target tests -> .venv/bin/python -m pytest tests/test_soak_readiness.py tests/test_paper_readiness.py tests/test_ops_health.py tests/test_ops_runtime.py tests/test_dashboard_state.py -q -> 18 passed
+Long-run soak readiness full regression -> .venv/bin/python -m pytest tests -q -> 61 passed
+Long-run soak readiness no-API CLI verification -> scripts/check_alpha_soak.sh returned overall_status_zh=不可开始长运行, pass/warn/fail=4/0/4 because no app-managed loop or maintenance snapshot was available
+Long-run soak readiness runtime API verification -> foreground FastAPI app returned `/readiness/soak` overall_status_zh=可观察运行, pass/warn/fail=7/1/0, with App entries, paper delivery, 5-minute loop, fresh broker-ready ticket, maintenance, backup, and live-order boundary passing
+Long-run soak readiness script API verification -> scripts/check_alpha_soak.sh preferred the running `/readiness/soak` API and returned overall_status_zh=可观察运行, pass/warn/fail=7/1/0
+Dashboard soak marker verification -> `/dashboard` contains 长运行预检/目标周期/预检项 and does not contain legacy Run Paper Cycle text
+Moomoo SDK install -> `.venv/bin/python -m pip install moomoo-api` installed official `moomoo-api` 10.7.6708 into the project virtualenv
+Moomoo SDK HOME guard -> direct `import moomoo` can write SDK logs under `~/.com.moomoo.OpenD/Log`; Alpha redirects SDK HOME to `runtime/moomoo_api_home` and imports successfully inside that guarded path
+Moomoo read-only quote runtime verification -> foreground FastAPI app returned `/broker/moomoo/status` status=ready_read_only/status_zh=只读探测就绪 and `/broker/moomoo/quote-snapshot` status=ready/status_zh=已获取 with 3 rows for US.SPY, US.QQQ, and US.TLT; live_order_submission_enabled=false
+Moomoo quote snapshot tests -> target tests passed; snapshot route/dashboard state enforce trade_context_enabled=false and live_order_submission_enabled=false
+Long-run soak readiness safety scan -> no new real broker place_order/unlock_trade path; live-order submission remains disabled
 ```
 
 ## Unresolved Risks
@@ -239,8 +257,9 @@ Dashboard Chinese title reinforcement -> dashboard now labels the relevant panel
 - Market data gateway exists, but default mode remains cache/fixture fallback; Stooq refresh is public delayed data and not broker-grade real-time market data.
 - This machine's current Python SSL trust chain blocked live Stooq refresh during validation; do not disable SSL verification by default.
 - External broker paper API integration is not connected yet; local sandbox paper adapter abstraction, Moomoo OpenD read-only probe, and manual broker-ready JSON/CSV/Chinese HTML ticket export now exist.
-- Moomoo OpenD is installed and listening on `127.0.0.1:11111`; Codex's sandboxed socket checks may be blocked, but an escalated read-only port check succeeded. The project `.venv` still cannot import `moomoo` or `futu`; install the correct API package into `.venv` before building quote/account read-only calls.
+- Moomoo OpenD is installed and listening on `127.0.0.1:11111`; Codex's sandboxed socket checks may be blocked. Project `.venv` now has official `moomoo-api` 10.7.6708 installed and Alpha can fetch read-only quote snapshots, but account/trade/paper broker contexts are still intentionally not integrated.
 - `/readiness/paper-trading` and `python -m backend.app.services.paper_readiness` now exist; direct CLI evidence can still be `不可交付` without an app-managed loop snapshot, while the foreground FastAPI runtime verified 10/10 readiness with fresh loop evidence.
+- `/readiness/soak` now exists; direct CLI without a running app fails closed, while the running FastAPI app reports `可观察运行` with no failing soak items and one ops-health关注项. This is a start gate, not proof of a completed 30-day run.
 - Dashboard is local MVP only.
 - Approval queue is SQLite-backed locally and automatic backup/rotation now exists; it still needs a normal macOS `.app` long-run soak and multi-process contention hardening before claiming unattended 30-day robustness.
 - The current execution environment may reclaim `nohup` background servers between tool calls; foreground uvicorn verified the app runtime, and the start script now detects post-health-check instability, but final `.app` long-run verification should be done from the user's normal macOS session.
@@ -250,4 +269,4 @@ Dashboard Chinese title reinforcement -> dashboard now labels the relevant panel
 
 ## Next Step
 
-Authenticate GitHub CLI/HTTPS push or continue connector-based sync, then install the Moomoo/Futu Python API into the project `.venv`, implement read-only quote/account probes, and run a normal macOS `.app` long-run soak.
+Authenticate GitHub CLI/HTTPS push or continue connector-based sync, then decide whether read-only Moomoo quote snapshots should feed `MarketDataGateway`, run a normal macOS `.app` long-run soak using `/readiness/soak` as the start gate, and only consider account read-only probes after explicit owner approval.

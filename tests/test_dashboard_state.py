@@ -51,6 +51,9 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
     assert state["paper_readiness"]["deadline"] == "2026-06-20"
     assert state["paper_readiness"]["check_count"] == 10
     assert state["paper_readiness"]["safety_boundary"]["live_order_submission_enabled"] is False
+    assert state["soak_readiness"]["target_days"] == 30
+    assert state["soak_readiness"]["check_count"] == 8
+    assert state["soak_readiness"]["safety_boundary"]["live_order_submission_enabled"] is False
     assert state["agent_status"]["status"] == "ready"
     assert state["paper_portfolio"]["trade_count"] == 1
     assert state["paper_performance"]["status"] == "ready"
@@ -73,6 +76,9 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
     assert state["moomoo_broker_status"]["trade_unlock_required"] is False
     assert state["moomoo_broker_status"]["supports_real_broker_place_order"] is False
     assert "提交真实资金订单" in state["moomoo_broker_status"]["forbidden_operations_zh"]
+    assert state["moomoo_quote_snapshot"]["mode_zh"] == "只读行情快照"
+    assert state["moomoo_quote_snapshot"]["trade_context_enabled"] is False
+    assert state["moomoo_quote_snapshot"]["live_order_submission_enabled"] is False
     assert state["strategy_tournament"]["candidate_count"] > 0
     assert state["strategy_tournament"]["validation_summary"]["validated_count"] > 0
     assert "hit_rate" in state["strategy_tournament"]["winner"]
@@ -204,9 +210,12 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "审批队列" in html
     assert "模拟交易执行层" in html
     assert "Moomoo OpenD" in html
+    assert "Moomoo 行情" in html
     assert "只读连接探测" in html
+    assert "只读行情快照" in html
     assert "OpenD 连接" in html
     assert "API 包" in html
+    assert "SDK 可导入" in html
     assert "下一步" in html
     assert "交易解锁" in html
     assert "禁止操作" in html
@@ -215,6 +224,9 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "交付就绪" in html
     assert "交付日期" in html
     assert "交付项" in html
+    assert "长运行预检" in html
+    assert "目标周期" in html
+    assert "预检项" in html
     assert "刷新公共行情" in html
     assert "生成运行备份" in html
     assert "自动维护" in html

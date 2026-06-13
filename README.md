@@ -11,6 +11,12 @@ python -m backend.app.services.paper_trading_loop --once
 uvicorn backend.app.main:app --reload
 ```
 
+如需启用 Moomoo OpenD 只读行情快照，可安装可选 broker 依赖：
+
+```bash
+python -m pip install -e '.[broker]'
+```
+
 `paper_trading_loop --once` 默认输出中文人工可读摘要；如需给自动化读取原始机器字段，使用：
 
 ```bash
@@ -24,7 +30,9 @@ scripts/start_alpha_dashboard.sh
 scripts/stop_alpha_dashboard.sh
 scripts/check_alpha_ops.sh
 scripts/check_alpha_ops.sh --backup
+scripts/check_alpha_soak.sh
 python -m backend.app.services.paper_readiness
+python -m backend.app.services.soak_readiness
 ```
 
 控制台启动后，FastAPI 应用生命周期会启动自动模拟交易智能体运行时：立即运行一次模拟交易周期，然后每 300 秒刷新一次。
@@ -64,6 +72,7 @@ GET  /paper/portfolio
 GET  /paper/performance/history
 GET  /paper/broker/status
 GET  /broker/moomoo/status
+GET  /broker/moomoo/quote-snapshot
 POST /strategy/tournament/run
 GET  /strategy/tournament/history
 GET  /agent/loop/status
@@ -73,6 +82,7 @@ GET  /ops/health
 POST /ops/backup
 GET  /ops/maintenance/status
 GET  /readiness/paper-trading
+GET  /readiness/soak
 GET  /orders/approval-queue
 GET  /orders/approval-queue/{ticket_id}/broker-ticket
 GET  /orders/approval-queue/{ticket_id}/broker-ticket/view
@@ -100,9 +110,12 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - `POST /ops/backup` 会在 `runtime/backups/` 下生成一次本地运行状态备份，包含审批队列快照、模拟组合、行情缓存、PID 和日志尾部。
 - `GET /ops/maintenance/status` 显示应用托管自动运行维护：健康采样次数、自动备份次数、下次维护时间、健康历史文件和备份轮转配置。
 - `GET /readiness/paper-trading` 输出 6月20日模拟交易交付就绪报告，逐项验证自动循环、策略迭代、模拟成交、OrderIntent、风控、审批队列、broker-ready 工单、5分钟时效、本地 App 入口和真实下单边界。
+- `GET /readiness/soak` 输出 30 天本地长运行预检报告，聚合 App 入口、模拟交易交付就绪、5分钟循环、有效 broker-ready 工单、运行健康、自动维护、恢复备份和真实下单边界。
 - `scripts/check_alpha_ops.sh` 输出中文健康检查摘要；加 `--json` 可输出机器 JSON。
 - `scripts/check_alpha_ops.sh --backup` 可在终端生成一次本地运行状态备份。
+- `scripts/check_alpha_soak.sh` 输出中文长运行预检摘要；加 `--json` 可输出机器 JSON。
 - `python -m backend.app.services.paper_readiness` 输出中文交付就绪摘要；加 `--json` 可查看完整机器证据。
+- `python -m backend.app.services.soak_readiness` 输出中文长运行预检摘要；该报告证明是否可以开始本地 soak，不等于已经完成 30 天验证。
 - 控制台启动后会自动启动运行维护：默认每 300 秒采样一次健康状态，默认每天自动备份一次，并保留最近 30 份备份。
 - 健康检查和备份只覆盖模拟交易与工单状态，不会提交真实资金订单。
 
@@ -143,6 +156,8 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 ## Moomoo OpenD 只读探测
 
 - `GET /broker/moomoo/status` 显示 Moomoo OpenD 只读探测状态。
+- `GET /broker/moomoo/quote-snapshot` 在只读连接就绪时读取 Moomoo OpenD 市场快照；未就绪时返回中文阻止原因。
+- `broker` 可选依赖安装官方 `moomoo-api` Python SDK；当前本机验证版本为 `10.7.6708`。
 - 默认连接地址为 `127.0.0.1:11111`；可用 `MOOMOO_OPEND_HOST`、`MOOMOO_OPEND_PORT`、`MOOMOO_OPEND_TIMEOUT_SECONDS` 调整。
-- Dashboard 的“Moomoo OpenD”面板会显示 API 包、OpenD 连接、只读就绪、交易解锁、允许真实下单和禁止操作。
-- 该探测层只用于确认本机环境是否准备好接入后续 read-only quote/account 能力；当前不会提交真实资金订单。
+- Dashboard 的“Moomoo OpenD”面板会显示 API 包、SDK 可导入、OpenD 连接、只读就绪、只读行情快照、交易解锁、允许真实下单和禁止操作。
+- 该探测层只用于确认本机环境和只读行情是否可用；当前不会创建交易上下文、不会解锁交易、不会提交真实资金订单。

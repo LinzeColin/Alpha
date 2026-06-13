@@ -1,4 +1,9 @@
-from backend.app.services.moomoo_broker_probe import MoomooOpenDProbeConfig, probe_moomoo_opend
+from backend.app.services.moomoo_broker_probe import (
+    MoomooOpenDProbeConfig,
+    MoomooQuoteSnapshotConfig,
+    probe_moomoo_opend,
+    probe_moomoo_quote_snapshot,
+)
 
 
 def _config() -> MoomooOpenDProbeConfig:
@@ -53,6 +58,31 @@ def test_moomoo_probe_reports_api_missing_when_opend_port_is_reachable():
     assert status["live_order_submission_enabled_zh"] == "否"
 
 
+def test_moomoo_probe_reports_api_import_error_when_package_cannot_import():
+    status = probe_moomoo_opend(
+        _config(),
+        package_detector=lambda: {
+            "available": False,
+            "installed": True,
+            "importable": False,
+            "import_name": "moomoo",
+            "distribution_name": "moomoo-api",
+            "version": "10.7.6708",
+            "import_error": "PermissionError",
+            "import_error_zh": "运行环境没有权限访问 Moomoo SDK 日志目录或本机端口。",
+            "message_zh": "当前 Python 环境已安装 Moomoo API 包，但导入失败。",
+        },
+        connection_probe=lambda host, port, timeout: {"connected": True, "error": None, "error_zh": None},
+    )
+
+    assert status["status"] == "api_import_error"
+    assert status["status_zh"] == "API 包导入失败"
+    assert status["package_installed"] is True
+    assert status["package_importable"] is False
+    assert status["read_only_ready"] is False
+    assert status["live_order_submission_enabled"] is False
+
+
 def test_moomoo_probe_reports_ready_read_only_when_package_and_opend_are_available():
     status = probe_moomoo_opend(
         _config(),
@@ -75,6 +105,40 @@ def test_moomoo_probe_reports_ready_read_only_when_package_and_opend_are_availab
     assert status["message_zh"].startswith("Moomoo API 包和本机 OpenD 端口均可用")
     assert status["trade_context_enabled"] is False
     assert status["live_order_submission_enabled"] is False
+
+
+def test_moomoo_quote_snapshot_blocks_until_read_only_probe_is_ready():
+    snapshot = probe_moomoo_quote_snapshot(
+        MoomooQuoteSnapshotConfig(host="127.0.0.1", port=11111, timeout_seconds=0.01, symbols=("US.SPY",)),
+        readiness_probe=lambda: {"status": "opend_unreachable", "status_zh": "OpenD 未连接", "read_only_ready": False},
+    )
+
+    assert snapshot["status"] == "blocked"
+    assert snapshot["status_zh"] == "未执行"
+    assert snapshot["row_count"] == 0
+    assert snapshot["trade_context_enabled"] is False
+    assert snapshot["live_order_submission_enabled"] is False
+
+
+def test_moomoo_quote_snapshot_returns_read_only_market_snapshot():
+    snapshot = probe_moomoo_quote_snapshot(
+        MoomooQuoteSnapshotConfig(host="127.0.0.1", port=11111, timeout_seconds=0.01, symbols=("US.SPY",)),
+        readiness_probe=lambda: {"status": "ready_read_only", "status_zh": "只读探测就绪", "read_only_ready": True},
+        quote_fetcher=lambda config: {
+            "status": "ready",
+            "message_zh": "已通过 Moomoo OpenD 只读行情连接获取 1 条市场快照。",
+            "quotes": [{"code": "US.SPY", "name": "SPDR S&P 500 ETF", "last_price": 741.75}],
+            "row_count": 1,
+        },
+    )
+
+    assert snapshot["status"] == "ready"
+    assert snapshot["status_zh"] == "已获取"
+    assert snapshot["row_count"] == 1
+    assert snapshot["quotes"][0]["code"] == "US.SPY"
+    assert snapshot["trade_context_enabled"] is False
+    assert snapshot["live_order_submission_enabled"] is False
+    assert "创建交易上下文" in snapshot["forbidden_operations_zh"]
 
 
 def test_moomoo_probe_fails_closed_on_probe_exception():
