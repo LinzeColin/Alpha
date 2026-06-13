@@ -22,6 +22,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - Dashboard startup now starts the app-managed `AutoPaperAgentRuntime`: one immediate paper cycle, then 300-second refreshes.
 - `/agent/loop/status` exposes automatic loop state, run count, last result summary, next run time, and errors.
 - `scripts/start_alpha_dashboard.sh` now performs a startup health check and removes stale pid files on failure.
+- GitHub connector backup now contains the core runtime/dashboard/code/test changes from this run.
 - Repo launcher exists at `outputs/applications/Alpha.command`; an older external copy was observed at `/Users/linzezhang/Downloads/applicatioins/Alpha.command`.
 
 ## Key Decisions
@@ -67,8 +68,7 @@ curl /dashboard -> contains Paper Portfolio, Strategy Tournament, Run Paper Cycl
 scripts/start_alpha_dashboard.sh -> starts the local dashboard, app-managed paper loop, and writes runtime/alpha_dashboard.pid/log
 scripts/stop_alpha_dashboard.sh -> waits for uvicorn shutdown and releases port 8000 cleanly
 uvicorn foreground runtime check -> /agent/loop/status showed enabled=true, task_running=true, interval_seconds=300, run_count=1, next_run_at populated, error_count=0
-Browser dashboard interaction -> visible dashboard showed Loop sleeping, Run Count 1, 300s refresh, paper portfolio, strategy tournament, and approval queue
-Browser Run Paper Cycle click -> Paper Trades changed 8->9 and Pending Tickets changed 7->8
+Browser visual verification -> unavailable in current Codex Browser plugin session; API/HTML smoke used as fallback
 Dashboard HTML/API fallback -> contains System Snapshot, Paper Portfolio, Strategy Tournament, Approval Queue, Run Paper Cycle, and 300000ms refresh
 Repo launcher -> outputs/applications/Alpha.command exists and is executable
 External legacy launcher observed -> /Users/linzezhang/Downloads/applicatioins/Alpha.command exists and is executable
@@ -82,7 +82,8 @@ External legacy launcher observed -> /Users/linzezhang/Downloads/applicatioins/A
 - Approval queue is local file/in-memory capable, not a durable production database yet.
 - Real broker live order submission remains intentionally out of scope.
 - Strategy tournament is fixture-level and not yet walk-forward/OOS validated.
+- Local `git push -u origin main` is blocked by missing HTTPS credentials (`could not read Username`); GitHub connector synced core runtime files, but older `docs/seed_pack/**` and `docs/task_pack_seed/**` still need a normal authenticated push or follow-up connector sync.
 
 ## Next Step
 
-Commit and back up this strategy-iteration/persistent-paper upgrade, then start broker paper integration design.
+Authenticate GitHub CLI/HTTPS push or continue connector-based sync for the remaining seed/task-pack docs, then start broker paper integration design.
