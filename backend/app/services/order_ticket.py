@@ -67,6 +67,7 @@ class BrokerReadyOrderTicket:
     ticket_id: str
     status: str
     human_action_required: bool
+    expires_at: str
     broker_payload: dict
     risk_check: dict
     intent: dict
@@ -88,6 +89,7 @@ class BrokerReadyOrderTicket:
             ticket_id=f"ticket_{uuid4().hex[:12]}",
             status=status,
             human_action_required=True,
+            expires_at=intent.expires_at,
             broker_payload=broker_payload,
             risk_check=risk_check,
             intent=intent.as_dict(),
