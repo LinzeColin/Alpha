@@ -1,0 +1,666 @@
+From c0321310a969754dc51f654aa3214500f11cd9b7 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Date: Sat, 13 Jun 2026 13:30:23 +1000
+Subject: [PATCH] Add strategy tournament history tracking
+
+---
+ HANDOFF.md                                 |  15 ++-
+ README.md                                  |  11 +-
+ backend/app/api/routes.py                  |  42 +++++-
+ backend/app/services/display_locale.py     |   9 ++
+ backend/app/services/paper_trading_loop.py |  18 +++
+ backend/app/services/strategy_journal.py   | 143 +++++++++++++++++++++
+ docs/decision_log.md                       |   8 ++
+ docs/requirements_alignment.md             |   4 +-
+ tests/test_dashboard_state.py              |  15 +++
+ tests/test_paper_trading_loop.py           |  12 +-
+ tests/test_strategy_journal.py             |  39 ++++++
+ 11 files changed, 310 insertions(+), 6 deletions(-)
+ create mode 100644 backend/app/services/strategy_journal.py
+ create mode 100644 tests/test_strategy_journal.py
+
+diff --git a/HANDOFF.md b/HANDOFF.md
+index 95d2ab0..2b76467 100644
+--- a/HANDOFF.md
++++ b/HANDOFF.md
+@@ -18,6 +18,9 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
+ - Paper portfolio state now persists through `PaperBroker.save/load`.
+ - Strategy iteration now runs a fixture momentum tournament and selects the best tradable candidate under risk/notional limits.
+ - Strategy iteration now includes walk-forward one-step OOS return, hit rate, and validation window counts.
++- Every paper cycle now appends strategy tournament evidence to `runtime/strategy_tournament_history.jsonl`.
++- `/strategy/tournament/history` and dashboard "策略迭代历史" expose run count, latest winner, winner streak, stability ratio, OOS return, hit rate, decision, and market-data quality.
++- Strategy history records and summaries now provide owner-facing Chinese fields such as `winner_strategy_id_zh`, `winner_decision_zh`, and `market_data_quality_zh`.
+ - Dashboard state includes `paper_portfolio` and `strategy_tournament`.
+ - Local launcher scripts exist at `scripts/start_alpha_dashboard.sh` and `scripts/stop_alpha_dashboard.sh`.
+ - Dashboard startup now starts the app-managed `AutoPaperAgentRuntime`: one immediate paper cycle, then 300-second refreshes.
+@@ -75,6 +78,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
+ - `backend/app/services/ops_health.py`
+ - `backend/app/services/ops_runtime.py`
+ - `backend/app/services/display_locale.py`
++- `backend/app/services/strategy_journal.py`
+ - `backend/app/services/live_broker.py`
+ - `backend/app/services/broker_ticket_export.py`
+ - `backend/app/services/strategy_iteration.py`
+@@ -92,6 +96,7 @@ python -m pytest tests -q
+ python -m backend.app.services.paper_trading_loop --once
+ python -m backend.app.services.paper_trading_loop --once --json
+ curl http://127.0.0.1:8000/market-data/status
++curl http://127.0.0.1:8000/strategy/tournament/history
+ curl http://127.0.0.1:8000/ops/health
+ curl http://127.0.0.1:8000/ops/maintenance/status
+ curl http://127.0.0.1:8000/orders/approval-queue/{ticket_id}/broker-ticket
+@@ -159,6 +164,14 @@ Broker ticket export target tests -> .venv/bin/python -m pytest tests/test_broke
+ Broker ticket export full regression -> .venv/bin/python -m pytest tests -q -> 42 passed
+ Broker ticket export runtime API verification -> generated ticket_a03c19291ad8, owner_reviewed, broker-ticket manual_entry_allowed=true, live_order_submission_enabled=false, CSV header present, marked broker_ticket_exported
+ Broker ticket export safety scan -> no new real broker place_order path; new export package records live_order_submission_enabled=false
++Strategy journal target tests -> .venv/bin/python -m pytest tests/test_strategy_journal.py tests/test_paper_trading_loop.py tests/test_dashboard_state.py tests/test_strategy_iteration.py -q -> 14 passed
++Strategy journal full regression -> .venv/bin/python -m pytest tests -q -> 44 passed
++Strategy journal diff hygiene -> git diff --check -> passed
++Full Chinese display reinforcement -> strategy history API now returns winner_strategy_id_zh, winner_decision_zh, market_data_quality_zh; dashboard and CLI summary prefer Chinese display fields
++Runtime strategy history verification -> POST /paper/run-once returned strategy_journal.status_zh=已写入, winner_strategy_id_zh=动量策略 QQQ 20日, winner_decision_zh=可进入模拟交易, live_order_submission_enabled=false
++Runtime strategy history API verification -> GET /strategy/tournament/history returned run_count=3, current_winner_streak=3, stability_ratio_zh=100.00%, latest_winner_strategy_id_zh=动量策略 QQQ 20日
++Browser dashboard Chinese verification -> /dashboard lang=zh-CN, 策略迭代历史/策略稳定度/动量策略 QQQ 20日/可进入模拟交易 visible, forbidden English/raw enum phrases=[], browser console errors=0
++Safety scan after strategy journal -> no new real broker place_order path; committed dashboard/API still report live_order_submission_enabled=false
+ ```
+ 
+ ## Unresolved Risks
+@@ -170,7 +183,7 @@ Broker ticket export safety scan -> no new real broker place_order path; new exp
+ - Approval queue is SQLite-backed locally and automatic backup/rotation now exists; it still needs a normal macOS `.app` long-run soak and multi-process contention hardening before claiming unattended 30-day robustness.
+ - The current execution environment may reclaim `nohup` background servers between tool calls; foreground uvicorn verified the app runtime, and the start script now detects post-health-check instability, but final `.app` long-run verification should be done from the user's normal macOS session.
+ - Real broker live order submission remains intentionally out of scope.
+-- Strategy tournament is still fixture-level; it now has simple walk-forward/OOS metrics, but not multi-year OOS, cost-model, slippage-model, or walk-forward portfolio validation.
++- Strategy tournament is still fixture-level; it now has simple walk-forward/OOS metrics and persistent strategy history, but not multi-year OOS, cost-model, slippage-model, or walk-forward portfolio validation.
+ - Local `git push -u origin main` is blocked by missing HTTPS credentials (`could not read Username`); GitHub connector synced core runtime files, but older `docs/seed_pack/**` and `docs/task_pack_seed/**` still need a normal authenticated push or follow-up connector sync.
+ 
+ ## Next Step
+diff --git a/README.md b/README.md
+index 29c00bb..7d1e712 100644
+--- a/README.md
++++ b/README.md
+@@ -34,6 +34,7 @@ scripts/check_alpha_ops.sh --backup
+ runtime/approval_queue.sqlite3
+ runtime/paper_portfolio.json
+ runtime/market_data/latest_prices.csv
++runtime/strategy_tournament_history.jsonl
+ runtime/backups/
+ ```
+ 
+@@ -60,6 +61,7 @@ POST /paper/run-once
+ GET  /paper/portfolio
+ GET  /paper/broker/status
+ POST /strategy/tournament/run
++GET  /strategy/tournament/history
+ GET  /agent/loop/status
+ GET  /market-data/status
+ POST /market-data/refresh
+@@ -105,5 +107,12 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
+ ## 中文显示
+ 
+ - 控制台页面、按钮、表格、状态、风险原因、执行层名称、策略名称、行情状态和本地命令摘要默认中文显示。
+-- API 字段名、内部枚举、工单号、文件路径和股票代码保持机器可读格式，供测试、MCP、后续券商适配器和自动化流程稳定使用。
++- 策略迭代历史、自动循环状态、运行健康、维护状态、风控原因和工单导出包会提供中文展示字段，例如 `status_zh`、`reason_zh`、`winner_strategy_id_zh`、`winner_decision_zh`。
++- API 字段名、内部枚举、工单号、文件路径和股票代码保持机器可读格式，供测试、MCP、后续券商适配器和自动化流程稳定使用；面向 owner 的界面必须优先展示中文字段。
+ - 新增界面或命令输出时必须补充中文展示映射；如确需展示 raw enum，必须同时给出中文标签或中文解释。
++
++## 策略迭代历史
++
++- `PaperTradingLoop` 每次自动模拟交易周期会把策略锦标赛结果追加写入 `runtime/strategy_tournament_history.jsonl`。
++- `GET /strategy/tournament/history` 汇总记录次数、最近胜出策略、连续胜出次数、最近稳定度和最近运行明细。
++- Dashboard 的“策略迭代历史”面板显示最近胜出策略、样本外收益、命中率、决策和行情质量，默认使用中文展示字段。
+diff --git a/backend/app/api/routes.py b/backend/app/api/routes.py
+index 32d8be8..a97add1 100644
+--- a/backend/app/api/routes.py
++++ b/backend/app/api/routes.py
+@@ -16,6 +16,7 @@ from backend.app.services.ops_health import collect_ops_health, create_runtime_b
+ from backend.app.services.ops_runtime import AUTO_OPS_MAINTENANCE
+ from backend.app.services.paper_trading_loop import DEFAULT_REFRESH_INTERVAL_SECONDS, build_default_loop, latest_mark_prices
+ from backend.app.services.paper_broker import PaperBroker
++from backend.app.services.strategy_journal import summarize_strategy_tournament_history
+ from backend.app.services.strategy_iteration import run_strategy_tournament
+ 
+ router = APIRouter()
+@@ -26,6 +27,7 @@ DATA_PATH = ROOT / "data" / "sample_prices.csv"
+ MARKET_DATA_CONFIG_PATH = ROOT / "configs" / "market_data.yaml"
+ QUEUE_PATH = ROOT / "runtime" / "approval_queue.sqlite3"
+ PAPER_STATE_PATH = ROOT / "runtime" / "paper_portfolio.json"
++STRATEGY_HISTORY_PATH = ROOT / "runtime" / "strategy_tournament_history.jsonl"
+ PID_PATH = ROOT / "runtime" / "alpha_dashboard.pid"
+ LOG_PATH = ROOT / "runtime" / "alpha_dashboard.log"
+ 
+@@ -84,7 +86,11 @@ def backtest_run(payload: dict | None = None) -> dict:
+ 
+ @router.post("/paper/run-once")
+ def paper_run_once() -> dict:
+-    loop = build_default_loop(queue_path=QUEUE_PATH, paper_state_path=PAPER_STATE_PATH)
++    loop = build_default_loop(
++        queue_path=QUEUE_PATH,
++        paper_state_path=PAPER_STATE_PATH,
++        strategy_history_path=STRATEGY_HISTORY_PATH,
++    )
+     return loop.run_once()
+ 
+ 
+@@ -203,6 +209,11 @@ def strategy_tournament_run() -> dict:
+     return run_strategy_tournament(resolve_market_data().price_path)
+ 
+ 
++@router.get("/strategy/tournament/history")
++def strategy_tournament_history() -> dict:
++    return summarize_strategy_tournament_history(STRATEGY_HISTORY_PATH)
++
++
+ @router.get("/market-data/status")
+ def market_data_status() -> dict:
+     return resolve_market_data().status
+@@ -266,6 +277,7 @@ def dashboard_state() -> dict:
+         "paper_portfolio": paper_portfolio(),
+         "paper_broker_status": paper_broker_status(),
+         "strategy_tournament": strategy_tournament_run(),
++        "strategy_journal": strategy_tournament_history(),
+         "approval_queue": approval_queue(),
+     }
+ 
+@@ -345,6 +357,8 @@ def dashboard() -> str:
+       queued: '已入队',
+       duplicate: '重复候选单',
+       skipped: '已跳过',
++      written: '已写入',
++      empty: '暂无记录',
+       filled: '模拟成交',
+       pending_owner_approval: '待人工确认',
+       fresh_pending_owner_approval: '有效，待人工确认',
+@@ -511,6 +525,7 @@ def dashboard() -> str:
+       const marketData = data.market_data || {};
+       const opsHealth = data.ops_health || {};
+       const opsMaintenance = data.ops_maintenance || {};
++      const strategyJournal = data.strategy_journal || {};
+       document.getElementById('metrics').innerHTML = [
+         metric('智能体', pill(displayStatus(agent.status), 'ok')),
+         metric('循环', pill(displayStatus(loop.status, '未知'), loop.error_count ? 'danger' : 'ok')),
+@@ -525,6 +540,7 @@ def dashboard() -> str:
+         metric('过期候选单', queueSummary.expired_pending_count || 0),
+         metric('已复核', queueSummary.owner_reviewed_count || 0),
+         metric('已导出工单', queueSummary.broker_ticket_exported_count || 0),
++        metric('策略稳定度', strategyJournal.stability_ratio_zh || '0.00%'),
+         metric('队列存储', displayStorageBackend((queue.storage || {}).backend)),
+         metric('刷新间隔', `${health.refresh_interval_seconds || 300} 秒`)
+       ].join('');
+@@ -668,6 +684,29 @@ def dashboard() -> str:
+         <table><thead><tr><th>策略</th><th>标的</th><th>回看天数</th><th>收益</th><th>样本外收益</th><th>命中率</th><th>验证窗口</th><th>回撤</th><th>分数</th><th>决策</th></tr></thead><tbody>${rows}</tbody></table>
+       `;
+     }
++    function renderStrategyJournal(journal) {
++      const rows = (journal.recent || []).slice(-8).reverse().map(row => `
++        <tr>
++          <td>${displayValue(row.generated_at)}</td>
++          <td>${row.winner_strategy_id_zh || displayStrategyId(row.winner_strategy_id)}</td>
++          <td>${displayValue(row.winner_symbol)}</td>
++          <td>${Number((row.winner_oos_return || 0) * 100).toFixed(2)}%</td>
++          <td>${Number((row.winner_hit_rate || 0) * 100).toFixed(2)}%</td>
++          <td>${row.winner_decision_zh || displayStatus(row.winner_decision, '未知')}</td>
++          <td>${row.market_data_quality_zh || displayDataQuality(row.market_data_quality)}</td>
++        </tr>
++      `).join('');
++      return `
++        <h2>策略迭代历史</h2>
++        <div class="metric-grid">
++          ${metric('记录次数', journal.run_count || 0)}
++          ${metric('最近胜出策略', journal.latest_winner_strategy_id_zh || displayStrategyId(journal.latest_winner_strategy_id))}
++          ${metric('连续胜出次数', journal.current_winner_streak || 0)}
++          ${metric('最近稳定度', journal.stability_ratio_zh || '0.00%')}
++        </div>
++        <table><thead><tr><th>时间</th><th>胜出策略</th><th>标的</th><th>样本外收益</th><th>命中率</th><th>决策</th><th>行情质量</th></tr></thead><tbody>${rows || '<tr><td colspan="7" class="muted">暂无策略迭代历史</td></tr>'}</tbody></table>
++      `;
++    }
+     function renderQueue(queue) {
+       const storage = queue.storage || {};
+       const rows = (queue.tickets || []).map(ticket => {
+@@ -717,6 +756,7 @@ def dashboard() -> str:
+         renderOpsHealth(data.ops_health || {});
+         document.getElementById('opsHealth').insertAdjacentHTML('beforeend', renderOpsMaintenance(data.ops_maintenance || {}));
+         renderTournament(data.strategy_tournament || {});
++        document.getElementById('tournament').insertAdjacentHTML('beforeend', renderStrategyJournal(data.strategy_journal || {}));
+         renderQueue(data.approval_queue || {});
+         document.getElementById('lastUpdated').textContent = '最近更新：' + new Date().toLocaleString('zh-CN');
+       } catch (error) {
+diff --git a/backend/app/services/display_locale.py b/backend/app/services/display_locale.py
+index 3b26696..53e16e8 100644
+--- a/backend/app/services/display_locale.py
++++ b/backend/app/services/display_locale.py
+@@ -13,6 +13,8 @@ STATUS_TEXT_ZH = {
+     "queued": "已入队",
+     "duplicate": "重复候选单",
+     "skipped": "已跳过",
++    "written": "已写入",
++    "empty": "暂无记录",
+     "filled": "模拟成交",
+     "pending_owner_approval": "待人工确认",
+     "fresh_pending_owner_approval": "有效，待人工确认",
+@@ -252,6 +254,8 @@ def format_paper_cycle_summary_zh(result: dict) -> str:
+     portfolio = result.get("paper_portfolio", {}) or {}
+     adapter = result.get("paper_broker_adapter", {}) or {}
+     market_data = result.get("market_data", {}) or {}
++    strategy_journal = result.get("strategy_journal", {}) or {}
++    latest_strategy_record = strategy_journal.get("latest_record", {}) or {}
+ 
+     lines = [
+         "Alpha 模拟交易周期摘要",
+@@ -266,6 +270,11 @@ def format_paper_cycle_summary_zh(result: dict) -> str:
+             f"{zh_order_type(intent.get('order_type'))} / {zh_time_in_force(intent.get('time_in_force'))}"
+         ),
+         f"策略：{zh_strategy_id(intent.get('strategy_id'))}",
++        (
++            "策略迭代："
++            f"{zh_status(strategy_journal.get('status'))} / "
++            f"胜出策略 {zh_strategy_id(latest_strategy_record.get('winner_strategy_id') or strategy_journal.get('latest_winner_strategy_id'))}"
++        ),
+         (
+             "行情数据："
+             f"{zh_market_data_provider(market_data.get('provider'))} / "
+diff --git a/backend/app/services/paper_trading_loop.py b/backend/app/services/paper_trading_loop.py
+index d86ccbe..1c9bfa4 100644
+--- a/backend/app/services/paper_trading_loop.py
++++ b/backend/app/services/paper_trading_loop.py
+@@ -16,6 +16,7 @@ from backend.app.services.order_ticket import BrokerReadyOrderTicket, OrderInten
+ from backend.app.services.paper_broker import PaperBroker, PaperOrder
+ from backend.app.services.policy import GovernorPolicy
+ from backend.app.services.risk import pre_trade_risk_check
++from backend.app.services.strategy_journal import append_strategy_tournament_history
+ from backend.app.services.strategy_iteration import run_strategy_tournament
+ 
+ 
+@@ -33,6 +34,7 @@ class PaperTradingLoop:
+         paper_broker_adapter: PaperBrokerAdapter | None = None,
+         paper_state_path: str | Path | None = None,
+         market_data_gateway: MarketDataGateway | None = None,
++        strategy_history_path: str | Path | None = None,
+         audit_sink: MemoryAuditSink | None = None,
+         refresh_interval_seconds: int = DEFAULT_REFRESH_INTERVAL_SECONDS,
+     ) -> None:
+@@ -43,6 +45,7 @@ class PaperTradingLoop:
+         self.paper_broker = paper_broker or (PaperBroker.load(self.paper_state_path) if self.paper_state_path else PaperBroker())
+         self.paper_broker_adapter = paper_broker_adapter or LocalSandboxPaperBrokerAdapter(self.paper_broker)
+         self.market_data_gateway = market_data_gateway
++        self.strategy_history_path = Path(strategy_history_path) if strategy_history_path else None
+         self.audit_sink = audit_sink or MemoryAuditSink()
+         self.refresh_interval_seconds = refresh_interval_seconds
+ 
+@@ -50,6 +53,7 @@ class PaperTradingLoop:
+         run_id = f"run_{uuid4().hex[:12]}"
+         market_data = self._resolve_market_data()
+         tournament = run_strategy_tournament(market_data.price_path)
++        strategy_journal = self._append_strategy_history(tournament, run_id=run_id, market_data=market_data.status)
+         intent = self._generate_order_intent(run_id, tournament=tournament, price_path=market_data.price_path)
+         risk_check = pre_trade_risk_check(intent.as_dict(), self.policy)
+         ticket = BrokerReadyOrderTicket.from_intent(intent, risk_check).as_dict()
+@@ -86,6 +90,7 @@ class PaperTradingLoop:
+             reason=risk_check["reason"],
+             payload={
+                 "strategy_tournament": tournament,
++                "strategy_journal": strategy_journal,
+                 "intent": intent.as_dict(),
+                 "risk_check": risk_check,
+                 "market_data": market_data.status,
+@@ -104,6 +109,7 @@ class PaperTradingLoop:
+             "intent": intent.as_dict(),
+             "market_data": market_data.status,
+             "strategy_tournament": tournament,
++            "strategy_journal": strategy_journal,
+             "risk_check": risk_check,
+             "approval_queue": queue_result,
+             "paper_broker_adapter": self.paper_broker_adapter.status(),
+@@ -150,10 +156,21 @@ class PaperTradingLoop:
+             return self.market_data_gateway.resolve_price_path()
+         return _static_market_data_snapshot(self.price_path)
+ 
++    def _append_strategy_history(self, tournament: dict, *, run_id: str, market_data: dict) -> dict:
++        if not self.strategy_history_path:
++            return {"status": "skipped", "status_zh": "已跳过", "reason_zh": "未配置策略迭代历史文件。"}
++        return append_strategy_tournament_history(
++            tournament,
++            history_path=self.strategy_history_path,
++            run_id=run_id,
++            market_data=market_data,
++        )
++
+ 
+ def build_default_loop(
+     queue_path: str | Path | None = None,
+     paper_state_path: str | Path | None = None,
++    strategy_history_path: str | Path | None = None,
+     interval_seconds: int = DEFAULT_REFRESH_INTERVAL_SECONDS,
+ ) -> PaperTradingLoop:
+     root = Path(__file__).resolve().parents[3]
+@@ -165,6 +182,7 @@ def build_default_loop(
+         approval_queue=ApprovalQueue(queue_path or root / "runtime" / "approval_queue.sqlite3"),
+         paper_state_path=state_path,
+         market_data_gateway=MarketDataGateway(root=root),
++        strategy_history_path=strategy_history_path or root / "runtime" / "strategy_tournament_history.jsonl",
+         refresh_interval_seconds=interval_seconds,
+     )
+ 
+diff --git a/backend/app/services/strategy_journal.py b/backend/app/services/strategy_journal.py
+new file mode 100644
+index 0000000..6192f0a
+--- /dev/null
++++ b/backend/app/services/strategy_journal.py
+@@ -0,0 +1,143 @@
++from __future__ import annotations
++
++import json
++from datetime import datetime, timezone
++from pathlib import Path
++
++from backend.app.services.display_locale import zh_data_quality, zh_market_data_source, zh_status, zh_strategy_id
++
++
++DEFAULT_MAX_STRATEGY_HISTORY_ROWS = 10_000
++
++
++def utc_now_iso() -> str:
++    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
++
++
++def append_strategy_tournament_history(
++    tournament: dict,
++    *,
++    history_path: str | Path,
++    run_id: str,
++    market_data: dict | None = None,
++    max_rows: int = DEFAULT_MAX_STRATEGY_HISTORY_ROWS,
++) -> dict:
++    path = Path(history_path)
++    path.parent.mkdir(parents=True, exist_ok=True)
++    winner = tournament.get("winner") or {}
++    validation = tournament.get("validation_summary") or {}
++    market = market_data or {}
++    record = _localized_record({
++        "run_id": run_id,
++        "generated_at": utc_now_iso(),
++        "status": tournament.get("status"),
++        "candidate_count": tournament.get("candidate_count", 0),
++        "validated_count": validation.get("validated_count", 0),
++        "winner_strategy_id": winner.get("strategy_id"),
++        "winner_symbol": winner.get("symbol"),
++        "winner_score": winner.get("score"),
++        "winner_decision": winner.get("decision"),
++        "winner_hit_rate": winner.get("hit_rate"),
++        "winner_oos_return": winner.get("oos_return"),
++        "winner_validation_windows": winner.get("validation_windows", 0),
++        "winner_max_drawdown": winner.get("max_drawdown"),
++        "market_data_source_kind": market.get("source_kind"),
++        "market_data_quality": market.get("data_quality"),
++        "market_data_latest_date": market.get("latest_date"),
++        "real_market_data": bool(market.get("real_market_data", False)),
++    })
++    rows = _read_jsonl(path)
++    rows.append(record)
++    if max_rows > 0:
++        rows = rows[-max_rows:]
++    path.write_text("\n".join(json.dumps(row, ensure_ascii=False, sort_keys=True) for row in rows) + "\n", encoding="utf-8")
++    return {
++        "status": "written",
++        "status_zh": "已写入",
++        "path": str(path),
++        "row_count": len(rows),
++        "latest_record": record,
++    }
++
++
++def summarize_strategy_tournament_history(history_path: str | Path, *, limit: int = 20) -> dict:
++    path = Path(history_path)
++    rows = _read_jsonl(path)
++    recent = rows[-limit:] if limit > 0 else rows
++    latest = rows[-1] if rows else None
++    localized_recent = [_localized_record(row) for row in recent]
++    localized_latest = _localized_record(latest) if latest else {}
++    winner_ids = [row.get("winner_strategy_id") for row in recent if row.get("winner_strategy_id")]
++    latest_winner = latest.get("winner_strategy_id") if latest else None
++    latest_winner_recent_count = sum(1 for value in winner_ids if value == latest_winner) if latest_winner else 0
++    current_streak = _current_winner_streak(rows)
++    denominator = len(winner_ids) or 1
++    stability_ratio = latest_winner_recent_count / denominator if latest_winner else 0.0
++    return {
++        "status": "ready" if rows else "empty",
++        "status_zh": "就绪" if rows else "暂无记录",
++        "path": str(path),
++        "exists": path.exists(),
++        "run_count": len(rows),
++        "recent_count": len(recent),
++        "unique_winner_count": len(set(winner_ids)),
++        "latest_winner_strategy_id": latest_winner,
++        "latest_winner_strategy_id_zh": localized_latest.get("winner_strategy_id_zh"),
++        "latest_winner_symbol": latest.get("winner_symbol") if latest else None,
++        "latest_winner_decision": latest.get("winner_decision") if latest else None,
++        "latest_winner_decision_zh": localized_latest.get("winner_decision_zh"),
++        "latest_winner_hit_rate": latest.get("winner_hit_rate") if latest else None,
++        "latest_winner_oos_return": latest.get("winner_oos_return") if latest else None,
++        "latest_winner_validation_windows": latest.get("winner_validation_windows") if latest else 0,
++        "latest_market_data_quality": latest.get("market_data_quality") if latest else None,
++        "latest_market_data_quality_zh": localized_latest.get("market_data_quality_zh"),
++        "latest_generated_at": latest.get("generated_at") if latest else None,
++        "latest_winner_recent_count": latest_winner_recent_count,
++        "current_winner_streak": current_streak,
++        "stability_ratio": round(stability_ratio, 6),
++        "stability_ratio_zh": f"{stability_ratio * 100:.2f}%",
++        "recent": localized_recent,
++    }
++
++
++def _localized_record(record: dict | None) -> dict:
++    if not record:
++        return {}
++    localized = dict(record)
++    localized["status_zh"] = zh_status(localized.get("status"))
++    localized["winner_strategy_id_zh"] = zh_strategy_id(localized.get("winner_strategy_id"))
++    localized["winner_decision_zh"] = zh_status(localized.get("winner_decision"))
++    localized["market_data_source_kind_zh"] = zh_market_data_source(localized.get("market_data_source_kind"))
++    localized["market_data_quality_zh"] = zh_data_quality(localized.get("market_data_quality"))
++    localized["real_market_data_zh"] = "是" if localized.get("real_market_data") else "否"
++    return localized
++
++
++def _current_winner_streak(rows: list[dict]) -> int:
++    if not rows:
++        return 0
++    latest_winner = rows[-1].get("winner_strategy_id")
++    if not latest_winner:
++        return 0
++    streak = 0
++    for row in reversed(rows):
++        if row.get("winner_strategy_id") != latest_winner:
++            break
++        streak += 1
++    return streak
++
++
++def _read_jsonl(path: Path) -> list[dict]:
++    if not path.exists():
++        return []
++    rows = []
++    for line in path.read_text(encoding="utf-8").splitlines():
++        if not line.strip():
++            continue
++        try:
++            value = json.loads(line)
++        except json.JSONDecodeError:
++            continue
++        if isinstance(value, dict):
++            rows.append(value)
++    return rows
+diff --git a/docs/decision_log.md b/docs/decision_log.md
+index c57446c..bdbd926 100644
+--- a/docs/decision_log.md
++++ b/docs/decision_log.md
+@@ -127,3 +127,11 @@ Decision: 已人工复核且仍在有效期内的候选单可以导出为 JSON/C
+ Reason: 用户需要可操作的 broker-ready order ticket；同时真实资金执行边界必须留在 owner 的经纪商确认侧。
+ 
+ Consequence: `/orders/approval-queue/{ticket_id}/broker-ticket` 和 `.csv` 提供标准化工单包，包含中文展示字段、CSV 行、安全提示和 `live_order_submission_enabled: false`。过期工单不能被复核或导出。
++
++## 2026-06-13: Strategy Tournament History Is Runtime Evidence
++
++Decision: 每次自动模拟交易周期都必须把策略锦标赛胜出结果追加到本地策略迭代历史，并向 dashboard/API 暴露策略稳定度。
++
++Reason: 单次策略锦标赛只能说明当前快照；成熟 paper trading 需要可恢复、可审计的策略迭代轨迹，用于观察胜出策略是否稳定漂移。
++
++Consequence: `PaperTradingLoop` 写入 `runtime/strategy_tournament_history.jsonl`；`GET /strategy/tournament/history` 和 dashboard “策略迭代历史”显示记录次数、最近胜出策略、连续胜出次数、稳定度、样本外收益、命中率、决策和行情质量。Owner-facing 字段提供 `*_zh` 中文展示值，raw enum 继续保留给自动化。
+diff --git a/docs/requirements_alignment.md b/docs/requirements_alignment.md
+index 7a60527..605890f 100644
+--- a/docs/requirements_alignment.md
++++ b/docs/requirements_alignment.md
+@@ -15,7 +15,7 @@
+ | Paper broker visibility | 已实现 MVP | `/paper/broker/status` 和 dashboard "模拟交易执行层" 显示 adapter、模式、连接、凭据要求、是否允许真实下单、最新模拟成交 |
+ | 操作及时性和时间有效性 | 已实现增强 MVP | `ApprovalQueue.summary()` 只把未过期的待人工确认候选单计为用户可操作；后端拒绝复核/导出过期工单；过期候选单保留用于审计 |
+ | 稳定 webpage 交互平台入口 | 已实现增强 MVP | AppleScript `Alpha.app` 已安装到 Downloads、用户 Applications 和系统 `/Applications`；命令入口保留用于兼容 |
+-| 全中文显示 | 已实现 MVP | 控制台标题、按钮、指标、表格、空状态、状态映射和启动/停止脚本提示均显示中文；API 机器字段和值保持稳定 |
+-| 策略迭代 | 已实现增强 MVP | `run_strategy_tournament()` 使用 walk-forward 样本外收益、命中率、验证窗口和可交易选择对 momentum 候选排序 |
++| 全中文显示 | 已实现增强 MVP | 控制台标题、按钮、指标、表格、空状态、状态映射、启动/停止脚本提示、CLI 摘要、策略迭代历史、风险原因和工单导出包均提供中文展示；API 机器字段和值保持稳定，owner-facing 字段补 `*_zh` |
++| 策略迭代 | 已实现增强 MVP | `run_strategy_tournament()` 使用 walk-forward 样本外收益、命中率、验证窗口和可交易选择对 momentum 候选排序；每次 paper cycle 持久化 `runtime/strategy_tournament_history.jsonl` 并显示策略稳定度 |
+ | `live_trading.enabled:true` | 已拒绝 | 提交默认值必须保持禁用 |
+ | 全自动实盘真实下单 | 已拒绝 | 真实资金订单需要用户在 broker 侧确认 |
+diff --git a/tests/test_dashboard_state.py b/tests/test_dashboard_state.py
+index fb9505c..6665030 100644
+--- a/tests/test_dashboard_state.py
++++ b/tests/test_dashboard_state.py
+@@ -25,6 +25,7 @@ def _patch_fixture_market_data(monkeypatch, tmp_path):
+ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, monkeypatch):
+     monkeypatch.setattr(routes, "QUEUE_PATH", tmp_path / "approval_queue.sqlite3")
+     monkeypatch.setattr(routes, "PAPER_STATE_PATH", tmp_path / "paper_portfolio.json")
++    monkeypatch.setattr(routes, "STRATEGY_HISTORY_PATH", tmp_path / "strategy_tournament_history.jsonl")
+     monkeypatch.setattr(routes, "DATA_PATH", Path("data/sample_prices.csv"))
+     _patch_fixture_market_data(monkeypatch, tmp_path)
+ 
+@@ -51,6 +52,12 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
+     assert state["strategy_tournament"]["candidate_count"] > 0
+     assert state["strategy_tournament"]["validation_summary"]["validated_count"] > 0
+     assert "hit_rate" in state["strategy_tournament"]["winner"]
++    assert state["strategy_journal"]["status"] == "ready"
++    assert state["strategy_journal"]["run_count"] == 1
++    assert state["strategy_journal"]["latest_winner_strategy_id"] == run_result["strategy_tournament"]["winner"]["strategy_id"]
++    assert state["strategy_journal"]["latest_winner_strategy_id_zh"].startswith("动量策略 ")
++    assert state["strategy_journal"]["latest_winner_decision_zh"] == "可进入模拟交易"
++    assert state["strategy_journal"]["stability_ratio_zh"] == "100.00%"
+     assert state["approval_queue"]["count"] == 1
+     assert state["approval_queue"]["storage"]["backend"] == "sqlite"
+     assert state["approval_queue"]["storage"]["durable"] is True
+@@ -107,6 +114,7 @@ def test_owner_summary_counts_only_fresh_pending_tickets(tmp_path, monkeypatch):
+ def test_approval_queue_review_actions_are_exposed_to_dashboard_state(tmp_path, monkeypatch):
+     monkeypatch.setattr(routes, "QUEUE_PATH", tmp_path / "approval_queue.sqlite3")
+     monkeypatch.setattr(routes, "PAPER_STATE_PATH", tmp_path / "paper_portfolio.json")
++    monkeypatch.setattr(routes, "STRATEGY_HISTORY_PATH", tmp_path / "strategy_tournament_history.jsonl")
+     monkeypatch.setattr(routes, "DATA_PATH", Path("data/sample_prices.csv"))
+     _patch_fixture_market_data(monkeypatch, tmp_path)
+ 
+@@ -142,6 +150,9 @@ def test_dashboard_html_uses_chinese_user_visible_text():
+     assert "系统快照" in html
+     assert "模拟组合" in html
+     assert "策略锦标赛" in html
++    assert "策略迭代历史" in html
++    assert "策略稳定度" in html
++    assert "连续胜出次数" in html
+     assert "审批队列" in html
+     assert "模拟交易执行层" in html
+     assert "行情数据" in html
+@@ -196,6 +207,8 @@ def test_python_display_locale_covers_runtime_statuses_and_live_reasons():
+     assert zh_status("running_maintenance") == "正在维护"
+     assert zh_status("degraded") == "需关注"
+     assert zh_status("pass") == "通过"
++    assert zh_status("written") == "已写入"
++    assert zh_status("empty") == "暂无记录"
+     assert zh_reason("live trading disabled by policy") == "策略已禁用真实资金交易"
+     assert zh_reason("FailClosedLiveBroker never submits real orders") == "失败即关闭真实经纪商适配器不会提交真实订单"
+ 
+@@ -203,6 +216,7 @@ def test_python_display_locale_covers_runtime_statuses_and_live_reasons():
+ def test_paper_cycle_summary_is_chinese_for_human_cli(tmp_path, monkeypatch):
+     monkeypatch.setattr(routes, "QUEUE_PATH", tmp_path / "approval_queue.sqlite3")
+     monkeypatch.setattr(routes, "PAPER_STATE_PATH", tmp_path / "paper_portfolio.json")
++    monkeypatch.setattr(routes, "STRATEGY_HISTORY_PATH", tmp_path / "strategy_tournament_history.jsonl")
+     monkeypatch.setattr(routes, "DATA_PATH", Path("data/sample_prices.csv"))
+     _patch_fixture_market_data(monkeypatch, tmp_path)
+ 
+@@ -211,6 +225,7 @@ def test_paper_cycle_summary_is_chinese_for_human_cli(tmp_path, monkeypatch):
+ 
+     assert "Alpha 模拟交易周期摘要" in summary
+     assert "候选订单：" in summary
++    assert "策略迭代：已写入" in summary
+     assert "行情数据：" in summary
+     assert "真实市场数据 否" in summary
+     assert "风控：已通过风控，待人工确认（下单前风控检查通过）" in summary
+diff --git a/tests/test_paper_trading_loop.py b/tests/test_paper_trading_loop.py
+index a63b4e3..7b551ab 100644
+--- a/tests/test_paper_trading_loop.py
++++ b/tests/test_paper_trading_loop.py
+@@ -9,7 +9,14 @@ def test_paper_loop_generates_ticket_and_fills_paper_order(tmp_path):
+     policy = GovernorPolicy.load(Path("configs/trading_governor_policy.yaml"))
+     queue = ApprovalQueue(tmp_path / "queue.json")
+     state_path = tmp_path / "portfolio.json"
+-    loop = PaperTradingLoop(policy=policy, price_path=Path("data/sample_prices.csv"), approval_queue=queue, paper_state_path=state_path)
++    strategy_history_path = tmp_path / "strategy_history.jsonl"
++    loop = PaperTradingLoop(
++        policy=policy,
++        price_path=Path("data/sample_prices.csv"),
++        approval_queue=queue,
++        paper_state_path=state_path,
++        strategy_history_path=strategy_history_path,
++    )
+ 
+     result = loop.run_once()
+ 
+@@ -33,7 +40,10 @@ def test_paper_loop_generates_ticket_and_fills_paper_order(tmp_path):
+     assert result["approval_queue"]["ticket"]["broker_payload"]["client_order_id"] == result["intent"]["idempotency_key"]
+     assert any(candidate["strategy_id"] == result["intent"]["strategy_id"] for candidate in result["strategy_tournament"]["candidates"])
+     assert result["paper_portfolio"]["trade_count"] == 1
++    assert result["strategy_journal"]["status"] == "written"
++    assert result["strategy_journal"]["latest_record"]["winner_strategy_id"] == result["strategy_tournament"]["winner"]["strategy_id"]
+     assert state_path.exists()
++    assert strategy_history_path.exists()
+     assert len(queue.list_tickets()) == 1
+ 
+ 
+diff --git a/tests/test_strategy_journal.py b/tests/test_strategy_journal.py
+new file mode 100644
+index 0000000..929a077
+--- /dev/null
++++ b/tests/test_strategy_journal.py
+@@ -0,0 +1,39 @@
++from pathlib import Path
++
++from backend.app.services.strategy_iteration import run_strategy_tournament
++from backend.app.services.strategy_journal import append_strategy_tournament_history, summarize_strategy_tournament_history
++
++
++def test_strategy_journal_records_tournament_winner_and_stability(tmp_path):
++    history_path = tmp_path / "runtime" / "strategy_tournament_history.jsonl"
++    tournament = run_strategy_tournament(Path("data/sample_prices.csv"))
++    market_data = {"source_kind": "fixture", "data_quality": "sample", "latest_date": "2024-02-09", "real_market_data": False}
++
++    first = append_strategy_tournament_history(tournament, history_path=history_path, run_id="run_1", market_data=market_data)
++    second = append_strategy_tournament_history(tournament, history_path=history_path, run_id="run_2", market_data=market_data)
++    summary = summarize_strategy_tournament_history(history_path)
++
++    assert first["status"] == "written"
++    assert second["row_count"] == 2
++    assert summary["status"] == "ready"
++    assert summary["status_zh"] == "就绪"
++    assert summary["run_count"] == 2
++    assert summary["latest_winner_strategy_id"] == tournament["winner"]["strategy_id"]
++    assert summary["latest_winner_strategy_id_zh"].startswith("动量策略 ")
++    assert summary["latest_winner_decision_zh"] == "可进入模拟交易"
++    assert summary["latest_market_data_quality_zh"] == "样例"
++    assert summary["current_winner_streak"] == 2
++    assert summary["stability_ratio"] == 1.0
++    assert summary["stability_ratio_zh"] == "100.00%"
++    assert summary["recent"][-1]["market_data_quality"] == "sample"
++    assert summary["recent"][-1]["market_data_quality_zh"] == "样例"
++    assert summary["recent"][-1]["winner_decision_zh"] == "可进入模拟交易"
++
++
++def test_strategy_journal_empty_summary_is_chinese_readable(tmp_path):
++    summary = summarize_strategy_tournament_history(tmp_path / "missing.jsonl")
++
++    assert summary["status"] == "empty"
++    assert summary["status_zh"] == "暂无记录"
++    assert summary["run_count"] == 0
++    assert summary["stability_ratio_zh"] == "0.00%"
+-- 
+2.39.5 (Apple Git-154)
