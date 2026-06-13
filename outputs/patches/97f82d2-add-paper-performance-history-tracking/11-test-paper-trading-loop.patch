@@ -1,0 +1,32 @@
+diff --git a/tests/test_paper_trading_loop.py b/tests/test_paper_trading_loop.py
+index 7b551ab..6e485cf 100644
+--- a/tests/test_paper_trading_loop.py
++++ b/tests/test_paper_trading_loop.py
+@@ -10,12 +10,14 @@ def test_paper_loop_generates_ticket_and_fills_paper_order(tmp_path):
+     queue = ApprovalQueue(tmp_path / "queue.json")
+     state_path = tmp_path / "portfolio.json"
+     strategy_history_path = tmp_path / "strategy_history.jsonl"
++    performance_history_path = tmp_path / "performance_history.jsonl"
+     loop = PaperTradingLoop(
+         policy=policy,
+         price_path=Path("data/sample_prices.csv"),
+         approval_queue=queue,
+         paper_state_path=state_path,
+         strategy_history_path=strategy_history_path,
++        performance_history_path=performance_history_path,
+     )
+ 
+     result = loop.run_once()
+@@ -42,8 +44,12 @@ def test_paper_loop_generates_ticket_and_fills_paper_order(tmp_path):
+     assert result["paper_portfolio"]["trade_count"] == 1
+     assert result["strategy_journal"]["status"] == "written"
+     assert result["strategy_journal"]["latest_record"]["winner_strategy_id"] == result["strategy_tournament"]["winner"]["strategy_id"]
++    assert result["paper_performance"]["status"] == "written"
++    assert result["paper_performance"]["latest_record"]["total_equity"] == result["paper_portfolio"]["total_equity"]
++    assert result["paper_performance"]["summary"]["total_return_zh"] == "0.00%"
+     assert state_path.exists()
+     assert strategy_history_path.exists()
++    assert performance_history_path.exists()
+     assert len(queue.list_tickets()) == 1
+ 
+ 
