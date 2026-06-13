@@ -4,11 +4,18 @@ Local commit: `71e9bf84bf1babf9ba903f6bb561364cd1c3094c`
 
 Reason for connector backup: local `git push origin main` failed because HTTPS credentials were unavailable on this machine: `fatal: could not read Username for 'https://github.com': Device not configured`.
 
-This directory stores a recoverable unified-diff backup for the local commit.
+This directory stores a recoverable base64-encoded unified diff for the local commit.
 
 ## Files
 
-- `changes.patch`
+- `changes.patch.b64`
+
+Restore command:
+
+```bash
+base64 -D -i outputs/patches/71e9bf8-add-chinese-broker-ticket-view/changes.patch.b64 -o /tmp/71e9bf8.patch
+git apply /tmp/71e9bf8.patch
+```
 
 ## Scope
 
