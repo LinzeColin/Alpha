@@ -1,0 +1,246 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+index c3347c2..83ebf05 100644
+--- a/HANDOFF.md
++++ b/HANDOFF.md
+@@ -50,6 +50,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
+ - Runtime backups are written locally under `runtime/backups/alpha_state_*/` and include a SQLite approval queue snapshot, paper portfolio, available market-data cache, PID, log tail, and manifest.
+ - Dashboard startup now also starts the app-managed `AutoOpsMaintenanceRuntime`: health sampling every 300 seconds, stale-backup creation, backup rotation, and JSONL health history.
+ - `/ops/maintenance/status` exposes automatic maintenance state, run count, backup count, next maintenance time, history file, retention config, and Chinese display fields.
++- `/readiness/paper-trading`, dashboard "交付就绪", and `python -m backend.app.services.paper_readiness` now expose a 6月20日 paper-trading delivery readiness report covering automatic loop, strategy iteration, paper execution, OrderIntent, risk checks, approval queue, broker-ready ticket, five-minute freshness, local App entry, and real-order boundary.
+ - Owner-facing API/status surfaces now include non-breaking Chinese display fields such as `status_zh`, `reason_zh`, `enabled_zh`, and `task_running_zh`; raw machine fields remain stable.
+ - Chinese display coverage includes FastAPI/OpenAPI metadata, owner summary actions, approval queue storage/freshness/actionability, HTTP error detail, and Moomoo OpenD next-step guidance.
+ - `AGENTS.md` now records the product rule: user-visible dashboard, App/script output, statuses, risk reasons, and owner-facing messages must default to Chinese.
+@@ -67,6 +68,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
+ - Use one app-managed paper loop; do not start a second external agent process beside the dashboard.
+ - User-visible runtime surfaces must display Chinese; API field names, enum values, ticket IDs, paths, and symbols stay machine-readable and stable.
+ - Owner-facing API errors must return a stable machine `code` plus Chinese `message_zh`.
++- Paper-trading delivery readiness is a separate gate from ops health; do not claim June 20 readiness unless `/readiness/paper-trading` has no failing items under the app-managed runtime.
+ - If a raw machine value must be shown to the owner, show it with a Chinese label or adjacent Chinese explanation.
+ - Paper execution adapters may be broker-like, but committed defaults must stay local sandbox or broker paper/read-only only.
+ - Dashboard approval actions update local ticket state only; they do not call any real broker order endpoint.
+@@ -112,10 +114,12 @@ curl http://127.0.0.1:8000/broker/moomoo/status
+ curl http://127.0.0.1:8000/strategy/tournament/history
+ curl http://127.0.0.1:8000/ops/health
+ curl http://127.0.0.1:8000/ops/maintenance/status
++curl http://127.0.0.1:8000/readiness/paper-trading
+ curl http://127.0.0.1:8000/orders/approval-queue/{ticket_id}/broker-ticket
+ curl http://127.0.0.1:8000/orders/approval-queue/{ticket_id}/broker-ticket/view
+ curl http://127.0.0.1:8000/orders/approval-queue/{ticket_id}/broker-ticket.csv
+ scripts/check_alpha_ops.sh --backup
++python -m backend.app.services.paper_readiness
+ ```
+ 
+ Latest validation:
+@@ -221,6 +225,10 @@ Owner-facing Chinese API reinforcement safety scan -> no new real broker place_o
+ Moomoo local environment recheck -> lsof shows `moomoo_Op` listening on 127.0.0.1:11111; escalated read-only `nc -zv 127.0.0.1 11111` succeeded; sandboxed socket checks may return Operation not permitted
+ Moomoo API package recheck -> system `python3 -m pip show moomoo futu-api futu` and `.venv/bin/python -m pip show moomoo futu-api futu` both reported package not found
+ Alpha Moomoo probe recheck -> escalated `.venv/bin/python` probe returned status=api_missing, status_zh=API 包未安装, opend_connected=true, package_available=false
++Paper readiness target tests -> .venv/bin/python -m pytest tests/test_paper_readiness.py tests/test_dashboard_state.py -q -> 11 passed
++Paper readiness full regression -> .venv/bin/python -m pytest tests -q -> 55 passed
++Paper readiness CLI verification -> .venv/bin/python -m backend.app.services.paper_readiness returned overall_status_zh=不可交付, pass/warn/fail=7/1/2 because no live loop snapshot and no fresh pending ticket in the current runtime state
++Paper readiness safety scan -> no new real broker place_order/unlock_trade path; readiness report states it does not submit real-money orders
+ ```
+ 
+ ## Unresolved Risks
+@@ -229,6 +237,7 @@ Alpha Moomoo probe recheck -> escalated `.venv/bin/python` probe returned status
+ - This machine's current Python SSL trust chain blocked live Stooq refresh during validation; do not disable SSL verification by default.
+ - External broker paper API integration is not connected yet; local sandbox paper adapter abstraction, Moomoo OpenD read-only probe, and manual broker-ready JSON/CSV/Chinese HTML ticket export now exist.
+ - Moomoo OpenD is installed and listening on `127.0.0.1:11111`; Codex's sandboxed socket checks may be blocked, but an escalated read-only port check succeeded. The project `.venv` still cannot import `moomoo` or `futu`; install the correct API package into `.venv` before building quote/account read-only calls.
++- `/readiness/paper-trading` and `python -m backend.app.services.paper_readiness` now exist; current CLI evidence is `不可交付` until the app-managed loop is running and a fresh pending candidate ticket exists.
+ - Dashboard is local MVP only.
+ - Approval queue is SQLite-backed locally and automatic backup/rotation now exists; it still needs a normal macOS `.app` long-run soak and multi-process contention hardening before claiming unattended 30-day robustness.
+ - The current execution environment may reclaim `nohup` background servers between tool calls; foreground uvicorn verified the app runtime, and the start script now detects post-health-check instability, but final `.app` long-run verification should be done from the user's normal macOS session.
+diff --git a/README.md b/README.md
+index 4c8b80b..53e56c2 100644
+--- a/README.md
++++ b/README.md
+@@ -24,6 +24,7 @@ scripts/start_alpha_dashboard.sh
+ scripts/stop_alpha_dashboard.sh
+ scripts/check_alpha_ops.sh
+ scripts/check_alpha_ops.sh --backup
++python -m backend.app.services.paper_readiness
+ ```
+ 
+ 控制台启动后，FastAPI 应用生命周期会启动自动模拟交易智能体运行时：立即运行一次模拟交易周期，然后每 300 秒刷新一次。
+@@ -71,6 +72,7 @@ POST /market-data/refresh
+ GET  /ops/health
+ POST /ops/backup
+ GET  /ops/maintenance/status
++GET  /readiness/paper-trading
+ GET  /orders/approval-queue
+ GET  /orders/approval-queue/{ticket_id}/broker-ticket
+ GET  /orders/approval-queue/{ticket_id}/broker-ticket/view
+@@ -97,8 +99,10 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
+ - `GET /ops/health` 汇总自动循环、SQLite 审批队列、模拟组合、模拟执行层边界、Moomoo OpenD 只读探测、行情数据、控制台进程、日志和最近备份状态。
+ - `POST /ops/backup` 会在 `runtime/backups/` 下生成一次本地运行状态备份，包含审批队列快照、模拟组合、行情缓存、PID 和日志尾部。
+ - `GET /ops/maintenance/status` 显示应用托管自动运行维护：健康采样次数、自动备份次数、下次维护时间、健康历史文件和备份轮转配置。
++- `GET /readiness/paper-trading` 输出 6月20日模拟交易交付就绪报告，逐项验证自动循环、策略迭代、模拟成交、OrderIntent、风控、审批队列、broker-ready 工单、5分钟时效、本地 App 入口和真实下单边界。
+ - `scripts/check_alpha_ops.sh` 输出中文健康检查摘要；加 `--json` 可输出机器 JSON。
+ - `scripts/check_alpha_ops.sh --backup` 可在终端生成一次本地运行状态备份。
++- `python -m backend.app.services.paper_readiness` 输出中文交付就绪摘要；加 `--json` 可查看完整机器证据。
+ - 控制台启动后会自动启动运行维护：默认每 300 秒采样一次健康状态，默认每天自动备份一次，并保留最近 30 份备份。
+ - 健康检查和备份只覆盖模拟交易与工单状态，不会提交真实资金订单。
+ 
+diff --git a/backend/app/api/routes.py b/backend/app/api/routes.py
+index a89d21b..9dad55f 100644
+--- a/backend/app/api/routes.py
++++ b/backend/app/api/routes.py
+@@ -20,6 +20,7 @@ from backend.app.services.market_data_gateway import MarketDataGateway, MarketDa
+ from backend.app.services.moomoo_broker_probe import probe_moomoo_opend
+ from backend.app.services.ops_health import collect_ops_health, create_runtime_backup
+ from backend.app.services.ops_runtime import AUTO_OPS_MAINTENANCE
++from backend.app.services.paper_readiness import collect_paper_trading_readiness
+ from backend.app.services.paper_trading_loop import DEFAULT_REFRESH_INTERVAL_SECONDS, build_default_loop, latest_mark_prices
+ from backend.app.services.paper_broker import PaperBroker
+ from backend.app.services.paper_performance import summarize_paper_performance_history
+@@ -307,6 +308,18 @@ def ops_maintenance_status() -> dict:
+     return AUTO_OPS_MAINTENANCE.snapshot()
+ 
+ 
++@router.get("/readiness/paper-trading")
++def paper_trading_readiness() -> dict:
++    return collect_paper_trading_readiness(
++        root=ROOT,
++        queue_path=QUEUE_PATH,
++        paper_state_path=PAPER_STATE_PATH,
++        strategy_history_path=STRATEGY_HISTORY_PATH,
++        performance_history_path=PAPER_PERFORMANCE_PATH,
++        loop_snapshot=AUTO_PAPER_AGENT.snapshot(),
++    )
++
++
+ @router.get("/dashboard/state")
+ def dashboard_state() -> dict:
+     return {
+@@ -314,6 +327,7 @@ def dashboard_state() -> dict:
+         "market_data": market_data_status(),
+         "ops_health": ops_health(),
+         "ops_maintenance": ops_maintenance_status(),
++        "paper_readiness": paper_trading_readiness(),
+         "owner_summary": owner_summary(),
+         "agent_status": agent_status(),
+         "paper_portfolio": paper_portfolio(),
+@@ -388,6 +402,7 @@ def dashboard() -> str:
+       <section><h2>Moomoo OpenD</h2><div id="moomooBroker"></div></section>
+       <section><h2>行情数据</h2><div id="marketData"></div></section>
+       <section><h2>运行健康</h2><div id="opsHealth"></div></section>
++      <section><h2>交付就绪</h2><div id="paperReadiness"></div></section>
+     </div>
+     <section><h2>策略锦标赛</h2><div id="tournament"></div></section>
+     <section><h2>审批队列</h2><div id="queue"></div></section>
+@@ -395,6 +410,7 @@ def dashboard() -> str:
+   <script>
+     const STATUS_TEXT = {
+       ready: '就绪',
++      not_ready: '未完全就绪',
+       sleeping: '等待下次运行',
+       running_cycle: '正在运行周期',
+       error_sleeping: '错误后等待',
+@@ -578,12 +594,14 @@ def dashboard() -> str:
+       const moomoo = data.moomoo_broker_status || {};
+       const opsHealth = data.ops_health || {};
+       const opsMaintenance = data.ops_maintenance || {};
++      const paperReadiness = data.paper_readiness || {};
+       const strategyJournal = data.strategy_journal || {};
+       const paperPerformance = data.paper_performance || {};
+       document.getElementById('metrics').innerHTML = [
+         metric('智能体', pill(displayStatus(agent.status), 'ok')),
+         metric('循环', pill(displayStatus(loop.status, '未知'), loop.error_count ? 'danger' : 'ok')),
+         metric('运行健康', pill(displayStatus(opsHealth.overall_status, '未知'), opsHealth.fail_count ? 'danger' : (opsHealth.warn_count ? 'warn' : 'ok'))),
++        metric('交付就绪', pill(paperReadiness.overall_status_zh || displayStatus(paperReadiness.overall_status, '未知'), paperReadiness.fail_count ? 'danger' : (paperReadiness.warn_count ? 'warn' : 'ok'))),
+         metric('自动维护', pill(displayStatus(opsMaintenance.status, '未知'), opsMaintenance.error_count ? 'danger' : (opsMaintenance.task_running ? 'ok' : 'warn'))),
+         metric('行情源', displayMarketDataSource(marketData.source_kind)),
+         metric('Moomoo OpenD', pill(moomoo.status_zh || displayStatus(moomoo.status, '未知'), moomoo.read_only_ready ? 'ok' : 'warn')),
+@@ -666,6 +684,29 @@ def dashboard() -> str:
+         <table><thead><tr><th>检查项</th><th>状态</th><th>说明</th></tr></thead><tbody>${rows || '<tr><td colspan="3" class="muted">暂无健康检查结果</td></tr>'}</tbody></table>
+       `;
+     }
++    function renderPaperReadiness(readiness) {
++      const checks = readiness.checks || [];
++      const rows = checks.map(check => {
++        const kind = check.status === 'fail' ? 'danger' : (check.status === 'warn' ? 'warn' : 'ok');
++        return `<tr><td>${check.title_zh || '未知检查'}</td><td>${pill(check.status_zh || displayStatus(check.status), kind)}</td><td>${check.message_zh || ''}</td></tr>`;
++      }).join('');
++      document.getElementById('paperReadiness').innerHTML = `
++        <div class="metric-grid">
++          ${metric('总体状态', pill(readiness.overall_status_zh || displayStatus(readiness.overall_status), readiness.fail_count ? 'danger' : (readiness.warn_count ? 'warn' : 'ok')))}
++          ${metric('通过', readiness.pass_count || 0)}
++          ${metric('需关注', readiness.warn_count || 0)}
++          ${metric('失败', readiness.fail_count || 0)}
++        </div>
++        <table>
++          <tbody>
++            <tr><th>交付日期</th><td>${readiness.deadline_zh || '2026年6月20日'}</td></tr>
++            <tr><th>结论</th><td>${readiness.summary_zh || '无'}</td></tr>
++            <tr><th>安全边界</th><td>${displayValue(readiness.safety_boundary && readiness.safety_boundary.message_zh)}</td></tr>
++          </tbody>
++        </table>
++        <table><thead><tr><th>交付项</th><th>状态</th><th>证据说明</th></tr></thead><tbody>${rows || '<tr><td colspan="3" class="muted">暂无就绪检查结果</td></tr>'}</tbody></table>
++      `;
++    }
+     function renderOpsMaintenance(opsMaintenance) {
+       const summary = opsMaintenance.last_result_summary || {};
+       const kind = opsMaintenance.error_count ? 'danger' : (opsMaintenance.task_running ? 'ok' : 'warn');
+@@ -872,6 +913,7 @@ def dashboard() -> str:
+         renderMoomooBroker(data.moomoo_broker_status || {});
+         renderMarketData(data.market_data || {});
+         renderOpsHealth(data.ops_health || {});
++        renderPaperReadiness(data.paper_readiness || {});
+         document.getElementById('opsHealth').insertAdjacentHTML('beforeend', renderOpsMaintenance(data.ops_maintenance || {}));
+         renderTournament(data.strategy_tournament || {});
+         document.getElementById('tournament').insertAdjacentHTML('beforeend', renderStrategyJournal(data.strategy_journal || {}));
+diff --git a/docs/decision_log.md b/docs/decision_log.md
+index fc0d174..18ecfe0 100644
+--- a/docs/decision_log.md
++++ b/docs/decision_log.md
+@@ -128,6 +128,14 @@ Reason: “全中文显示”不能只停留在 dashboard HTML；用户从 `/das
+ 
+ Consequence: FastAPI app title/description 改为中文；队列状态、时效性、存储状态和转移结果补 `*_zh`；HTTP 错误 detail 返回 `code` 与 `message_zh`；Moomoo OpenD 探测返回 `next_step_zh`。Raw enum/API key 继续保留给自动化兼容。
+ 
++## 2026-06-13: Paper Trading Readiness Is A Separate Delivery Gate
++
++Decision: Alpha must expose a dedicated paper-trading delivery readiness report separate from operational health.
++
++Reason: `/ops/health` proves the app is operational; it does not directly answer whether the June 20 paper-trading delivery requirements are satisfied item by item. The owner needs a requirement-level proof surface for automatic paper trading, candidate order generation, risk checks, approval queue, broker-ready tickets, 5-minute freshness, dashboard/app entry, and real-order boundary.
++
++Consequence: `/readiness/paper-trading`, dashboard “交付就绪”, and `python -m backend.app.services.paper_readiness` now produce a Chinese readiness report with 10 checks, pass/warn/fail counts, evidence payloads, and a clear no-real-order safety boundary. Missing app-managed loop evidence or fresh tickets prevents claiming delivery readiness.
++
+ ## 2026-06-13: Broker-Ready Ticket Export Is Manual-Only
+ 
+ Decision: 已人工复核且仍在有效期内的候选单可以导出为 JSON/CSV 人工录入工单包，但 Alpha 不调用真实经纪商下单接口。
+diff --git a/docs/requirements_alignment.md b/docs/requirements_alignment.md
+index af8b6cd..844e402 100644
+--- a/docs/requirements_alignment.md
++++ b/docs/requirements_alignment.md
+@@ -12,6 +12,7 @@
+ | Web dashboard | 已实现增强 MVP | `/dashboard`、`/dashboard/state`、`/agent/loop/status`、`/paper/portfolio`、`/paper/performance/history`、`/strategy/tournament/run`；队列表显示可操作性/时效性/剩余秒数、SQLite 存储状态，并提供中文复核、拒绝、导出操作；策略表显示样本外收益/命中率/验证窗口；模拟绩效面板显示收益率、权益变化、回撤、执行模型和累计佣金 |
+ | Market data gateway | 已实现 MVP | `MarketDataGateway` 默认缓存优先，缺失时回退到样例数据；`/market-data/status` 和 dashboard 显示行情来源、质量、最新日期、最新价格；`/market-data/refresh` 可尝试刷新 Stooq 公共延迟行情缓存 |
+ | 30 天运行健康与备份 | 已实现增强 MVP | `/ops/health`、`/ops/backup`、`/ops/maintenance/status`、`scripts/check_alpha_ops.sh` 和 dashboard "运行健康" 显示自动循环、SQLite 审批队列、模拟组合、Moomoo OpenD 只读探测、行情质量、进程/日志、最近备份、自动维护状态和真实下单边界；应用托管 ops maintenance 默认每 300 秒采样健康状态、每天自动备份一次并保留最近 30 份 |
++| 6月20日模拟交易交付就绪报告 | 已实现 MVP | `/readiness/paper-trading`、dashboard "交付就绪" 和 `python -m backend.app.services.paper_readiness` 逐项验证自动循环、策略迭代、模拟成交、OrderIntent、风控、审批队列、broker-ready 工单、5分钟时效、本地 App 入口和真实下单边界；缺少运行中循环或新鲜工单时明确标记不可交付 |
+ | Paper broker visibility | 已实现增强 MVP | `/paper/broker/status` 和 dashboard "模拟交易执行层" 显示 adapter、模式、连接、凭据要求、是否允许真实下单、执行模型、模拟滑点、单笔佣金、累计佣金、最新模拟成交和最近成交成本 |
+ | Moomoo OpenD 本机集成 | 已实现只读探测 MVP | `/broker/moomoo/status` 和 dashboard "Moomoo OpenD" 显示 Python API 包、OpenD 本机端口、只读就绪、交易解锁、真实下单禁用和禁止操作；当前不读取交易凭据、不解锁交易、不调用真实下单 |
+ | 操作及时性和时间有效性 | 已实现增强 MVP | `ApprovalQueue.summary()` 只把未过期的待人工确认候选单计为用户可操作；后端拒绝复核/导出过期工单；过期候选单保留用于审计 |
+diff --git a/tests/test_dashboard_state.py b/tests/test_dashboard_state.py
+index ce1cd80..2b1eb5a 100644
+--- a/tests/test_dashboard_state.py
++++ b/tests/test_dashboard_state.py
+@@ -48,6 +48,9 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
+     assert state["ops_health"]["check_count"] >= 1
+     assert state["ops_maintenance"]["status"] in {"stopped", "maintenance_sleeping", "running_maintenance", "starting"}
+     assert state["ops_maintenance"]["backup_interval_seconds"] > 0
++    assert state["paper_readiness"]["deadline"] == "2026-06-20"
++    assert state["paper_readiness"]["check_count"] == 10
++    assert state["paper_readiness"]["safety_boundary"]["live_order_submission_enabled"] is False
+     assert state["agent_status"]["status"] == "ready"
+     assert state["paper_portfolio"]["trade_count"] == 1
+     assert state["paper_performance"]["status"] == "ready"
+@@ -207,6 +210,9 @@ def test_dashboard_html_uses_chinese_user_visible_text():
+     assert "禁止操作" in html
+     assert "行情数据" in html
+     assert "运行健康" in html
++    assert "交付就绪" in html
++    assert "交付日期" in html
++    assert "交付项" in html
+     assert "刷新公共行情" in html
+     assert "生成运行备份" in html
+     assert "自动维护" in html
