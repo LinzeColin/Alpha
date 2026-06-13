@@ -1,0 +1,78 @@
+From d5a730f55369b0219e5033e58fb14fc3df6e2450 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Date: Sat, 13 Jun 2026 14:46:24 +1000
+Subject: [PATCH] Document Chinese display coverage
+
+---
+ HANDOFF.md                     | 2 ++
+ README.md                      | 1 +
+ docs/decision_log.md           | 8 ++++++++
+ docs/requirements_alignment.md | 2 +-
+ 4 files changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/HANDOFF.md b/HANDOFF.md
+index 9b6448b..1f83dea 100644
+--- a/HANDOFF.md
++++ b/HANDOFF.md
+@@ -51,6 +51,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
+ - Dashboard startup now also starts the app-managed `AutoOpsMaintenanceRuntime`: health sampling every 300 seconds, stale-backup creation, backup rotation, and JSONL health history.
+ - `/ops/maintenance/status` exposes automatic maintenance state, run count, backup count, next maintenance time, history file, retention config, and Chinese display fields.
+ - Owner-facing API/status surfaces now include non-breaking Chinese display fields such as `status_zh`, `reason_zh`, `enabled_zh`, and `task_running_zh`; raw machine fields remain stable.
++- Chinese display coverage includes FastAPI/OpenAPI metadata, owner summary actions, approval queue storage/freshness/actionability, HTTP error detail, and Moomoo OpenD next-step guidance.
+ - `AGENTS.md` now records the product rule: user-visible dashboard, App/script output, statuses, risk reasons, and owner-facing messages must default to Chinese.
+ - `scripts/start_alpha_dashboard.sh` now performs a post-health-check stability confirmation before reporting startup success.
+ - AppleScript `Alpha.app` is installed at `/Users/linzezhang/Downloads/Alpha.app`, `/Users/linzezhang/Applications/Alpha.app`, and `/Applications/Alpha.app`.
+@@ -65,6 +66,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
+ - Refresh cadence target is 300 seconds by default.
+ - Use one app-managed paper loop; do not start a second external agent process beside the dashboard.
+ - User-visible runtime surfaces must display Chinese; API field names, enum values, ticket IDs, paths, and symbols stay machine-readable and stable.
++- Owner-facing API errors must return a stable machine `code` plus Chinese `message_zh`.
+ - If a raw machine value must be shown to the owner, show it with a Chinese label or adjacent Chinese explanation.
+ - Paper execution adapters may be broker-like, but committed defaults must stay local sandbox or broker paper/read-only only.
+ - Dashboard approval actions update local ticket state only; they do not call any real broker order endpoint.
+diff --git a/README.md b/README.md
+index b4109ba..4c8b80b 100644
+--- a/README.md
++++ b/README.md
+@@ -113,6 +113,7 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
+ 
+ - 控制台页面、按钮、表格、状态、风险原因、执行层名称、策略名称、行情状态、模拟绩效和本地命令摘要默认中文显示。
+ - 策略迭代历史、模拟绩效历史、自动循环状态、运行健康、维护状态、风控原因和工单导出包会提供中文展示字段，例如 `status_zh`、`reason_zh`、`winner_strategy_id_zh`、`winner_decision_zh`。
++- FastAPI OpenAPI 元信息、owner 摘要、审批队列时效性、存储状态、人工操作、HTTP 错误说明和 Moomoo 下一步提示均提供中文展示字段。
+ - API 字段名、内部枚举、工单号、文件路径和股票代码保持机器可读格式，供测试、MCP、后续券商适配器和自动化流程稳定使用；面向 owner 的界面必须优先展示中文字段。
+ - 新增界面或命令输出时必须补充中文展示映射；如确需展示 raw enum，必须同时给出中文标签或中文解释。
+ 
+diff --git a/docs/decision_log.md b/docs/decision_log.md
+index 13466d6..fc0d174 100644
+--- a/docs/decision_log.md
++++ b/docs/decision_log.md
+@@ -120,6 +120,14 @@ Reason: 用户要求“整个系统彻底的全中文显示”，运行期间不
+ 
+ Consequence: API 字段名、内部枚举、工单号、文件路径和股票代码继续保持机器可读格式；Dashboard、CLI 摘要和 owner-facing API 会提供中文映射或 `*_zh` 字段。新增界面或命令输出必须补对应中文展示测试。
+ 
++## 2026-06-13: Owner-Facing API Errors And Metadata Are Chinese
++
++Decision: OpenAPI 产品元信息、owner 摘要、审批队列时效性、存储状态、HTTP 错误说明和 broker 探测下一步提示必须提供中文展示值。
++
++Reason: “全中文显示”不能只停留在 dashboard HTML；用户从 `/dashboard/state`、`/orders/...` 错误响应或 `/broker/moomoo/status` 读取状态时也应能直接理解系统含义。
++
++Consequence: FastAPI app title/description 改为中文；队列状态、时效性、存储状态和转移结果补 `*_zh`；HTTP 错误 detail 返回 `code` 与 `message_zh`；Moomoo OpenD 探测返回 `next_step_zh`。Raw enum/API key 继续保留给自动化兼容。
++
+ ## 2026-06-13: Broker-Ready Ticket Export Is Manual-Only
+ 
+ Decision: 已人工复核且仍在有效期内的候选单可以导出为 JSON/CSV 人工录入工单包，但 Alpha 不调用真实经纪商下单接口。
+diff --git a/docs/requirements_alignment.md b/docs/requirements_alignment.md
+index f75f398..af8b6cd 100644
+--- a/docs/requirements_alignment.md
++++ b/docs/requirements_alignment.md
+@@ -16,7 +16,7 @@
+ | Moomoo OpenD 本机集成 | 已实现只读探测 MVP | `/broker/moomoo/status` 和 dashboard "Moomoo OpenD" 显示 Python API 包、OpenD 本机端口、只读就绪、交易解锁、真实下单禁用和禁止操作；当前不读取交易凭据、不解锁交易、不调用真实下单 |
+ | 操作及时性和时间有效性 | 已实现增强 MVP | `ApprovalQueue.summary()` 只把未过期的待人工确认候选单计为用户可操作；后端拒绝复核/导出过期工单；过期候选单保留用于审计 |
+ | 稳定 webpage 交互平台入口 | 已实现增强 MVP | AppleScript `Alpha.app` 已安装到 Downloads、用户 Applications 和系统 `/Applications`；命令入口保留用于兼容 |
+-| 全中文显示 | 已实现增强 MVP | 控制台标题、按钮、指标、表格、空状态、状态映射、启动/停止脚本提示、CLI 摘要、策略迭代历史、模拟绩效、风险原因和工单导出包均提供中文展示；API 机器字段和值保持稳定，owner-facing 字段补 `*_zh` |
++| 全中文显示 | 已实现增强 MVP | 控制台标题、按钮、指标、表格、空状态、状态映射、启动/停止脚本提示、CLI 摘要、策略迭代历史、模拟绩效、风险原因、工单导出包、OpenAPI 元信息、HTTP 错误说明、owner 摘要、审批队列时效/存储状态和 Moomoo 下一步提示均提供中文展示；API 机器字段和值保持稳定，owner-facing 字段补 `*_zh` |
+ | 策略迭代 | 已实现增强 MVP | `run_strategy_tournament()` 使用 walk-forward 样本外收益、命中率、验证窗口和可交易选择对 momentum 候选排序；每次 paper cycle 持久化 `runtime/strategy_tournament_history.jsonl` 并显示策略稳定度 |
+ | `live_trading.enabled:true` | 已拒绝 | 提交默认值必须保持禁用 |
+ | 全自动实盘真实下单 | 已拒绝 | 真实资金订单需要用户在 broker 侧确认 |
+-- 
+2.39.5 (Apple Git-154)
