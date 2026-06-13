@@ -1,0 +1,514 @@
+From 78d10e3d59315707c474c5a974a5aa3cc337ddd4 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Date: Sat, 13 Jun 2026 14:44:58 +1000
+Subject: [PATCH] Improve Chinese owner-facing status surfaces
+
+---
+ HANDOFF.md                                  |  4 ++
+ backend/app/api/routes.py                   | 30 ++++++++++---
+ backend/app/main.py                         |  7 ++-
+ backend/app/services/approval_queue.py      | 49 ++++++++++++++++++---
+ backend/app/services/display_locale.py      | 20 +++++++++
+ backend/app/services/moomoo_broker_probe.py | 11 +++++
+ tests/test_approval_queue.py                | 10 +++++
+ tests/test_dashboard_state.py               | 25 +++++++++++
+ tests/test_moomoo_broker_probe.py           |  4 ++
+ 9 files changed, 145 insertions(+), 15 deletions(-)
+
+diff --git a/HANDOFF.md b/HANDOFF.md
+index 2028f97..9b6448b 100644
+--- a/HANDOFF.md
++++ b/HANDOFF.md
+@@ -212,6 +212,10 @@ Moomoo read-only probe safety scan -> no new real broker place_order/unlock_trad
+ Runtime Moomoo probe verification -> GET /broker/moomoo/status returned status_zh=API 包未安装, opend_connected=true, package_available=false, read_only_ready=false, live_order_submission_enabled=false, trade_unlock_required=false
+ Runtime dashboard Moomoo verification -> GET /dashboard/state exposed Moomoo OpenD mode_zh=只读连接探测 and forbidden_operations_zh includes 解锁交易/提交真实资金订单/修改真实账户
+ Runtime ops health Moomoo verification -> GET /ops/health included Moomoo OpenD 只读探测 as warn because OpenD port is reachable but current .venv cannot import moomoo/futu API package; real-order submission false
++Owner-facing Chinese API reinforcement target tests -> .venv/bin/python -m pytest tests/test_dashboard_state.py tests/test_approval_queue.py tests/test_moomoo_broker_probe.py tests/test_live_broker_fail_closed.py -q -> 23 passed
++Owner-facing Chinese API reinforcement full regression -> .venv/bin/python -m pytest tests -q -> 53 passed
++Owner-facing Chinese API reinforcement diff hygiene -> git diff --check -> passed
++Owner-facing Chinese API reinforcement safety scan -> no new real broker place_order/unlock_trade path; live-order submission remains disabled
+ ```
+ 
+ ## Unresolved Risks
+diff --git a/backend/app/api/routes.py b/backend/app/api/routes.py
+index 5d85386..a89d21b 100644
+--- a/backend/app/api/routes.py
++++ b/backend/app/api/routes.py
+@@ -13,6 +13,7 @@ from backend.app.services.broker_ticket_export import (
+     format_broker_ready_order_csv,
+     format_broker_ready_order_html_zh,
+ )
++from backend.app.services.display_locale import zh_owner_action, zh_reason, zh_system_mode
+ from backend.app.services.policy import GovernorPolicy
+ from backend.app.services.live_broker import FailClosedLiveBroker, LiveOrderIntent
+ from backend.app.services.market_data_gateway import MarketDataGateway, MarketDataSnapshot
+@@ -66,13 +67,23 @@ def resolve_market_data() -> MarketDataSnapshot:
+ def owner_summary() -> dict:
+     queue = ApprovalQueue(QUEUE_PATH)
+     queue_summary = queue.summary()
++    system_mode = "research_paper_order_intent_review"
++    required_actions = ["review_order_tickets"] if queue_summary["fresh_pending_count"] else []
+     return {
+-        "system_mode": "research_paper_order_intent_review",
++        "system_mode": system_mode,
++        "system_mode_zh": zh_system_mode(system_mode),
+         "strategies": {"research": 1, "paper": 1, "live_order_review": queue_summary["fresh_pending_count"]},
+-        "required_owner_actions": ["review_order_tickets"] if queue_summary["fresh_pending_count"] else [],
++        "strategies_zh": {
++            "research": "研究策略 1 个",
++            "paper": "模拟交易策略 1 个",
++            "live_order_review": f"待人工复核候选单 {queue_summary['fresh_pending_count']} 张",
++        },
++        "required_owner_actions": required_actions,
++        "required_owner_actions_zh": [zh_owner_action(action) for action in required_actions],
+         "pending_order_tickets": queue_summary["fresh_pending_count"],
+         "expired_order_tickets": queue_summary["expired_pending_count"],
+         "approval_queue_storage": queue.storage_status(),
++        "message_zh": queue_summary["message_zh"],
+     }
+ 
+ 
+@@ -151,7 +162,7 @@ def approval_queue_mark_exported(ticket_id: str, payload: dict | None = None) ->
+ def approval_queue_broker_ticket(ticket_id: str) -> dict:
+     ticket = ApprovalQueue(QUEUE_PATH).get_ticket(ticket_id)
+     if not ticket:
+-        raise HTTPException(status_code=404, detail="ticket_not_found")
++        raise _http_error(404, "ticket_not_found")
+     return build_broker_ready_order_export(ticket)
+ 
+ 
+@@ -159,7 +170,7 @@ def approval_queue_broker_ticket(ticket_id: str) -> dict:
+ def approval_queue_broker_ticket_view(ticket_id: str) -> HTMLResponse:
+     ticket = ApprovalQueue(QUEUE_PATH).get_ticket(ticket_id)
+     if not ticket:
+-        raise HTTPException(status_code=404, detail="ticket_not_found")
++        raise _http_error(404, "ticket_not_found")
+     export_package = build_broker_ready_order_export(ticket)
+     return HTMLResponse(format_broker_ready_order_html_zh(export_package))
+ 
+@@ -168,19 +179,23 @@ def approval_queue_broker_ticket_view(ticket_id: str) -> HTMLResponse:
+ def approval_queue_broker_ticket_csv(ticket_id: str) -> PlainTextResponse:
+     ticket = ApprovalQueue(QUEUE_PATH).get_ticket(ticket_id)
+     if not ticket:
+-        raise HTTPException(status_code=404, detail="ticket_not_found")
++        raise _http_error(404, "ticket_not_found")
+     export_package = build_broker_ready_order_export(ticket)
+     return PlainTextResponse(format_broker_ready_order_csv(export_package), media_type="text/csv; charset=utf-8")
+ 
+ 
+ def _queue_transition_response(result: dict) -> dict:
+     if result.get("status") == "not_found":
+-        raise HTTPException(status_code=404, detail="ticket_not_found")
++        raise _http_error(404, "ticket_not_found")
+     if result.get("status") == "blocked":
+-        raise HTTPException(status_code=409, detail=result.get("reason", "ticket_transition_blocked"))
++        raise _http_error(409, str(result.get("reason", "ticket_transition_blocked")))
+     return result
+ 
+ 
++def _http_error(status_code: int, code: str) -> HTTPException:
++    return HTTPException(status_code=status_code, detail={"code": code, "message_zh": zh_reason(code)})
++
++
+ @router.get("/agent/status")
+ def agent_status() -> dict:
+     queue = ApprovalQueue(QUEUE_PATH)
+@@ -757,6 +772,7 @@ def dashboard() -> str:
+             <tr><th>连接模式</th><td>${status.mode_zh || displayStatus(status.mode, '未知')}</td></tr>
+             <tr><th>探测结果</th><td>${pill(status.status_zh || displayStatus(status.status, '未知'), kind)}</td></tr>
+             <tr><th>说明</th><td>${status.message_zh || '暂无说明'}</td></tr>
++            <tr><th>下一步</th><td>${status.next_step_zh || '暂无'}</td></tr>
+             <tr><th>OpenD 地址</th><td>${displayValue(status.host)}:${displayValue(status.port)}</td></tr>
+             <tr><th>OpenD 连接</th><td>${status.opend_connected_zh || displayBool(status.opend_connected)}</td></tr>
+             <tr><th>API 包</th><td>${status.package_available_zh || displayBool(status.package_available)} / ${displayValue(packageInfo.import_name, '未发现')} / ${displayValue(packageInfo.version, '未知版本')}</td></tr>
+diff --git a/backend/app/main.py b/backend/app/main.py
+index dde021f..a4a2e84 100644
+--- a/backend/app/main.py
++++ b/backend/app/main.py
+@@ -77,7 +77,12 @@ async def lifespan(app: FastAPI):
+     await AUTO_PAPER_AGENT.stop()
+ 
+ 
+-app = FastAPI(title="Personal Alpha Agent Workspace", version="0.1.0", lifespan=lifespan)
++app = FastAPI(
++    title="Alpha 个人量化智能体工作台",
++    description="本地优先的研究、回测、自动模拟交易、候选订单人工复核与运行健康控制台。",
++    version="0.1.0",
++    lifespan=lifespan,
++)
+ app.include_router(router)
+ 
+ if __name__ == "__main__":
+diff --git a/backend/app/services/approval_queue.py b/backend/app/services/approval_queue.py
+index bb4f429..d748cfc 100644
+--- a/backend/app/services/approval_queue.py
++++ b/backend/app/services/approval_queue.py
+@@ -6,6 +6,8 @@ from datetime import datetime, timezone
+ from pathlib import Path
+ from typing import Iterable
+ 
++from backend.app.services.display_locale import zh_reason, zh_status, zh_storage_backend
++
+ SQLITE_SUFFIXES = {".db", ".sqlite", ".sqlite3"}
+ SQLITE_SCHEMA_VERSION = 1
+ 
+@@ -29,13 +31,13 @@ class ApprovalQueue:
+ 
+     def enqueue(self, ticket: dict) -> dict:
+         if self.get_ticket(str(ticket.get("ticket_id", ""))):
+-            return {"status": "duplicate", "ticket": ticket}
++            return {"status": "duplicate", "status_zh": zh_status("duplicate"), "ticket": ticket}
+         if self.storage_backend == "sqlite":
+             self._save_sqlite_ticket(ticket, insert=True)
+-            return {"status": "queued", "ticket": ticket}
++            return {"status": "queued", "status_zh": zh_status("queued"), "ticket": ticket}
+         self._tickets.append(ticket)
+         self._persist()
+-        return {"status": "queued", "ticket": ticket}
++        return {"status": "queued", "status_zh": zh_status("queued"), "ticket": ticket}
+ 
+     def list_tickets(self) -> list[dict]:
+         if self.storage_backend == "sqlite":
+@@ -77,15 +79,19 @@ class ApprovalQueue:
+             "latest_fresh_ticket_created_at": fresh_pending[-1].get("created_at") if fresh_pending else None,
+             "latest_ticket_created_at": annotated[-1].get("created_at") if annotated else None,
+             "storage": self.storage_status(),
++            "message_zh": _summary_message_zh(len(fresh_pending), len(expired_pending), len(exported)),
+         }
+ 
+     def storage_status(self) -> dict:
+         exists = bool(self.path and self.path.exists())
+         return {
+             "backend": self.storage_backend,
++            "backend_zh": zh_storage_backend(self.storage_backend),
+             "durable": self.storage_backend in {"json", "sqlite"},
++            "durable_zh": "是" if self.storage_backend in {"json", "sqlite"} else "否",
+             "path": str(self.path) if self.path else None,
+             "exists": exists,
++            "exists_zh": "是" if exists else "否",
+             "schema_version": SQLITE_SCHEMA_VERSION if self.storage_backend == "sqlite" else None,
+             "file_size_bytes": self.path.stat().st_size if exists and self.path else None,
+         }
+@@ -132,12 +138,20 @@ class ApprovalQueue:
+     ) -> dict:
+         ticket = self.get_ticket(ticket_id)
+         if not ticket:
+-            return {"status": "not_found", "ticket_id": ticket_id}
++            return {
++                "status": "not_found",
++                "status_zh": zh_status("not_found"),
++                "reason": "ticket_not_found",
++                "reason_zh": zh_reason("ticket_not_found"),
++                "ticket_id": ticket_id,
++            }
+         current_status = str(ticket.get("status", "unknown"))
+         if current_status == new_status:
+             return {
+                 "status": "unchanged",
++                "status_zh": zh_status("unchanged"),
+                 "reason": "ticket_already_in_requested_state",
++                "reason_zh": zh_reason("ticket_already_in_requested_state"),
+                 "ticket": annotate_ticket_freshness(ticket),
+             }
+         blocked_reason = _transition_blocker(current_status, new_status)
+@@ -145,14 +159,18 @@ class ApprovalQueue:
+         if blocked_reason:
+             return {
+                 "status": "blocked",
++                "status_zh": zh_status("blocked"),
+                 "reason": blocked_reason,
++                "reason_zh": zh_reason(blocked_reason),
+                 "ticket": annotated_ticket,
+             }
+         freshness_status = (annotated_ticket.get("freshness") or {}).get("status")
+         if new_status in {"owner_reviewed", "broker_ticket_exported"} and freshness_status != "fresh":
+             return {
+                 "status": "blocked",
++                "status_zh": zh_status("blocked"),
+                 "reason": "expired_ticket_cannot_be_owner_reviewed_or_exported",
++                "reason_zh": zh_reason("expired_ticket_cannot_be_owner_reviewed_or_exported"),
+                 "ticket": annotated_ticket,
+             }
+         updated = dict(ticket)
+@@ -186,8 +204,11 @@ class ApprovalQueue:
+         self._save_ticket(updated)
+         return {
+             "status": "updated",
++            "status_zh": zh_status("updated"),
+             "previous_status": current_status,
++            "previous_status_zh": zh_status(current_status),
+             "new_status": new_status,
++            "new_status_zh": zh_status(new_status),
+             "ticket": annotate_ticket_freshness(updated),
+         }
+ 
+@@ -316,18 +337,22 @@ def annotate_ticket_freshness(ticket: dict, *, now: datetime | None = None) -> d
+         annotated["actionability"] = annotated["status"]
+     else:
+         annotated["actionability"] = annotated.get("status", "unknown")
++    annotated["status_zh"] = zh_status(annotated.get("status"))
++    annotated["actionability_zh"] = zh_status(annotated.get("actionability"))
+     return annotated
+ 
+ 
+ def _freshness(expires_at: str | None, *, now: datetime) -> dict:
+     if not expires_at:
+-        return {"status": "unknown", "expires_at": None, "seconds_until_expiry": None}
++        return {"status": "unknown", "status_zh": zh_status("unknown"), "expires_at": None, "seconds_until_expiry": None}
+     expires = _parse_iso_datetime(expires_at)
+     if not expires:
+-        return {"status": "invalid", "expires_at": expires_at, "seconds_until_expiry": None}
++        return {"status": "invalid", "status_zh": zh_status("invalid"), "expires_at": expires_at, "seconds_until_expiry": None}
+     seconds_until_expiry = int((expires - now).total_seconds())
++    status = "fresh" if seconds_until_expiry > 0 else "expired"
+     return {
+-        "status": "fresh" if seconds_until_expiry > 0 else "expired",
++        "status": status,
++        "status_zh": zh_status(status),
+         "expires_at": expires.isoformat(),
+         "seconds_until_expiry": seconds_until_expiry,
+     }
+@@ -355,6 +380,16 @@ def _transition_blocker(current_status: str, new_status: str) -> str | None:
+     return None
+ 
+ 
++def _summary_message_zh(fresh_pending_count: int, expired_pending_count: int, exported_count: int) -> str:
++    if fresh_pending_count:
++        return f"当前有 {fresh_pending_count} 张有效候选单需要人工复核。"
++    if expired_pending_count:
++        return f"当前没有有效候选单，已有 {expired_pending_count} 张过期候选单保留用于审计。"
++    if exported_count:
++        return f"当前没有待处理候选单，已有 {exported_count} 张工单完成导出记录。"
++    return "当前没有待处理候选单。"
++
++
+ def _storage_backend_for_path(path: Path | None) -> str:
+     if path is None:
+         return "memory"
+diff --git a/backend/app/services/display_locale.py b/backend/app/services/display_locale.py
+index bbacc72..5e9caf3 100644
+--- a/backend/app/services/display_locale.py
++++ b/backend/app/services/display_locale.py
+@@ -76,6 +76,14 @@ STORAGE_BACKEND_TEXT_ZH = {
+     "memory": "内存",
+ }
+ 
++SYSTEM_MODE_TEXT_ZH = {
++    "research_paper_order_intent_review": "研究、模拟交易与候选订单人工复核模式",
++}
++
++OWNER_ACTION_TEXT_ZH = {
++    "review_order_tickets": "复核候选订单工单",
++}
++
+ MARKET_DATA_PROVIDER_TEXT_ZH = {
+     "cache_or_fixture": "本地缓存优先",
+     "stooq": "Stooq 公共延迟行情",
+@@ -178,6 +186,18 @@ def zh_storage_backend(value: object) -> str:
+     return STORAGE_BACKEND_TEXT_ZH.get(str(value), "未知存储")
+ 
+ 
++def zh_system_mode(value: object) -> str:
++    if value is None or value == "":
++        return "未知系统模式"
++    return SYSTEM_MODE_TEXT_ZH.get(str(value), "未知系统模式")
++
++
++def zh_owner_action(value: object) -> str:
++    if value is None or value == "":
++        return "无"
++    return OWNER_ACTION_TEXT_ZH.get(str(value), "未知人工操作")
++
++
+ def zh_market_data_provider(value: object) -> str:
+     if value is None or value == "":
+         return "未知行情源"
+diff --git a/backend/app/services/moomoo_broker_probe.py b/backend/app/services/moomoo_broker_probe.py
+index fa8e388..cf8534f 100644
+--- a/backend/app/services/moomoo_broker_probe.py
++++ b/backend/app/services/moomoo_broker_probe.py
+@@ -34,6 +34,14 @@ MESSAGE_ZH = {
+     "probe_error": "Moomoo OpenD 探测过程中发生异常；系统保持只读与真实下单禁用状态。",
+ }
+ 
++NEXT_STEP_ZH = {
++    "ready_read_only": "下一步：只接入只读行情和账户状态探测，继续保持真实下单禁用。",
++    "api_missing": "下一步：在项目虚拟环境中安装 Moomoo/Futu OpenAPI Python 包后重新探测。",
++    "opend_unreachable": "下一步：启动本机 Moomoo OpenD，并确认监听地址和端口配置。",
++    "not_configured": "下一步：安装 Moomoo/Futu OpenAPI Python 包并启动本机 OpenD。",
++    "probe_error": "下一步：查看探测异常和本机 OpenD 状态；修复前保持只读和真实下单禁用。",
++}
++
+ 
+ @dataclass(frozen=True)
+ class MoomooOpenDProbeConfig:
+@@ -91,6 +99,7 @@ def _probe_status(
+         "status": status,
+         "status_zh": STATUS_ZH[status],
+         "message_zh": MESSAGE_ZH[status],
++        "next_step_zh": NEXT_STEP_ZH[status],
+         "generated_at": _utc_now_iso(),
+         "host": cfg.host,
+         "port": cfg.port,
+@@ -126,6 +135,7 @@ def detect_moomoo_api_package() -> dict:
+         version = _package_version(import_name, candidate["distribution_names"])
+         return {
+             "available": True,
++            "available_zh": "是",
+             "import_name": import_name,
+             "distribution_name": version["distribution_name"],
+             "version": version["version"],
+@@ -133,6 +143,7 @@ def detect_moomoo_api_package() -> dict:
+         }
+     return {
+         "available": False,
++        "available_zh": "否",
+         "import_name": None,
+         "distribution_name": None,
+         "version": None,
+diff --git a/tests/test_approval_queue.py b/tests/test_approval_queue.py
+index 6c0d60c..98d57be 100644
+--- a/tests/test_approval_queue.py
++++ b/tests/test_approval_queue.py
+@@ -52,10 +52,15 @@ def test_approval_queue_summarizes_fresh_and_expired_pending_tickets(tmp_path):
+     assert summary["total_count"] == 2
+     assert summary["fresh_pending_count"] == 1
+     assert summary["expired_pending_count"] == 1
++    assert summary["message_zh"] == "当前有 1 张有效候选单需要人工复核。"
+     assert latest[0]["actionability"] == "fresh_pending_owner_approval"
++    assert latest[0]["actionability_zh"] == "有效，待人工确认"
+     assert latest[0]["freshness"]["seconds_until_expiry"] == 300
++    assert latest[0]["freshness"]["status_zh"] == "有效"
+     assert latest[1]["actionability"] == "expired_owner_approval"
++    assert latest[1]["actionability_zh"] == "已过期，需重新生成"
+     assert latest[1]["freshness"]["status"] == "expired"
++    assert latest[1]["freshness"]["status_zh"] == "已过期"
+ 
+ 
+ def test_approval_queue_tracks_owner_review_and_export_transitions(tmp_path):
+@@ -77,7 +82,9 @@ def test_approval_queue_tracks_owner_review_and_export_transitions(tmp_path):
+     summary = reloaded.summary()
+ 
+     assert reviewed["status"] == "updated"
++    assert reviewed["status_zh"] == "已更新"
+     assert reviewed["new_status"] == "owner_reviewed"
++    assert reviewed["new_status_zh"] == "已人工复核"
+     assert exported["status"] == "updated"
+     assert exported["new_status"] == "broker_ticket_exported"
+     assert stored["status"] == "broker_ticket_exported"
+@@ -124,6 +131,7 @@ def test_sqlite_approval_queue_imports_existing_json_sibling(tmp_path):
+     queue = ApprovalQueue(sqlite_path)
+ 
+     assert queue.storage_status()["backend"] == "sqlite"
++    assert queue.storage_status()["backend_zh"] == "SQLite 数据库"
+     assert queue.get_ticket("ticket_legacy")["ticket_id"] == "ticket_legacy"
+     assert queue.summary()["total_count"] == 1
+ 
+@@ -136,7 +144,9 @@ def test_approval_queue_blocks_export_before_owner_review(tmp_path):
+     result = queue.mark_exported("ticket_pending")
+ 
+     assert result["status"] == "blocked"
++    assert result["status_zh"] == "已阻止"
+     assert result["reason"] == "ticket_must_be_owner_reviewed_before_export"
++    assert result["reason_zh"] == "导出前必须先完成所有者复核"
+     assert queue.get_ticket("ticket_pending")["status"] == "pending_owner_approval"
+ 
+ 
+diff --git a/tests/test_dashboard_state.py b/tests/test_dashboard_state.py
+index 2f7bbdd..ce1cd80 100644
+--- a/tests/test_dashboard_state.py
++++ b/tests/test_dashboard_state.py
+@@ -1,7 +1,11 @@
+ from datetime import datetime, timedelta, timezone
+ from pathlib import Path
+ 
++import pytest
++from fastapi import HTTPException
++
+ from backend.app.api import routes
++from backend.app.main import app
+ from backend.app.services.display_locale import format_paper_cycle_summary_zh, zh_reason, zh_status
+ from backend.app.services.approval_queue import ApprovalQueue
+ 
+@@ -77,8 +81,12 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
+     assert state["strategy_journal"]["stability_ratio_zh"] == "100.00%"
+     assert state["approval_queue"]["count"] == 1
+     assert state["approval_queue"]["storage"]["backend"] == "sqlite"
++    assert state["approval_queue"]["storage"]["backend_zh"] == "SQLite 数据库"
+     assert state["approval_queue"]["storage"]["durable"] is True
+     assert state["owner_summary"]["approval_queue_storage"]["backend"] == "sqlite"
++    assert state["owner_summary"]["system_mode_zh"] == "研究、模拟交易与候选订单人工复核模式"
++    assert state["owner_summary"]["required_owner_actions_zh"] == ["复核候选订单工单"]
++    assert state["owner_summary"]["message_zh"] == "当前有 1 张有效候选单需要人工复核。"
+     assert state["agent_status"]["approval_queue_storage"]["backend"] == "sqlite"
+ 
+ 
+@@ -194,6 +202,7 @@ def test_dashboard_html_uses_chinese_user_visible_text():
+     assert "只读连接探测" in html
+     assert "OpenD 连接" in html
+     assert "API 包" in html
++    assert "下一步" in html
+     assert "交易解锁" in html
+     assert "禁止操作" in html
+     assert "行情数据" in html
+@@ -244,6 +253,22 @@ def test_dashboard_html_uses_chinese_user_visible_text():
+     assert " bps" not in html
+ 
+ 
++def test_fastapi_metadata_is_chinese():
++    schema = app.openapi()
++
++    assert schema["info"]["title"] == "Alpha 个人量化智能体工作台"
++    assert "本地优先" in schema["info"]["description"]
++    assert "Personal Alpha Agent Workspace" not in schema["info"]["title"]
++
++
++def test_owner_facing_http_errors_are_chinese():
++    with pytest.raises(HTTPException) as exc_info:
++        routes.approval_queue_broker_ticket("missing_ticket")
++
++    assert exc_info.value.status_code == 404
++    assert exc_info.value.detail == {"code": "ticket_not_found", "message_zh": "未找到工单"}
++
++
+ def test_python_display_locale_covers_runtime_statuses_and_live_reasons():
+     assert zh_status("maintenance_sleeping") == "等待下次维护"
+     assert zh_status("running_maintenance") == "正在维护"
+diff --git a/tests/test_moomoo_broker_probe.py b/tests/test_moomoo_broker_probe.py
+index a5780fc..9beefa7 100644
+--- a/tests/test_moomoo_broker_probe.py
++++ b/tests/test_moomoo_broker_probe.py
+@@ -20,6 +20,7 @@ def test_moomoo_probe_reports_not_configured_without_package_or_opend():
+ 
+     assert status["status"] == "not_configured"
+     assert status["status_zh"] == "未就绪"
++    assert status["next_step_zh"] == "下一步：安装 Moomoo/Futu OpenAPI Python 包并启动本机 OpenD。"
+     assert status["mode_zh"] == "只读连接探测"
+     assert status["package_available"] is False
+     assert status["opend_connected"] is False
+@@ -46,6 +47,7 @@ def test_moomoo_probe_reports_api_missing_when_opend_port_is_reachable():
+ 
+     assert status["status"] == "api_missing"
+     assert status["status_zh"] == "API 包未安装"
++    assert status["next_step_zh"] == "下一步：在项目虚拟环境中安装 Moomoo/Futu OpenAPI Python 包后重新探测。"
+     assert status["opend_connected_zh"] == "是"
+     assert status["read_only_ready_zh"] == "否"
+     assert status["live_order_submission_enabled_zh"] == "否"
+@@ -66,6 +68,7 @@ def test_moomoo_probe_reports_ready_read_only_when_package_and_opend_are_availab
+ 
+     assert status["status"] == "ready_read_only"
+     assert status["status_zh"] == "只读探测就绪"
++    assert status["next_step_zh"] == "下一步：只接入只读行情和账户状态探测，继续保持真实下单禁用。"
+     assert status["read_only_ready"] is True
+     assert status["read_only_ready_zh"] == "是"
+     assert status["package"]["import_name"] == "moomoo"
+@@ -92,6 +95,7 @@ def test_moomoo_probe_fails_closed_on_probe_exception():
+ 
+     assert status["status"] == "probe_error"
+     assert status["status_zh"] == "探测异常"
++    assert status["next_step_zh"] == "下一步：查看探测异常和本机 OpenD 状态；修复前保持只读和真实下单禁用。"
+     assert status["read_only_ready"] is False
+     assert status["live_order_submission_enabled"] is False
+     assert status["supports_real_broker_place_order"] is False
+-- 
+2.39.5 (Apple Git-154)
