@@ -31,3 +31,11 @@ Decision: Only unexpired `pending_owner_approval` tickets count as owner-actiona
 Reason: Broker-ready tickets can become stale; a candidate older than its TTL should remain auditable but should not be treated as executable.
 
 Consequence: `ApprovalQueue.summary()` separates fresh pending, expired pending, blocked, and total tickets. The dashboard shows actionability, freshness, and seconds until expiry.
+
+## 2026-06-13: Strategy Iteration Requires Walk-Forward Evidence
+
+Decision: Strategy tournament candidates must expose simple out-of-sample evidence: walk-forward return, hit rate, and validation window count.
+
+Reason: Last-window momentum ranking is too weak for strategy promotion. Even fixture-level MVP strategy iteration should show whether a signal had repeated one-step-ahead confirmation.
+
+Consequence: `run_strategy_tournament()` now returns `validation_summary`, and each candidate includes `oos_return`, `hit_rate`, and `validation_windows`. The dashboard tournament table displays these fields.
