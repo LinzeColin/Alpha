@@ -33,6 +33,7 @@ scripts/check_alpha_ops.sh --backup
 ```text
 runtime/approval_queue.sqlite3
 runtime/paper_portfolio.json
+runtime/paper_performance_history.jsonl
 runtime/market_data/latest_prices.csv
 runtime/strategy_tournament_history.jsonl
 runtime/backups/
@@ -59,6 +60,7 @@ http://localhost:8000/dashboard/state
 ```text
 POST /paper/run-once
 GET  /paper/portfolio
+GET  /paper/performance/history
 GET  /paper/broker/status
 POST /strategy/tournament/run
 GET  /strategy/tournament/history
@@ -106,8 +108,8 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 
 ## 中文显示
 
-- 控制台页面、按钮、表格、状态、风险原因、执行层名称、策略名称、行情状态和本地命令摘要默认中文显示。
-- 策略迭代历史、自动循环状态、运行健康、维护状态、风控原因和工单导出包会提供中文展示字段，例如 `status_zh`、`reason_zh`、`winner_strategy_id_zh`、`winner_decision_zh`。
+- 控制台页面、按钮、表格、状态、风险原因、执行层名称、策略名称、行情状态、模拟绩效和本地命令摘要默认中文显示。
+- 策略迭代历史、模拟绩效历史、自动循环状态、运行健康、维护状态、风控原因和工单导出包会提供中文展示字段，例如 `status_zh`、`reason_zh`、`winner_strategy_id_zh`、`winner_decision_zh`。
 - API 字段名、内部枚举、工单号、文件路径和股票代码保持机器可读格式，供测试、MCP、后续券商适配器和自动化流程稳定使用；面向 owner 的界面必须优先展示中文字段。
 - 新增界面或命令输出时必须补充中文展示映射；如确需展示 raw enum，必须同时给出中文标签或中文解释。
 
@@ -116,3 +118,9 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - `PaperTradingLoop` 每次自动模拟交易周期会把策略锦标赛结果追加写入 `runtime/strategy_tournament_history.jsonl`。
 - `GET /strategy/tournament/history` 汇总记录次数、最近胜出策略、连续胜出次数、最近稳定度和最近运行明细。
 - Dashboard 的“策略迭代历史”面板显示最近胜出策略、样本外收益、命中率、决策和行情质量，默认使用中文展示字段。
+
+## 模拟绩效历史
+
+- `PaperTradingLoop` 每次自动模拟交易周期会把组合权益快照追加写入 `runtime/paper_performance_history.jsonl`。
+- `GET /paper/performance/history` 汇总记录次数、最新总权益、累计收益率、最新权益变化、权益高水位、最大回撤和当前回撤。
+- Dashboard 的“模拟绩效”面板显示权益历史、收益率、回撤、最新策略、标的、方向和交易次数，默认使用中文展示字段。

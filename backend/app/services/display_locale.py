@@ -256,6 +256,8 @@ def format_paper_cycle_summary_zh(result: dict) -> str:
     market_data = result.get("market_data", {}) or {}
     strategy_journal = result.get("strategy_journal", {}) or {}
     latest_strategy_record = strategy_journal.get("latest_record", {}) or {}
+    paper_performance = result.get("paper_performance", {}) or {}
+    performance_summary = paper_performance.get("summary", {}) or paper_performance
 
     lines = [
         "Alpha 模拟交易周期摘要",
@@ -299,6 +301,13 @@ def format_paper_cycle_summary_zh(result: dict) -> str:
             f"总权益 {portfolio.get('total_equity', 0)} / "
             f"现金 {portfolio.get('cash', 0)} / "
             f"交易次数 {portfolio.get('trade_count', 0)}"
+        ),
+        (
+            "模拟绩效："
+            f"累计收益 {performance_summary.get('total_return_zh', '0.00%')} / "
+            f"最新权益变化 {performance_summary.get('latest_change_zh', '0.00')} / "
+            f"当前回撤 {performance_summary.get('current_drawdown_zh', '0.00%')} / "
+            f"最大回撤 {performance_summary.get('max_drawdown_zh', '0.00%')}"
         ),
         (
             "执行层："

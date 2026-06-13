@@ -21,6 +21,8 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - Every paper cycle now appends strategy tournament evidence to `runtime/strategy_tournament_history.jsonl`.
 - `/strategy/tournament/history` and dashboard "策略迭代历史" expose run count, latest winner, winner streak, stability ratio, OOS return, hit rate, decision, and market-data quality.
 - Strategy history records and summaries now provide owner-facing Chinese fields such as `winner_strategy_id_zh`, `winner_decision_zh`, and `market_data_quality_zh`.
+- Every paper cycle now appends paper portfolio performance evidence to `runtime/paper_performance_history.jsonl`.
+- `/paper/performance/history` and dashboard "模拟绩效" expose run count, latest equity, cumulative return, latest equity change, high watermark, max drawdown, current drawdown, and recent equity rows.
 - Dashboard state includes `paper_portfolio` and `strategy_tournament`.
 - Local launcher scripts exist at `scripts/start_alpha_dashboard.sh` and `scripts/stop_alpha_dashboard.sh`.
 - Dashboard startup now starts the app-managed `AutoPaperAgentRuntime`: one immediate paper cycle, then 300-second refreshes.
@@ -78,6 +80,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - `backend/app/services/ops_health.py`
 - `backend/app/services/ops_runtime.py`
 - `backend/app/services/display_locale.py`
+- `backend/app/services/paper_performance.py`
 - `backend/app/services/strategy_journal.py`
 - `backend/app/services/live_broker.py`
 - `backend/app/services/broker_ticket_export.py`
@@ -96,6 +99,7 @@ python -m pytest tests -q
 python -m backend.app.services.paper_trading_loop --once
 python -m backend.app.services.paper_trading_loop --once --json
 curl http://127.0.0.1:8000/market-data/status
+curl http://127.0.0.1:8000/paper/performance/history
 curl http://127.0.0.1:8000/strategy/tournament/history
 curl http://127.0.0.1:8000/ops/health
 curl http://127.0.0.1:8000/ops/maintenance/status
@@ -172,6 +176,13 @@ Runtime strategy history verification -> POST /paper/run-once returned strategy_
 Runtime strategy history API verification -> GET /strategy/tournament/history returned run_count=3, current_winner_streak=3, stability_ratio_zh=100.00%, latest_winner_strategy_id_zh=动量策略 QQQ 20日
 Browser dashboard Chinese verification -> /dashboard lang=zh-CN, 策略迭代历史/策略稳定度/动量策略 QQQ 20日/可进入模拟交易 visible, forbidden English/raw enum phrases=[], browser console errors=0
 Safety scan after strategy journal -> no new real broker place_order path; committed dashboard/API still report live_order_submission_enabled=false
+Paper performance target tests -> .venv/bin/python -m pytest tests/test_paper_performance.py tests/test_paper_trading_loop.py tests/test_dashboard_state.py -q -> 13 passed
+Paper performance full regression -> .venv/bin/python -m pytest tests -q -> 46 passed
+Paper performance diff hygiene -> git diff --check -> passed
+Paper performance safety scan -> no new real broker place_order path; live-order submission remains disabled
+Runtime paper performance verification -> POST /paper/run-once returned paper_performance.status_zh=已写入, latest_record.strategy_id_zh=动量策略 TLT 20日, total_return_zh=0.00%, live_order_submission_enabled=false
+Runtime paper performance API verification -> GET /paper/performance/history returned run_count=2, latest_total_equity=10000.0, total_return_zh=0.00%, max_drawdown_zh=0.00%, latest_trade_side_zh=买入
+Browser paper performance verification -> /dashboard lang=zh-CN, 模拟绩效/模拟收益率/累计收益率/最大回撤/权益高水位/动量策略 TLT 20日 visible, forbidden English/raw enum phrases=[], browser console errors=0
 ```
 
 ## Unresolved Risks
@@ -183,7 +194,7 @@ Safety scan after strategy journal -> no new real broker place_order path; commi
 - Approval queue is SQLite-backed locally and automatic backup/rotation now exists; it still needs a normal macOS `.app` long-run soak and multi-process contention hardening before claiming unattended 30-day robustness.
 - The current execution environment may reclaim `nohup` background servers between tool calls; foreground uvicorn verified the app runtime, and the start script now detects post-health-check instability, but final `.app` long-run verification should be done from the user's normal macOS session.
 - Real broker live order submission remains intentionally out of scope.
-- Strategy tournament is still fixture-level; it now has simple walk-forward/OOS metrics and persistent strategy history, but not multi-year OOS, cost-model, slippage-model, or walk-forward portfolio validation.
+- Strategy tournament is still fixture-level; it now has simple walk-forward/OOS metrics, persistent strategy history, and persistent paper performance history, but not multi-year OOS, cost-model, slippage-model, or walk-forward portfolio validation.
 - Local `git push -u origin main` is blocked by missing HTTPS credentials (`could not read Username`); GitHub connector synced core runtime files, but older `docs/seed_pack/**` and `docs/task_pack_seed/**` still need a normal authenticated push or follow-up connector sync.
 
 ## Next Step

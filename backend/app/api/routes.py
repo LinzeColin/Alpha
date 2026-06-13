@@ -16,6 +16,7 @@ from backend.app.services.ops_health import collect_ops_health, create_runtime_b
 from backend.app.services.ops_runtime import AUTO_OPS_MAINTENANCE
 from backend.app.services.paper_trading_loop import DEFAULT_REFRESH_INTERVAL_SECONDS, build_default_loop, latest_mark_prices
 from backend.app.services.paper_broker import PaperBroker
+from backend.app.services.paper_performance import summarize_paper_performance_history
 from backend.app.services.strategy_journal import summarize_strategy_tournament_history
 from backend.app.services.strategy_iteration import run_strategy_tournament
 
@@ -28,6 +29,7 @@ MARKET_DATA_CONFIG_PATH = ROOT / "configs" / "market_data.yaml"
 QUEUE_PATH = ROOT / "runtime" / "approval_queue.sqlite3"
 PAPER_STATE_PATH = ROOT / "runtime" / "paper_portfolio.json"
 STRATEGY_HISTORY_PATH = ROOT / "runtime" / "strategy_tournament_history.jsonl"
+PAPER_PERFORMANCE_PATH = ROOT / "runtime" / "paper_performance_history.jsonl"
 PID_PATH = ROOT / "runtime" / "alpha_dashboard.pid"
 LOG_PATH = ROOT / "runtime" / "alpha_dashboard.log"
 
@@ -90,6 +92,7 @@ def paper_run_once() -> dict:
         queue_path=QUEUE_PATH,
         paper_state_path=PAPER_STATE_PATH,
         strategy_history_path=STRATEGY_HISTORY_PATH,
+        performance_history_path=PAPER_PERFORMANCE_PATH,
     )
     return loop.run_once()
 
@@ -199,6 +202,11 @@ def paper_portfolio() -> dict:
     return PaperBroker.load(PAPER_STATE_PATH).portfolio_snapshot(latest_mark_prices(market_data.price_path))
 
 
+@router.get("/paper/performance/history")
+def paper_performance_history() -> dict:
+    return summarize_paper_performance_history(PAPER_PERFORMANCE_PATH)
+
+
 @router.get("/paper/broker/status")
 def paper_broker_status() -> dict:
     return LocalSandboxPaperBrokerAdapter(PaperBroker.load(PAPER_STATE_PATH)).status()
@@ -275,6 +283,7 @@ def dashboard_state() -> dict:
         "owner_summary": owner_summary(),
         "agent_status": agent_status(),
         "paper_portfolio": paper_portfolio(),
+        "paper_performance": paper_performance_history(),
         "paper_broker_status": paper_broker_status(),
         "strategy_tournament": strategy_tournament_run(),
         "strategy_journal": strategy_tournament_history(),
@@ -338,6 +347,7 @@ def dashboard() -> str:
     </section>
     <div class="grid-two">
       <section><h2>模拟组合</h2><div id="portfolio"></div></section>
+      <section><h2>模拟绩效</h2><div id="paperPerformance"></div></section>
       <section><h2>智能体状态</h2><div id="agent"></div></section>
       <section><h2>模拟交易执行层</h2><div id="broker"></div></section>
       <section><h2>行情数据</h2><div id="marketData"></div></section>
@@ -526,6 +536,7 @@ def dashboard() -> str:
       const opsHealth = data.ops_health || {};
       const opsMaintenance = data.ops_maintenance || {};
       const strategyJournal = data.strategy_journal || {};
+      const paperPerformance = data.paper_performance || {};
       document.getElementById('metrics').innerHTML = [
         metric('智能体', pill(displayStatus(agent.status), 'ok')),
         metric('循环', pill(displayStatus(loop.status, '未知'), loop.error_count ? 'danger' : 'ok')),
@@ -535,6 +546,8 @@ def dashboard() -> str:
         metric('行情质量', pill(displayDataQuality(marketData.data_quality), marketData.real_market_data ? 'ok' : 'warn')),
         metric('最新行情日', displayValue(marketData.latest_date)),
         metric('模拟权益', Number(portfolio.total_equity || 0).toFixed(2)),
+        metric('模拟收益率', paperPerformance.total_return_zh || '0.00%'),
+        metric('当前回撤', paperPerformance.current_drawdown_zh || '0.00%'),
         metric('模拟交易数', portfolio.trade_count || 0),
         metric('有效候选单', queueSummary.fresh_pending_count || queue.count || 0),
         metric('过期候选单', queueSummary.expired_pending_count || 0),
@@ -555,6 +568,30 @@ def dashboard() -> str:
           ${metric('总权益', Number(portfolio.total_equity || 0).toFixed(2))}
         </div>
         <table><thead><tr><th>标的</th><th>数量</th><th>标记价</th><th>市值</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="muted">暂无模拟持仓</td></tr>'}</tbody></table>
+      `;
+    }
+    function renderPaperPerformance(performance) {
+      const rows = (performance.recent || []).slice(-8).reverse().map(row => `
+        <tr>
+          <td>${displayValue(row.generated_at)}</td>
+          <td>${Number(row.total_equity || 0).toFixed(2)}</td>
+          <td>${row.total_return_zh || '0.00%'}</td>
+          <td>${displayStrategyId(row.strategy_id)}</td>
+          <td>${displayValue(row.latest_trade_symbol)}</td>
+          <td>${row.latest_trade_side_zh || displaySide(row.latest_trade_side)}</td>
+          <td>${displayValue(row.trade_count)}</td>
+        </tr>
+      `).join('');
+      document.getElementById('paperPerformance').innerHTML = `
+        <div class="metric-grid">
+          ${metric('记录次数', performance.run_count || 0)}
+          ${metric('累计收益率', performance.total_return_zh || '0.00%')}
+          ${metric('最新权益变化', performance.latest_change_zh || '0.00')}
+          ${metric('最大回撤', performance.max_drawdown_zh || '0.00%')}
+          ${metric('当前回撤', performance.current_drawdown_zh || '0.00%')}
+          ${metric('权益高水位', Number(performance.equity_high_watermark || 0).toFixed(2))}
+        </div>
+        <table><thead><tr><th>时间</th><th>总权益</th><th>累计收益率</th><th>策略</th><th>标的</th><th>方向</th><th>交易次数</th></tr></thead><tbody>${rows || '<tr><td colspan="7" class="muted">暂无模拟绩效历史</td></tr>'}</tbody></table>
       `;
     }
     function renderOpsHealth(opsHealth) {
@@ -750,6 +787,7 @@ def dashboard() -> str:
         const data = await response.json();
         renderMetrics(data);
         renderPortfolio(data.paper_portfolio || {});
+        renderPaperPerformance(data.paper_performance || {});
         renderAgent(data.agent_status || {});
         renderBroker(data.paper_broker_status || {});
         renderMarketData(data.market_data || {});

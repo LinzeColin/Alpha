@@ -14,6 +14,7 @@ from backend.app.services.display_locale import format_paper_cycle_summary_zh
 from backend.app.services.market_data_gateway import MarketDataGateway, MarketDataSnapshot, utc_now_iso as market_data_utc_now_iso
 from backend.app.services.order_ticket import BrokerReadyOrderTicket, OrderIntent, utc_now_iso
 from backend.app.services.paper_broker import PaperBroker, PaperOrder
+from backend.app.services.paper_performance import append_paper_performance_history
 from backend.app.services.policy import GovernorPolicy
 from backend.app.services.risk import pre_trade_risk_check
 from backend.app.services.strategy_journal import append_strategy_tournament_history
@@ -35,6 +36,7 @@ class PaperTradingLoop:
         paper_state_path: str | Path | None = None,
         market_data_gateway: MarketDataGateway | None = None,
         strategy_history_path: str | Path | None = None,
+        performance_history_path: str | Path | None = None,
         audit_sink: MemoryAuditSink | None = None,
         refresh_interval_seconds: int = DEFAULT_REFRESH_INTERVAL_SECONDS,
     ) -> None:
@@ -46,6 +48,7 @@ class PaperTradingLoop:
         self.paper_broker_adapter = paper_broker_adapter or LocalSandboxPaperBrokerAdapter(self.paper_broker)
         self.market_data_gateway = market_data_gateway
         self.strategy_history_path = Path(strategy_history_path) if strategy_history_path else None
+        self.performance_history_path = Path(performance_history_path) if performance_history_path else None
         self.audit_sink = audit_sink or MemoryAuditSink()
         self.refresh_interval_seconds = refresh_interval_seconds
 
@@ -80,6 +83,13 @@ class PaperTradingLoop:
 
         mark_prices = latest_mark_prices(market_data.price_path)
         portfolio = self.paper_broker.portfolio_snapshot(mark_prices)
+        paper_performance = self._append_performance_history(
+            portfolio,
+            run_id=run_id,
+            market_data=market_data.status,
+            intent=intent.as_dict(),
+            broker_receipt=broker_paper_receipt,
+        )
 
         self.audit_sink.write(
             trace_id=run_id,
@@ -97,6 +107,7 @@ class PaperTradingLoop:
                 "broker_paper_receipt": broker_paper_receipt,
                 "paper_result": paper_result,
                 "paper_portfolio": portfolio,
+                "paper_performance": paper_performance,
             },
         )
 
@@ -116,6 +127,7 @@ class PaperTradingLoop:
             "broker_paper_order": broker_paper_receipt,
             "paper_order": paper_result,
             "paper_portfolio": portfolio,
+            "paper_performance": paper_performance,
             "audit_events": self.audit_sink.as_dicts(),
         }
 
@@ -166,11 +178,32 @@ class PaperTradingLoop:
             market_data=market_data,
         )
 
+    def _append_performance_history(
+        self,
+        portfolio: dict,
+        *,
+        run_id: str,
+        market_data: dict,
+        intent: dict,
+        broker_receipt: dict,
+    ) -> dict:
+        if not self.performance_history_path:
+            return {"status": "skipped", "status_zh": "已跳过", "reason_zh": "未配置模拟绩效历史文件。"}
+        return append_paper_performance_history(
+            portfolio,
+            history_path=self.performance_history_path,
+            run_id=run_id,
+            market_data=market_data,
+            intent=intent,
+            broker_receipt=broker_receipt,
+        )
+
 
 def build_default_loop(
     queue_path: str | Path | None = None,
     paper_state_path: str | Path | None = None,
     strategy_history_path: str | Path | None = None,
+    performance_history_path: str | Path | None = None,
     interval_seconds: int = DEFAULT_REFRESH_INTERVAL_SECONDS,
 ) -> PaperTradingLoop:
     root = Path(__file__).resolve().parents[3]
@@ -183,6 +216,7 @@ def build_default_loop(
         paper_state_path=state_path,
         market_data_gateway=MarketDataGateway(root=root),
         strategy_history_path=strategy_history_path or root / "runtime" / "strategy_tournament_history.jsonl",
+        performance_history_path=performance_history_path or root / "runtime" / "paper_performance_history.jsonl",
         refresh_interval_seconds=interval_seconds,
     )
 
