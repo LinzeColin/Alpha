@@ -1,5 +1,5 @@
 {
-  "base_url": "http://127.0.0.1:8147",
+  "base_url": "http://127.0.0.1:8149",
   "checked_viewport_count": 2,
   "chrome_path": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
   "error_count": 0,
@@ -21,15 +21,15 @@
         "bit_depth": 8,
         "channels": 3,
         "color_type": 2,
-        "file_size_bytes": 204362,
+        "file_size_bytes": 205335,
         "height": 1000,
-        "unique_sample_count": 221,
+        "unique_sample_count": 233,
         "width": 1440
       },
       "screenshot_path": "outputs/visual_acceptance/dashboard_desktop.png",
       "screenshot_timeout_recovered": true,
       "viewport": "desktop",
-      "visible_text_character_count": 10615,
+      "visible_text_character_count": 11160,
       "width": 1440
     },
     {
@@ -44,15 +44,15 @@
         "bit_depth": 8,
         "channels": 3,
         "color_type": 2,
-        "file_size_bytes": 71012,
+        "file_size_bytes": 77726,
         "height": 844,
-        "unique_sample_count": 336,
+        "unique_sample_count": 370,
         "width": 390
       },
       "screenshot_path": "outputs/visual_acceptance/dashboard_mobile.png",
       "screenshot_timeout_recovered": true,
       "viewport": "mobile",
-      "visible_text_character_count": 10615,
+      "visible_text_character_count": 11159,
       "width": 390
     }
   ]
