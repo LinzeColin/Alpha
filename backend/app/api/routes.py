@@ -4,11 +4,12 @@ from pathlib import Path
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 from backend.app.schemas.strategy_dsl import validate_strategy
+from backend.app.services.agent_runtime import AUTO_PAPER_AGENT
 from backend.app.services.backtest import run_buy_and_hold_fixture
 from backend.app.services.approval_queue import ApprovalQueue
 from backend.app.services.policy import GovernorPolicy
 from backend.app.services.live_broker import FailClosedLiveBroker, LiveOrderIntent
-from backend.app.services.paper_trading_loop import DEFAULT_REFRESH_INTERVAL_SECONDS, build_default_loop
+from backend.app.services.paper_trading_loop import DEFAULT_REFRESH_INTERVAL_SECONDS, build_default_loop, latest_mark_prices
 from backend.app.services.paper_broker import PaperBroker
 from backend.app.services.strategy_iteration import run_strategy_tournament
 
@@ -59,7 +60,7 @@ def backtest_run(payload: dict | None = None) -> dict:
 
 @router.post("/paper/run-once")
 def paper_run_once() -> dict:
-    loop = build_default_loop(queue_path=QUEUE_PATH)
+    loop = build_default_loop(queue_path=QUEUE_PATH, paper_state_path=PAPER_STATE_PATH)
     return loop.run_once()
 
 
@@ -72,6 +73,9 @@ def approval_queue() -> dict:
 @router.get("/agent/status")
 def agent_status() -> dict:
     queue = ApprovalQueue(QUEUE_PATH)
+    tickets = queue.list_tickets()
+    pending = [item for item in tickets if item.get("status") == "pending_owner_approval"]
+    latest_ticket = tickets[-1] if tickets else None
     return {
         "agent_id": "paper_trading_loop",
         "status": "ready",
@@ -82,13 +86,20 @@ def agent_status() -> dict:
             "approval_queue",
             "broker_ready_order_ticket",
         ],
-        "pending_tickets": len(queue.list_tickets()),
+        "pending_tickets": len(pending),
+        "latest_ticket_created_at": latest_ticket.get("created_at") if latest_ticket else None,
+        "loop": AUTO_PAPER_AGENT.snapshot(),
     }
+
+
+@router.get("/agent/loop/status")
+def agent_loop_status() -> dict:
+    return AUTO_PAPER_AGENT.snapshot()
 
 
 @router.get("/paper/portfolio")
 def paper_portfolio() -> dict:
-    return PaperBroker.load(PAPER_STATE_PATH).snapshot()
+    return PaperBroker.load(PAPER_STATE_PATH).portfolio_snapshot(latest_mark_prices(DATA_PATH))
 
 
 @router.post("/strategy/tournament/run")
@@ -119,16 +130,29 @@ def dashboard() -> str:
   <title>Alpha Dashboard</title>
   <style>
     :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    body { margin: 0; background: #f7f7f4; color: #1d1f21; }
-    header { padding: 20px 28px; border-bottom: 1px solid #d9d9d2; background: #ffffff; display: flex; justify-content: space-between; gap: 16px; align-items: center; }
-    h1 { margin: 0; font-size: 22px; font-weight: 700; }
-    main { padding: 24px 28px; display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
-    section { background: #ffffff; border: 1px solid #d9d9d2; border-radius: 8px; padding: 16px; min-height: 132px; }
+    body { margin: 0; background: #f5f6f3; color: #1d1f21; }
+    header { padding: 18px 28px; border-bottom: 1px solid #d8ddd2; background: #ffffff; display: flex; justify-content: space-between; gap: 16px; align-items: center; position: sticky; top: 0; z-index: 2; }
+    h1 { margin: 0; font-size: 22px; font-weight: 750; }
     h2 { margin: 0 0 12px; font-size: 15px; }
-    button { border: 1px solid #1d1f21; background: #1d1f21; color: #fff; border-radius: 6px; padding: 9px 12px; cursor: pointer; }
+    main { padding: 20px 28px 28px; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+    section { background: #ffffff; border: 1px solid #d8ddd2; border-radius: 8px; padding: 16px; }
+    button { border: 1px solid #1d1f21; background: #1d1f21; color: #fff; border-radius: 6px; padding: 9px 12px; cursor: pointer; font-weight: 650; }
     button.secondary { background: #fff; color: #1d1f21; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 9px 8px; border-bottom: 1px solid #eceee8; text-align: left; vertical-align: top; }
+    th { color: #5c6258; font-size: 12px; text-transform: uppercase; letter-spacing: 0; }
     pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.45; margin: 0; }
     .status { font-size: 13px; color: #555; }
+    .metric-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+    .metric { border: 1px solid #eceee8; border-radius: 8px; padding: 12px; background: #fbfbf8; }
+    .metric .label { color: #666d61; font-size: 12px; }
+    .metric .value { font-size: 22px; font-weight: 760; margin-top: 5px; }
+    .pill { display: inline-flex; border-radius: 999px; padding: 3px 8px; font-size: 12px; font-weight: 700; }
+    .ok { background: #e6f5ec; color: #176c3a; }
+    .warn { background: #fff3d6; color: #8a5b00; }
+    .danger { background: #fde7e7; color: #9b1c1c; }
+    .grid-two { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+    .muted { color: #6a7166; }
   </style>
 </head>
 <body>
@@ -143,23 +167,101 @@ def dashboard() -> str:
     </div>
   </header>
   <main>
-    <section><h2>Agent Status</h2><pre id="agent"></pre></section>
-    <section><h2>Owner Summary</h2><pre id="summary"></pre></section>
-    <section><h2>Paper Portfolio</h2><pre id="portfolio"></pre></section>
-    <section><h2>Strategy Tournament</h2><pre id="tournament"></pre></section>
-    <section><h2>Approval Queue</h2><pre id="queue"></pre></section>
-    <section><h2>System Health</h2><pre id="health"></pre></section>
+    <section>
+      <h2>System Snapshot</h2>
+      <div class="metric-grid" id="metrics"></div>
+    </section>
+    <div class="grid-two">
+      <section><h2>Paper Portfolio</h2><div id="portfolio"></div></section>
+      <section><h2>Agent Status</h2><div id="agent"></div></section>
+    </div>
+    <section><h2>Strategy Tournament</h2><div id="tournament"></div></section>
+    <section><h2>Approval Queue</h2><div id="queue"></div></section>
   </main>
   <script>
+    function pill(text, kind) {
+      return `<span class="pill ${kind}">${text}</span>`;
+    }
+    function metric(label, value) {
+      return `<div class="metric"><div class="label">${label}</div><div class="value">${value}</div></div>`;
+    }
+    function renderMetrics(data) {
+      const portfolio = data.paper_portfolio || {};
+      const queue = data.approval_queue || {};
+      const health = data.health || {};
+      const loop = (data.agent_status && data.agent_status.loop) || {};
+      document.getElementById('metrics').innerHTML = [
+        metric('Agent', pill(data.agent_status.status, 'ok')),
+        metric('Loop', pill(loop.status || 'unknown', loop.error_count ? 'danger' : 'ok')),
+        metric('Paper Equity', Number(portfolio.total_equity || 0).toFixed(2)),
+        metric('Paper Trades', portfolio.trade_count || 0),
+        metric('Pending Tickets', queue.count || 0),
+        metric('Refresh', `${health.refresh_interval_seconds || 300}s`)
+      ].join('');
+    }
+    function renderPortfolio(portfolio) {
+      const positions = portfolio.positions || [];
+      const rows = positions.map(row => `<tr><td>${row.symbol}</td><td>${row.quantity}</td><td>${row.mark_price}</td><td>${row.market_value}</td></tr>`).join('');
+      document.getElementById('portfolio').innerHTML = `
+        <div class="metric-grid">
+          ${metric('Cash', Number(portfolio.cash || 0).toFixed(2))}
+          ${metric('Positions Value', Number(portfolio.positions_value || 0).toFixed(2))}
+          ${metric('Total Equity', Number(portfolio.total_equity || 0).toFixed(2))}
+        </div>
+        <table><thead><tr><th>Symbol</th><th>Qty</th><th>Mark</th><th>Value</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="muted">No paper positions yet</td></tr>'}</tbody></table>
+      `;
+    }
+    function renderAgent(agent) {
+      const loop = agent.loop || {};
+      const summary = loop.last_result_summary || {};
+      const loopKind = loop.error_count ? 'danger' : (loop.task_running ? 'ok' : 'warn');
+      document.getElementById('agent').innerHTML = `
+        <table>
+          <tbody>
+            <tr><th>ID</th><td>${agent.agent_id}</td></tr>
+            <tr><th>Status</th><td>${pill(agent.status, 'ok')}</td></tr>
+            <tr><th>Loop</th><td>${pill(loop.status || 'unknown', loopKind)}</td></tr>
+            <tr><th>Run Count</th><td>${loop.run_count || 0}</td></tr>
+            <tr><th>Refresh</th><td>${agent.refresh_interval_seconds}s</td></tr>
+            <tr><th>Last Run</th><td>${loop.last_run_completed_at || 'Not yet'}</td></tr>
+            <tr><th>Next Run</th><td>${loop.next_run_at || 'Pending'}</td></tr>
+            <tr><th>Latest Ticket</th><td>${agent.latest_ticket_created_at || 'None'}</td></tr>
+            <tr><th>Last Result</th><td>${summary.intent_symbol || 'None'} / ${summary.ticket_status || 'None'} / ${summary.paper_order_status || 'None'}</td></tr>
+            <tr><th>Errors</th><td>${loop.error_count || 0}${loop.last_error ? ': ' + loop.last_error : ''}</td></tr>
+            <tr><th>Capabilities</th><td>${(agent.capabilities || []).join(', ')}</td></tr>
+          </tbody>
+        </table>
+      `;
+    }
+    function renderTournament(tournament) {
+      const rows = (tournament.candidates || []).slice(0, 8).map(row => `
+        <tr>
+          <td>${row.strategy_id}</td><td>${row.symbol}</td><td>${row.lookback_days}</td>
+          <td>${Number(row.total_return * 100).toFixed(2)}%</td><td>${Number(row.max_drawdown * 100).toFixed(2)}%</td>
+          <td>${Number(row.score).toFixed(4)}</td><td>${row.decision}</td>
+        </tr>`).join('');
+      document.getElementById('tournament').innerHTML = `
+        <div class="status">Winner: ${(tournament.winner && tournament.winner.strategy_id) || 'None'}</div>
+        <table><thead><tr><th>Strategy</th><th>Symbol</th><th>Lookback</th><th>Return</th><th>Drawdown</th><th>Score</th><th>Decision</th></tr></thead><tbody>${rows}</tbody></table>
+      `;
+    }
+    function renderQueue(queue) {
+      const rows = (queue.tickets || []).map(ticket => `
+        <tr>
+          <td>${ticket.ticket_id}</td><td>${ticket.status}</td><td>${ticket.broker_payload.symbol}</td>
+          <td>${ticket.broker_payload.side}</td><td>${ticket.broker_payload.quantity}</td>
+          <td>${ticket.broker_payload.estimated_price}</td><td>${ticket.risk_check.status}</td>
+        </tr>`).join('');
+      document.getElementById('queue').innerHTML = `<table><thead><tr><th>Ticket</th><th>Status</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Price</th><th>Risk</th></tr></thead><tbody>${rows || '<tr><td colspan="7" class="muted">No pending tickets</td></tr>'}</tbody></table>`;
+    }
     async function loadState() {
       const response = await fetch('/dashboard/state');
       const data = await response.json();
-      document.getElementById('health').textContent = JSON.stringify(data.health, null, 2);
-      document.getElementById('summary').textContent = JSON.stringify(data.owner_summary, null, 2);
-      document.getElementById('agent').textContent = JSON.stringify(data.agent_status, null, 2);
-      document.getElementById('portfolio').textContent = JSON.stringify(data.paper_portfolio, null, 2);
-      document.getElementById('tournament').textContent = JSON.stringify(data.strategy_tournament, null, 2);
-      document.getElementById('queue').textContent = JSON.stringify(data.approval_queue, null, 2);
+      renderMetrics(data);
+      renderPortfolio(data.paper_portfolio || {});
+      renderAgent(data.agent_status || {});
+      renderTournament(data.strategy_tournament || {});
+      renderQueue(data.approval_queue || {});
       document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleString();
     }
     async function runCycle() {
