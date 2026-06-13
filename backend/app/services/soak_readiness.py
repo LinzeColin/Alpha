@@ -9,6 +9,7 @@ from typing import Any
 
 from backend.app.services.ops_health import collect_ops_health
 from backend.app.services.paper_readiness import collect_paper_trading_readiness
+from backend.app.services.runtime_status import read_persisted_runtime_snapshot
 
 
 DEFAULT_ROOT = Path(__file__).resolve().parents[3]
@@ -30,6 +31,7 @@ def collect_soak_readiness(
     ops_health_report: dict | None = None,
     paper_readiness_report: dict | None = None,
     maintenance_snapshot: dict | None = None,
+    maintenance_snapshot_path: str | Path | None = None,
     app_paths: list[str | Path] | None = None,
     target_days: int = DEFAULT_TARGET_DAYS,
 ) -> dict:
@@ -38,7 +40,15 @@ def collect_soak_readiness(
     paper_report = (
         paper_readiness_report if paper_readiness_report is not None else collect_paper_trading_readiness(root=root)
     )
-    maintenance = maintenance_snapshot or {}
+    maintenance_evidence = None
+    maintenance = maintenance_snapshot
+    if maintenance is None:
+        maintenance, maintenance_evidence = read_persisted_runtime_snapshot(
+            maintenance_snapshot_path or root / "runtime" / "ops_maintenance_status.json",
+            expected_kind="ops_maintenance",
+            max_age_seconds=DEFAULT_REFRESH_INTERVAL_SECONDS * 2,
+        )
+    maintenance = maintenance or {"persisted_runtime_evidence": maintenance_evidence}
     app_entries = [Path(path) for path in (app_paths or _default_app_paths(root))]
 
     checks = [
@@ -91,6 +101,7 @@ def collect_soak_readiness(
             "interval_seconds": maintenance.get("interval_seconds"),
             "backup_interval_seconds": maintenance.get("backup_interval_seconds"),
             "error_count": maintenance.get("error_count", 0),
+            "persisted_runtime_evidence": maintenance.get("persisted_runtime_evidence"),
         },
         "safety_boundary": {
             "live_order_submission_enabled": False,
@@ -170,8 +181,8 @@ def _check_fresh_ticket(report: dict) -> dict:
         "expired_pending_count": queue_summary.get("expired_pending_count", 0),
     }
     if not report.get("latest_fresh_ticket_id") or int(queue_summary.get("fresh_pending_count") or 0) <= 0:
-        return _check("fresh_broker_ticket", "有效 broker-ready 工单", "fail", "当前没有有效待人工确认 broker-ready 工单。", evidence)
-    return _check("fresh_broker_ticket", "有效 broker-ready 工单", "pass", "当前存在有效待人工确认 broker-ready 工单。", evidence)
+        return _check("fresh_broker_ticket", "有效经纪商就绪工单", "fail", "当前没有有效待人工确认经纪商就绪工单。", evidence)
+    return _check("fresh_broker_ticket", "有效经纪商就绪工单", "pass", "当前存在有效待人工确认经纪商就绪工单。", evidence)
 
 
 def _check_ops_report(report: dict) -> dict:
@@ -197,6 +208,7 @@ def _check_maintenance(snapshot: dict) -> dict:
         "interval_seconds": snapshot.get("interval_seconds"),
         "backup_interval_seconds": snapshot.get("backup_interval_seconds"),
         "error_count": snapshot.get("error_count", 0),
+        "persisted_runtime_evidence": snapshot.get("persisted_runtime_evidence"),
     }
     if not snapshot:
         return _check("automatic_maintenance", "自动维护", "fail", "缺少自动维护快照，无法证明健康采样和备份任务已启动。", evidence)

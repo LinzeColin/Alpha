@@ -1,4 +1,6 @@
 import asyncio
+import json
+import os
 
 from backend.app.services.agent_runtime import AutoPaperAgentRuntime
 
@@ -51,3 +53,31 @@ def test_auto_paper_agent_runtime_runs_immediate_cycle_and_stops():
     assert stopped["status"] == "stopped"
     assert stopped["status_zh"] == "已停止"
     assert stopped["task_running"] is False
+
+
+def test_auto_paper_agent_runtime_persists_heartbeat(tmp_path):
+    runtime = AutoPaperAgentRuntime()
+    status_path = tmp_path / "runtime" / "agent_loop_status.json"
+
+    async def exercise():
+        runtime.start(loop_factory=FakePaperLoop, interval_seconds=60, status_path=status_path)
+        for _ in range(50):
+            if runtime.snapshot()["run_count"] >= 1:
+                break
+            await asyncio.sleep(0.01)
+        running = json.loads(status_path.read_text(encoding="utf-8"))
+        stopped = await runtime.stop()
+        stopped_payload = json.loads(status_path.read_text(encoding="utf-8"))
+        return running, stopped, stopped_payload
+
+    running, stopped, stopped_payload = asyncio.run(exercise())
+
+    assert running["snapshot_kind"] == "agent_loop"
+    assert running["process_id"] == os.getpid()
+    assert running["task_running"] is True
+    assert running["last_persist_error_zh"] == "无"
+    assert running["run_count"] == 1
+    assert running["last_result_summary"]["ticket_status_zh"] == "待人工确认"
+    assert stopped["status"] == "stopped"
+    assert stopped_payload["status"] == "stopped"
+    assert stopped_payload["task_running"] is False

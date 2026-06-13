@@ -7,6 +7,7 @@ from pathlib import Path
 from backend.app.services.approval_queue import ApprovalQueue
 from backend.app.services.ops_health import collect_ops_health, create_runtime_backup, format_ops_health_summary_zh, prune_runtime_backups
 from backend.app.services.paper_broker import PaperBroker, PaperOrder
+from backend.app.services.runtime_status import atomic_write_runtime_snapshot
 
 
 class FakeMarketDataGateway:
@@ -102,6 +103,50 @@ def test_collect_ops_health_reports_e_safe_runtime_checks(tmp_path):
     assert "Alpha 运行健康检查" in summary
     assert "自动模拟交易循环：通过" in summary
     assert "安全边界：不会提交真实资金订单。" in summary
+
+
+def test_collect_ops_health_can_use_fresh_persisted_agent_heartbeat(tmp_path):
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    runtime = tmp_path / "runtime"
+    queue_path = runtime / "approval_queue.sqlite3"
+    paper_state_path = runtime / "paper_portfolio.json"
+    log_path = runtime / "alpha_dashboard.log"
+    pid_path = runtime / "alpha_dashboard.pid"
+    loop_status_path = runtime / "agent_loop_status.json"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text("INFO: Alpha dashboard ready\n", encoding="utf-8")
+    pid_path.write_text(str(99999999), encoding="utf-8")
+    atomic_write_runtime_snapshot(loop_status_path, _healthy_loop_snapshot(now), snapshot_kind="agent_loop")
+
+    ApprovalQueue(queue_path).enqueue(_fresh_ticket(now))
+    broker = PaperBroker()
+    broker.submit_order(PaperOrder(idempotency_key="paper_1", symbol="SPY", side="buy", quantity=1, price=100))
+    broker.save(paper_state_path)
+
+    health = collect_ops_health(
+        root=tmp_path,
+        queue_path=queue_path,
+        paper_state_path=paper_state_path,
+        pid_path=pid_path,
+        log_path=log_path,
+        market_data_gateway=FakeMarketDataGateway({**_market_data_status(tmp_path), "real_market_data": True}),
+        loop_snapshot_path=loop_status_path,
+        moomoo_probe_status={
+            "status": "ready_read_only",
+            "status_zh": "只读探测就绪",
+            "message_zh": "富途牛牛接口包和本机开放网关端口均可用；当前仅允许只读探测。",
+            "read_only_ready": True,
+            "live_order_submission_enabled": False,
+            "trade_context_enabled": False,
+            "supports_real_broker_place_order": False,
+        },
+    )
+    checks = {item["id"]: item for item in health["checks"]}
+
+    assert checks["agent_loop"]["status"] == "pass"
+    assert checks["agent_loop"]["evidence"]["persisted_runtime_evidence"]["valid"] is True
+    assert checks["dashboard_process"]["status"] == "warn"
+    assert health["fail_count"] == 0
 
 
 def test_create_runtime_backup_copies_durable_state(tmp_path):

@@ -67,3 +67,34 @@ def test_paper_performance_empty_summary_is_chinese_readable(tmp_path):
     assert summary["run_count"] == 0
     assert summary["total_return_zh"] == "0.00%"
     assert summary["current_drawdown_zh"] == "0.00%"
+
+
+def test_paper_performance_localizes_broker_quote_cache_source(tmp_path):
+    history_path = tmp_path / "runtime" / "paper_performance_history.jsonl"
+    market_data = {
+        "source_kind": "broker_quote_cache",
+        "data_quality": "fresh",
+        "latest_date": "2026-06-12",
+        "real_market_data": True,
+    }
+
+    append_paper_performance_history(
+        {
+            "cash": 9000,
+            "positions_value": 1000,
+            "total_equity": 10000,
+            "trade_count": 1,
+            "total_commission": 1.0,
+            "positions": [],
+            "latest_trade": {"symbol": "SPY", "side": "buy", "quantity": 1, "price": 741.75, "reference_price": 741.75, "commission": 1.0, "slippage_bps": 5.0, "execution_model_id": "fixed_cost_slippage_v1"},
+        },
+        history_path=history_path,
+        run_id="run_broker_quote",
+        market_data=market_data,
+        intent={"strategy_id": "momentum_SPY_20d", "symbol": "SPY", "side": "buy"},
+        broker_receipt={"broker_order_id": "paper_broker_quote", "status": "filled"},
+    )
+    summary = summarize_paper_performance_history(history_path)
+
+    assert summary["recent"][-1]["market_data_source_kind"] == "broker_quote_cache"
+    assert summary["recent"][-1]["market_data_source_kind_zh"] == "经纪商只读行情缓存"

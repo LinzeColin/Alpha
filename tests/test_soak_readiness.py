@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from backend.app.services.runtime_status import atomic_write_runtime_snapshot
 from backend.app.services.soak_readiness import collect_soak_readiness, format_soak_readiness_summary_zh
 
 
@@ -98,6 +99,26 @@ def test_soak_readiness_passes_when_runtime_evidence_is_complete(tmp_path):
     assert "不会提交真实资金订单" in summary
 
 
+def test_soak_readiness_can_use_fresh_persisted_maintenance_heartbeat(tmp_path):
+    app_path = tmp_path / "Alpha.app"
+    app_path.mkdir()
+    maintenance_path = tmp_path / "runtime" / "ops_maintenance_status.json"
+    atomic_write_runtime_snapshot(maintenance_path, _maintenance_snapshot(), snapshot_kind="ops_maintenance")
+
+    report = collect_soak_readiness(
+        root=tmp_path,
+        ops_health_report=_ops_report(),
+        paper_readiness_report=_paper_report(),
+        maintenance_snapshot_path=maintenance_path,
+        app_paths=[app_path],
+    )
+    checks = {item["id"]: item for item in report["checks"]}
+
+    assert report["overall_status"] == "healthy"
+    assert checks["automatic_maintenance"]["status"] == "pass"
+    assert checks["automatic_maintenance"]["evidence"]["persisted_runtime_evidence"]["valid"] is True
+
+
 def test_soak_readiness_fails_without_fresh_broker_ticket(tmp_path):
     app_path = tmp_path / "Alpha.app"
     app_path.mkdir()
@@ -113,6 +134,8 @@ def test_soak_readiness_fails_without_fresh_broker_ticket(tmp_path):
 
     assert report["overall_status"] == "unhealthy"
     assert checks["fresh_broker_ticket"]["status"] == "fail"
+    assert checks["fresh_broker_ticket"]["title_zh"] == "有效经纪商就绪工单"
+    assert "broker-ready" not in checks["fresh_broker_ticket"]["message_zh"]
     assert "不能开始 30 天本地长运行" in report["summary_zh"]
 
 

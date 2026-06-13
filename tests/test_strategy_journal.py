@@ -37,3 +37,25 @@ def test_strategy_journal_empty_summary_is_chinese_readable(tmp_path):
     assert summary["status_zh"] == "暂无记录"
     assert summary["run_count"] == 0
     assert summary["stability_ratio_zh"] == "0.00%"
+
+
+def test_strategy_journal_localizes_broker_quote_cache_source(tmp_path):
+    history_path = tmp_path / "runtime" / "strategy_tournament_history.jsonl"
+    tournament = run_strategy_tournament(Path("data/sample_prices.csv"))
+
+    append_strategy_tournament_history(
+        tournament,
+        history_path=history_path,
+        run_id="run_broker_quote",
+        market_data={
+            "source_kind": "broker_quote_cache",
+            "data_quality": "fresh",
+            "latest_date": "2026-06-12",
+            "real_market_data": True,
+        },
+    )
+    summary = summarize_strategy_tournament_history(history_path)
+
+    assert summary["latest_market_data_source_kind"] == "broker_quote_cache"
+    assert summary["latest_market_data_source_kind_zh"] == "经纪商只读行情缓存"
+    assert summary["recent"][-1]["market_data_source_kind_zh"] == "经纪商只读行情缓存"

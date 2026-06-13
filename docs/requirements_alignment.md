@@ -11,7 +11,7 @@
 | 每 5 分钟更新一次 | 已实现增强 MVP | 服务、`configs/agent_loop.yaml`、应用运行时、控制台刷新和候选单有效期均使用 `refresh_interval_seconds: 300`。 |
 | 网页控制台 | 已实现增强 MVP | `/dashboard`、`/dashboard/state`、`/agent/loop/status`、`/paper/portfolio`、`/paper/performance/history`、`/strategy/tournament/run`；队列表显示可操作性/时效性/剩余秒数、SQLite 存储状态，并提供中文复核、拒绝、导出操作。 |
 | 行情数据网关 | 已实现 MVP | `MarketDataGateway` 默认缓存优先，缺失时回退到样例数据；`/market-data/status` 和控制台显示行情来源、质量、最新日期、最新价格；`/market-data/refresh` 可尝试刷新 Stooq 公共延迟行情缓存或富途牛牛只读行情缓存。 |
-| 30 天运行健康与备份 | 已实现增强 MVP | `/ops/health`、`/ops/backup`、`/ops/maintenance/status`、`scripts/check_alpha_ops.sh` 和控制台“运行健康”显示自动循环、SQLite 审批队列、模拟组合、富途牛牛开放网关只读探测、行情质量、进程/日志、最近备份、自动维护状态和真实下单边界。 |
+| 30 天运行健康与备份 | 已实现增强 MVP | `/ops/health`、`/ops/backup`、`/ops/maintenance/status`、`scripts/check_alpha_ops.sh` 和控制台“运行健康”显示自动循环、SQLite 审批队列、模拟组合、富途牛牛开放网关只读探测、行情质量、进程/日志、最近备份、自动维护状态和真实下单边界；自动循环和自动维护会写入本地心跳文件，供就绪检查跨进程验证。 |
 | 6月15日模拟交易交付就绪报告 | 已实现 MVP | `/readiness/paper-trading`、控制台“交付就绪”和 `python -m backend.app.services.paper_readiness` 逐项验证自动循环、策略迭代、模拟成交、`OrderIntent`、风控、审批队列、经纪商就绪工单、5分钟时效、本地 App 入口和真实下单边界，并标注 6月17日网页与本地应用入口目标。 |
 | 30 天长运行预检 | 已实现 MVP | `/readiness/soak`、控制台“长运行预检”、`scripts/check_alpha_soak.sh` 和 `python -m backend.app.services.soak_readiness` 聚合 App 入口、模拟交易交付就绪、5分钟循环、有效经纪商就绪工单、运行健康、自动维护、恢复备份和真实下单边界；该报告只证明是否可以开始本地长运行，不等于已经完成 30 天验证。 |
 | 模拟执行层可见性 | 已实现增强 MVP | `/paper/broker/status` 和控制台“模拟交易执行层”显示适配器、模式、连接、凭据要求、是否允许真实下单、执行模型、模拟滑点、单笔佣金、累计佣金、最新模拟成交和最近成交成本。 |

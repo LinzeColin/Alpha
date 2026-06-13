@@ -96,11 +96,13 @@ OWNER_ACTION_TEXT_ZH = {
 MARKET_DATA_PROVIDER_TEXT_ZH = {
     "cache_or_fixture": "本地缓存优先",
     "stooq": "Stooq 公共延迟行情",
+    "moomoo_opend": "富途牛牛开放网关只读行情",
     "direct_file": "直接文件",
 }
 
 MARKET_DATA_SOURCE_TEXT_ZH = {
     "public_cache": "公共延迟行情缓存",
+    "broker_quote_cache": "经纪商只读行情缓存",
     "local_cache": "本地行情缓存",
     "fixture": "样例数据",
     "local_file": "本地文件",

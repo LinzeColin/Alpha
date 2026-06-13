@@ -45,6 +45,9 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
     assert state["health"]["mode_zh"] == "研究、模拟交易与候选订单人工复核模式"
     assert state["market_data"]["latest_date"] is not None
     assert state["market_data"]["real_market_data"] is False
+    assert state["market_data"]["real_market_data_zh"] == "否"
+    assert state["market_data"]["source_kind_zh"] in {"样例数据", "公共延迟行情缓存", "本地行情缓存", "经纪商只读行情缓存"}
+    assert state["market_data"]["refresh_error_zh"] == "无"
     assert state["ops_health"]["safety_boundary"]["live_order_submission_enabled"] is False
     assert state["ops_health"]["check_count"] >= 1
     assert state["ops_maintenance"]["status"] in {"stopped", "maintenance_sleeping", "running_maintenance", "starting"}
@@ -246,6 +249,7 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "行情质量" in html
     assert "真实市场数据" in html
     assert "公共延迟行情缓存" in html
+    assert "refresh_error_zh" in html
     assert "允许真实下单" in html
     assert "适配器" in html
     assert "本地沙盒模拟经纪商适配器" in html
@@ -277,6 +281,8 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "Run Paper Cycle" not in html
     assert "System Snapshot" not in html
     assert "Approval Queue" not in html
+    assert "broker-ready" not in html
+    assert "Broker-ready" not in html
     assert "No pending tickets" not in html
     assert "<th>Adapter</th>" not in html
     assert "Moomoo OpenD" not in html

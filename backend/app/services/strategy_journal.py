@@ -89,6 +89,8 @@ def summarize_strategy_tournament_history(history_path: str | Path, *, limit: in
         "latest_winner_hit_rate": latest.get("winner_hit_rate") if latest else None,
         "latest_winner_oos_return": latest.get("winner_oos_return") if latest else None,
         "latest_winner_validation_windows": latest.get("winner_validation_windows") if latest else 0,
+        "latest_market_data_source_kind": latest.get("market_data_source_kind") if latest else None,
+        "latest_market_data_source_kind_zh": localized_latest.get("market_data_source_kind_zh"),
         "latest_market_data_quality": latest.get("market_data_quality") if latest else None,
         "latest_market_data_quality_zh": localized_latest.get("market_data_quality_zh"),
         "latest_generated_at": latest.get("generated_at") if latest else None,

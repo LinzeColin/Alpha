@@ -14,6 +14,7 @@ from backend.app.services.broker_paper_adapter import LocalSandboxPaperBrokerAda
 from backend.app.services.market_data_gateway import MarketDataGateway
 from backend.app.services.moomoo_broker_probe import probe_moomoo_opend
 from backend.app.services.paper_broker import PaperBroker
+from backend.app.services.runtime_status import read_persisted_runtime_snapshot
 
 
 DEFAULT_ROOT = Path(__file__).resolve().parents[3]
@@ -40,6 +41,7 @@ def collect_ops_health(
     log_path: str | Path | None = None,
     market_data_gateway: MarketDataGateway | None = None,
     loop_snapshot: dict | None = None,
+    loop_snapshot_path: str | Path | None = None,
     moomoo_probe_status: dict | None = None,
     max_loop_lag_seconds: int = DEFAULT_MAX_LOOP_LAG_SECONDS,
     max_backup_age_seconds: int = DEFAULT_MAX_BACKUP_AGE_SECONDS,
@@ -50,9 +52,20 @@ def collect_ops_health(
     pid_path = Path(pid_path) if pid_path else root / "runtime" / "alpha_dashboard.pid"
     log_path = Path(log_path) if log_path else root / "runtime" / "alpha_dashboard.log"
     gateway = market_data_gateway or MarketDataGateway(root=root)
+    loop_snapshot_evidence = None
+    if loop_snapshot is None:
+        loop_snapshot, loop_snapshot_evidence = read_persisted_runtime_snapshot(
+            loop_snapshot_path or root / "runtime" / "agent_loop_status.json",
+            expected_kind="agent_loop",
+            max_age_seconds=max_loop_lag_seconds,
+        )
 
     checks = [
-        _check_agent_loop(loop_snapshot, max_loop_lag_seconds=max_loop_lag_seconds),
+        _check_agent_loop(
+            loop_snapshot,
+            max_loop_lag_seconds=max_loop_lag_seconds,
+            persisted_evidence=loop_snapshot_evidence,
+        ),
         _check_approval_queue(queue_path),
         _check_paper_portfolio(paper_state_path),
         _check_paper_broker_boundary(paper_state_path),
@@ -228,14 +241,19 @@ def format_ops_health_summary_zh(health: dict) -> str:
     return "\n".join(lines)
 
 
-def _check_agent_loop(loop_snapshot: dict | None, *, max_loop_lag_seconds: int) -> dict:
+def _check_agent_loop(
+    loop_snapshot: dict | None,
+    *,
+    max_loop_lag_seconds: int,
+    persisted_evidence: dict | None = None,
+) -> dict:
     if not loop_snapshot:
         return _check(
             "agent_loop",
             "自动模拟交易循环",
             "warn",
-            "当前上下文没有应用托管循环快照；请通过控制台 /agent/loop/status 验证。",
-            {"has_snapshot": False},
+            "当前上下文没有有效自动循环心跳；请通过控制台 /agent/loop/status 验证。",
+            {"has_snapshot": False, "persisted_runtime_evidence": persisted_evidence},
         )
     interval = int(loop_snapshot.get("interval_seconds") or 0)
     task_running = bool(loop_snapshot.get("task_running"))
@@ -250,6 +268,7 @@ def _check_agent_loop(loop_snapshot: dict | None, *, max_loop_lag_seconds: int) 
         "run_count": run_count,
         "status": loop_snapshot.get("status"),
         "last_run_age_seconds": age_seconds,
+        "persisted_runtime_evidence": loop_snapshot.get("persisted_runtime_evidence") or persisted_evidence,
     }
     if not enabled or not task_running:
         return _check("agent_loop", "自动模拟交易循环", "fail", "自动循环未运行，无法满足 5 分钟候选单更新要求。", evidence)

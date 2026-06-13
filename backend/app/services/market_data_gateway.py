@@ -11,6 +11,7 @@ from urllib.request import urlopen
 import pandas as pd
 import yaml
 
+from backend.app.services.display_locale import zh_data_quality, zh_market_data_provider, zh_market_data_source
 from backend.app.services.moomoo_broker_probe import MoomooQuoteSnapshotConfig, probe_moomoo_quote_snapshot
 
 
@@ -316,9 +317,13 @@ class MarketDataGateway:
         latest = _latest_dataset_stats(price_path)
         return {
             "provider": provider,
+            "provider_zh": zh_market_data_provider(provider),
             "source_kind": source_kind,
+            "source_kind_zh": zh_market_data_source(source_kind),
             "data_quality": data_quality,
+            "data_quality_zh": zh_data_quality(data_quality),
             "real_market_data": real_market_data,
+            "real_market_data_zh": "是" if real_market_data else "否",
             "price_path": str(price_path),
             "cache_path": str(self.cache_path),
             "fixture_path": str(self.fixture_path),
@@ -331,8 +336,11 @@ class MarketDataGateway:
             "latest_date": latest["latest_date"],
             "latest_prices": latest["latest_prices"],
             "refresh_attempted": refresh_attempted,
+            "refresh_attempted_zh": "是" if refresh_attempted else "否",
             "refresh_succeeded": refresh_succeeded,
+            "refresh_succeeded_zh": "是" if refresh_succeeded else "否",
             "refresh_error": refresh_error,
+            "refresh_error_zh": zh_market_data_refresh_error(refresh_error),
             "generated_at": utc_now_iso(),
         }
 
@@ -388,3 +396,23 @@ def _first_number(*values: object) -> float | None:
             continue
         return number
     return None
+
+
+def zh_market_data_refresh_error(refresh_error: object) -> str:
+    if refresh_error is None or refresh_error == "":
+        return "无"
+    text = str(refresh_error)
+    if "Moomoo" in text:
+        text = text.replace("Moomoo", "富途牛牛")
+    if "public provider returned no usable market data" in text:
+        return "公共行情源没有返回可用市场数据，已回退到本地数据。"
+    if "public provider response missing columns" in text:
+        return "公共行情源返回字段不完整，已回退到本地数据。"
+    if "富途牛牛" in text:
+        return text
+    lowered = text.lower()
+    if "timed out" in lowered or "timeout" in lowered:
+        return "行情源连接超时，已回退到本地数据。"
+    if "urlopen error" in lowered or "connection" in lowered:
+        return "行情源连接失败，已回退到本地数据。"
+    return "行情刷新失败，已回退到本地数据。"

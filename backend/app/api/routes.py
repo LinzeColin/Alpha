@@ -16,7 +16,7 @@ from backend.app.services.broker_ticket_export import (
 from backend.app.services.display_locale import zh_owner_action, zh_reason, zh_system_mode
 from backend.app.services.policy import GovernorPolicy
 from backend.app.services.live_broker import FailClosedLiveBroker, LiveOrderIntent
-from backend.app.services.market_data_gateway import MarketDataGateway, MarketDataSnapshot
+from backend.app.services.market_data_gateway import MarketDataGateway, MarketDataSnapshot, zh_market_data_refresh_error
 from backend.app.services.moomoo_broker_probe import probe_moomoo_opend, probe_moomoo_quote_snapshot
 from backend.app.services.ops_health import collect_ops_health, create_runtime_backup
 from backend.app.services.ops_runtime import AUTO_OPS_MAINTENANCE
@@ -298,8 +298,11 @@ def market_data_refresh() -> dict:
     except Exception as exc:
         status = gateway.resolve_price_path(force_refresh=False).status
         status["refresh_attempted"] = True
+        status["refresh_attempted_zh"] = "是"
         status["refresh_succeeded"] = False
+        status["refresh_succeeded_zh"] = "否"
         status["refresh_error"] = str(exc)
+        status["refresh_error_zh"] = zh_market_data_refresh_error(exc)
         return status
 
 
@@ -601,6 +604,17 @@ def dashboard() -> str:
     function displayDataQuality(value) {
       return DATA_QUALITY_TEXT[value] || '未知质量';
     }
+    function displayRefreshError(valueZh, value) {
+      if (valueZh && valueZh !== '无') return valueZh;
+      if (!value) return '行情源不可用，已回退到本地数据。';
+      const raw = String(value);
+      if (raw.includes('Moomoo')) return raw.replaceAll('Moomoo', '富途牛牛');
+      if (raw.includes('public provider returned no usable market data')) return '公共行情源没有返回可用市场数据，已回退到本地数据。';
+      if (raw.includes('public provider response missing columns')) return '公共行情源返回字段不完整，已回退到本地数据。';
+      if (raw.toLowerCase().includes('timeout') || raw.toLowerCase().includes('timed out')) return '行情源连接超时，已回退到本地数据。';
+      if (raw.toLowerCase().includes('connection') || raw.toLowerCase().includes('urlopen error')) return '行情源连接失败，已回退到本地数据。';
+      return '行情刷新失败，已回退到本地数据。';
+    }
     function displayStrategyId(value) {
       if (!value) return '无';
       const raw = String(value);
@@ -806,15 +820,15 @@ def dashboard() -> str:
       const latestPrices = marketData.latest_prices || {};
       const priceRows = Object.entries(latestPrices).map(([symbol, price]) => `<tr><td>${symbol}</td><td>${price}</td></tr>`).join('');
       const refreshStatus = marketData.refresh_attempted
-        ? (marketData.refresh_succeeded ? '刷新成功' : `刷新失败：${marketData.refresh_error || '行情源不可用，已回退到本地数据。'}`)
+        ? (marketData.refresh_succeeded ? '刷新成功' : `刷新失败：${displayRefreshError(marketData.refresh_error_zh, marketData.refresh_error)}`)
         : '尚未尝试刷新';
       document.getElementById('marketData').innerHTML = `
         <table>
           <tbody>
-            <tr><th>提供方</th><td>${displayMarketDataProvider(marketData.provider)}</td></tr>
-            <tr><th>来源</th><td>${displayMarketDataSource(marketData.source_kind)}</td></tr>
-            <tr><th>质量</th><td>${pill(displayDataQuality(marketData.data_quality), marketData.real_market_data ? 'ok' : 'warn')}</td></tr>
-            <tr><th>真实市场数据</th><td>${displayBool(marketData.real_market_data)}</td></tr>
+            <tr><th>提供方</th><td>${marketData.provider_zh || displayMarketDataProvider(marketData.provider)}</td></tr>
+            <tr><th>来源</th><td>${marketData.source_kind_zh || displayMarketDataSource(marketData.source_kind)}</td></tr>
+            <tr><th>质量</th><td>${pill(marketData.data_quality_zh || displayDataQuality(marketData.data_quality), marketData.real_market_data ? 'ok' : 'warn')}</td></tr>
+            <tr><th>真实市场数据</th><td>${marketData.real_market_data_zh || displayBool(marketData.real_market_data)}</td></tr>
             <tr><th>最新日期</th><td>${displayValue(marketData.latest_date)}</td></tr>
             <tr><th>标的数量</th><td>${marketData.symbol_count || 0}</td></tr>
             <tr><th>缓存年龄</th><td>${marketData.cache_age_seconds === null || marketData.cache_age_seconds === undefined ? '无缓存' : marketData.cache_age_seconds + ' 秒'}</td></tr>

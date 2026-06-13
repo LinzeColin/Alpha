@@ -40,8 +40,11 @@ def test_market_data_gateway_falls_back_to_fixture_when_cache_missing(tmp_path):
 
     assert snapshot.price_path == fixture
     assert snapshot.status["source_kind"] == "fixture"
+    assert snapshot.status["source_kind_zh"] == "样例数据"
     assert snapshot.status["data_quality"] == "sample"
+    assert snapshot.status["data_quality_zh"] == "样例"
     assert snapshot.status["real_market_data"] is False
+    assert snapshot.status["real_market_data_zh"] == "否"
     assert snapshot.status["latest_prices"] == {"SPY": 100.0}
 
 
@@ -76,7 +79,10 @@ def test_market_data_gateway_refreshes_public_stooq_cache(tmp_path):
 
     assert cache.exists()
     assert status["source_kind"] == "public_cache"
+    assert status["source_kind_zh"] == "公共延迟行情缓存"
     assert status["real_market_data"] is True
+    assert status["real_market_data_zh"] == "是"
+    assert status["refresh_error_zh"] == "无"
     assert snapshot.price_path == cache
     assert snapshot.status["data_quality"] == "fresh"
     assert snapshot.status["latest_prices"] == {"SPY": 101.5}
@@ -126,8 +132,11 @@ def test_market_data_gateway_refreshes_moomoo_opend_quote_cache(tmp_path):
     cached = pd.read_csv(cache)
 
     assert status["provider"] == "moomoo_opend"
+    assert status["provider_zh"] == "富途牛牛开放网关只读行情"
     assert status["source_kind"] == "broker_quote_cache"
+    assert status["source_kind_zh"] == "经纪商只读行情缓存"
     assert status["data_quality"] == "fresh"
+    assert status["data_quality_zh"] == "新鲜"
     assert status["real_market_data"] is True
     assert status["latest_prices"] == {"QQQ": 721.34, "SPY": 741.75}
     assert status["quote_snapshot"]["trade_context_enabled"] is False
@@ -163,7 +172,7 @@ def test_market_data_gateway_falls_back_when_moomoo_quote_is_not_ready(tmp_path)
         config_path=config,
         moomoo_quote_probe=lambda config: {
             "status": "blocked",
-            "message_zh": "Moomoo 只读连接未就绪，未执行行情快照探测。",
+            "message_zh": "富途牛牛只读连接未就绪，未执行行情快照探测。",
             "quotes": [],
             "row_count": 0,
         },
@@ -175,5 +184,9 @@ def test_market_data_gateway_falls_back_when_moomoo_quote_is_not_ready(tmp_path)
     assert snapshot.status["source_kind"] == "fixture"
     assert snapshot.status["real_market_data"] is False
     assert snapshot.status["refresh_attempted"] is True
+    assert snapshot.status["refresh_attempted_zh"] == "是"
     assert snapshot.status["refresh_succeeded"] is False
-    assert "Moomoo 只读连接未就绪" in snapshot.status["refresh_error"]
+    assert snapshot.status["refresh_succeeded_zh"] == "否"
+    assert "富途牛牛只读连接未就绪" in snapshot.status["refresh_error"]
+    assert "富途牛牛只读连接未就绪" in snapshot.status["refresh_error_zh"]
+    assert "Moomoo" not in snapshot.status["refresh_error_zh"]

@@ -11,11 +11,13 @@
 - 权威仓库：`https://github.com/LinzeColin/Alpha`。
 - 本地默认真实下单仍禁用，`live_trading.enabled` 不得提交为启用。
 - 控制台入口：`/dashboard`；状态接口：`/dashboard/state`。
-- 控制台显示、脚本输出、策略校验错误、工单 HTML、工单 CSV 表头、富途牛牛开放网关状态和主要文档已按中文显示规则更新。
+- 控制台显示、脚本输出、策略校验错误、工单 HTML、工单 CSV 表头、富途牛牛开放网关状态、行情刷新错误、就绪预检工单文案和主要文档已按中文显示规则更新。
 - API 机器字段、路径、枚举、工单号、股票代码和 `provider_id=moomoo_opend` 保持稳定；用户可见展示优先使用中文字段或中文标签。
+- 行情状态提供 `provider_zh`、`source_kind_zh`、`data_quality_zh`、`real_market_data_zh`、`refresh_error_zh` 等中文展示字段；控制台刷新失败优先显示中文错误兜底。
 - 经纪商工单 JSON 仍保留机器字段；默认 HTML 视图和 CSV 下载面向人工操作改为中文。
 - 富途牛牛开放网关仍只允许只读探测和只读行情快照；不得创建交易上下文、不得解锁交易、不得调用真实下单。
 - `scripts/start_alpha_dashboard.sh` 和 `scripts/stop_alpha_dashboard.sh` 修复了变量紧贴中文标点时的 zsh 解析问题。
+- 自动模拟交易循环和自动维护循环会分别写入 `runtime/agent_loop_status.json` 与 `runtime/ops_maintenance_status.json`；`/readiness/paper-trading` 和 `/readiness/soak` 可以读取新鲜心跳并校验进程仍存活，避免把已退出的 App 误判为就绪。
 
 ## 关键决策
 
@@ -31,6 +33,11 @@
 - `backend/app/services/moomoo_broker_probe.py`
 - `backend/app/services/ops_health.py`
 - `backend/app/services/market_data_gateway.py`
+- `backend/app/services/agent_runtime.py`
+- `backend/app/services/ops_runtime.py`
+- `backend/app/services/paper_readiness.py`
+- `backend/app/services/soak_readiness.py`
+- `backend/app/services/runtime_status.py`
 - `backend/app/services/broker_ticket_export.py`
 - `backend/app/schemas/strategy_dsl.py`
 - `scripts/start_alpha_dashboard.sh`
@@ -39,6 +46,10 @@
 - `tests/test_broker_ticket_export.py`
 - `tests/test_moomoo_broker_probe.py`
 - `tests/test_market_data_gateway.py`
+- `tests/test_agent_runtime.py`
+- `tests/test_ops_runtime.py`
+- `tests/test_paper_readiness.py`
+- `tests/test_soak_readiness.py`
 - `tests/test_ops_health.py`
 - `tests/test_strategy_dsl.py`
 - `AGENTS.md`
@@ -52,17 +63,19 @@
 已通过：
 
 ```bash
-.venv/bin/python -m pytest tests/test_dashboard_state.py tests/test_broker_ticket_export.py tests/test_moomoo_broker_probe.py tests/test_market_data_gateway.py tests/test_strategy_dsl.py tests/test_ops_health.py -q
-# 32 passed
+.venv/bin/python -m pytest tests/test_dashboard_state.py tests/test_market_data_gateway.py tests/test_paper_readiness.py tests/test_soak_readiness.py -q
+# 22 passed
 
 .venv/bin/python -m pytest tests -q
-# 64 passed
+# 71 passed
 
 git diff --check
 # passed
 ```
 
 安全扫描结果：没有发现真实下单启用路径；命中项只包含禁用说明、测试断言和 `live_order_submission_enabled=false` 相关字段。
+
+短周期运行验证：`ALPHA_MARKET_DATA_PROVIDER=moomoo_opend` 下启动 `AutoPaperAgentRuntime` 与 `AutoOpsMaintenanceRuntime` 各完成 1 轮；`collect_paper_trading_readiness(root=.)` 通过持久心跳返回 `overall_status=healthy pass/warn/fail=10/0/0 latest_fresh_ticket_id=ticket_8e41d2a1b1d9`；`collect_soak_readiness(root=.)` 返回 `overall_status=degraded pass/warn/fail=7/1/0`，唯一关注项为当前 Codex 环境的 dashboard PID/ops health，不涉及真实下单能力。
 
 运行态检查：沙箱对本机 HTTP 读取和部分 Python 直接导入调用有阻塞/超时现象；启动脚本 bug 已在本轮修复。控制台静态 HTML 中文显示由测试覆盖，临时 HTTP 读取曾验证到页面包含“富途牛牛开放网关（只读）/富途行情/接口包/软件开发包可导入”，且旧英文标签为空；后续若需要最终视觉证据，建议用 Browser/Chrome 工具或用户本机浏览器打开 `http://127.0.0.1:8000/dashboard` 再截屏。
 
@@ -71,10 +84,10 @@ git diff --check
 - 30 天长运行尚未完成，只能声明具备开始预检/观察运行条件。
 - 外部经纪商模拟接口尚未接入；当前是真实本机只读行情加本地沙盒模拟成交。
 - GitHub `main` 可能与远端历史不一致，当前应优先推送备份分支，禁止强推。
-- 当前工作树还有 `backend/app/services/agent_runtime.py`、`backend/app/services/ops_runtime.py` 和 `backend/app/services/runtime_status.py` 的未提交运行状态快照持久化改动；本轮中文显示提交应避免误包含这些未确认改动，除非后续明确接手该功能。
+- 30 天长运行仍需要真实时间跨度的历史采样；当前心跳只证明 App/循环在当前进程下新鲜运行。
 
 ## 下一步
 
-1. 只 staging/提交 `HANDOFF.md` 或明确接手运行状态快照持久化改动后再一起提交。
-2. 推送备份分支 `codex/soak-readiness-quote`，不要强推 `main`。
-3. 继续做长运行采样历史：把 `/readiness/soak` 按周期写入 `runtime/soak_readiness_history.jsonl` 并在控制台显示连续无失败采样数。
+1. 提交并推送运行心跳与全中文显示改动到 `codex/soak-readiness-quote`，不要强推 `main`。
+2. 继续做长运行采样历史：把 `/readiness/soak` 按周期写入 `runtime/soak_readiness_history.jsonl` 并在控制台显示连续无失败采样数。
+3. 若要进一步提高“全中文显示”覆盖率，可追加一个 dashboard 渲染快照审计脚本，检查用户可见 DOM 中是否出现未映射 raw enum。

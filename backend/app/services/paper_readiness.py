@@ -10,6 +10,7 @@ from backend.app.services.approval_queue import ApprovalQueue
 from backend.app.services.broker_paper_adapter import LocalSandboxPaperBrokerAdapter
 from backend.app.services.paper_broker import PaperBroker
 from backend.app.services.paper_performance import summarize_paper_performance_history
+from backend.app.services.runtime_status import read_persisted_runtime_snapshot
 from backend.app.services.strategy_journal import summarize_strategy_tournament_history
 
 
@@ -37,6 +38,7 @@ def collect_paper_trading_readiness(
     strategy_history_path: str | Path | None = None,
     performance_history_path: str | Path | None = None,
     loop_snapshot: dict | None = None,
+    loop_snapshot_path: str | Path | None = None,
     app_paths: list[str | Path] | None = None,
     max_refresh_interval_seconds: int = DEFAULT_REFRESH_INTERVAL_SECONDS,
 ) -> dict:
@@ -50,6 +52,13 @@ def collect_paper_trading_readiness(
         Path(performance_history_path) if performance_history_path else root / "runtime" / "paper_performance_history.jsonl"
     )
     app_paths = [Path(path) for path in (app_paths or _default_app_paths(root))]
+    loop_snapshot_evidence = None
+    if loop_snapshot is None:
+        loop_snapshot, loop_snapshot_evidence = read_persisted_runtime_snapshot(
+            loop_snapshot_path or root / "runtime" / "agent_loop_status.json",
+            expected_kind="agent_loop",
+            max_age_seconds=max_refresh_interval_seconds * 2,
+        )
 
     queue = ApprovalQueue(queue_path)
     queue_summary = queue.summary()
@@ -65,7 +74,11 @@ def collect_paper_trading_readiness(
     performance_summary = summarize_paper_performance_history(performance_history_path)
 
     checks = [
-        _check_automatic_loop(loop_snapshot, max_refresh_interval_seconds=max_refresh_interval_seconds),
+        _check_automatic_loop(
+            loop_snapshot,
+            max_refresh_interval_seconds=max_refresh_interval_seconds,
+            persisted_evidence=loop_snapshot_evidence,
+        ),
         _check_strategy_iteration(strategy_summary),
         _check_paper_execution(performance_summary, paper_broker_status),
         _check_order_intent(latest_ticket),
@@ -99,6 +112,7 @@ def collect_paper_trading_readiness(
         "performance_summary": performance_summary,
         "latest_ticket": latest_ticket,
         "latest_fresh_ticket_id": latest_fresh_ticket.get("ticket_id") if latest_fresh_ticket else None,
+        "loop_snapshot_evidence": loop_snapshot_evidence or (loop_snapshot or {}).get("persisted_runtime_evidence"),
         "safety_boundary": {
             "live_order_submission_enabled": False,
             "message_zh": "该就绪报告只验证自动模拟交易、候选订单、风控、审批队列和人工工单；不会提交真实资金订单。",
@@ -121,9 +135,20 @@ def format_paper_trading_readiness_summary_zh(report: dict) -> str:
     return "\n".join(lines)
 
 
-def _check_automatic_loop(loop_snapshot: dict | None, *, max_refresh_interval_seconds: int) -> dict:
+def _check_automatic_loop(
+    loop_snapshot: dict | None,
+    *,
+    max_refresh_interval_seconds: int,
+    persisted_evidence: dict | None = None,
+) -> dict:
     if not loop_snapshot:
-        return _check("automatic_paper_loop", "全自动模拟交易循环", "fail", "缺少自动循环快照，无法证明 5 分钟自动运行。")
+        return _check(
+            "automatic_paper_loop",
+            "全自动模拟交易循环",
+            "fail",
+            "缺少有效自动循环心跳，无法证明 5 分钟自动运行。",
+            {"persisted_runtime_evidence": persisted_evidence} if persisted_evidence else {},
+        )
     enabled = bool(loop_snapshot.get("enabled"))
     task_running = bool(loop_snapshot.get("task_running"))
     interval = int(loop_snapshot.get("interval_seconds") or 0)
@@ -134,6 +159,7 @@ def _check_automatic_loop(loop_snapshot: dict | None, *, max_refresh_interval_se
         "interval_seconds": interval,
         "run_count": run_count,
         "status": loop_snapshot.get("status"),
+        "persisted_runtime_evidence": loop_snapshot.get("persisted_runtime_evidence") or persisted_evidence,
     }
     if not enabled or not task_running:
         return _check("automatic_paper_loop", "全自动模拟交易循环", "fail", "自动模拟交易循环未运行。", evidence)
@@ -247,15 +273,15 @@ def _check_broker_ready_ticket(ticket: dict) -> dict:
         "client_order_id": payload.get("client_order_id"),
     }
     if not ticket:
-        return _check("broker_ready_ticket", "Broker-ready 工单", "warn", "尚无候选单可生成 broker-ready 工单。", evidence)
+        return _check("broker_ready_ticket", "经纪商就绪工单", "warn", "尚无候选单可生成经纪商就绪工单。", evidence)
     required = ["symbol", "side", "quantity", "order_type", "time_in_force", "client_order_id"]
     missing = [key for key in required if not payload.get(key)]
     if missing:
         evidence["missing_fields"] = missing
-        return _check("broker_ready_ticket", "Broker-ready 工单", "fail", "最新候选单缺少经纪商人工录入字段。", evidence)
+        return _check("broker_ready_ticket", "经纪商就绪工单", "fail", "最新候选单缺少经纪商人工录入字段。", evidence)
     if ticket.get("status") == "blocked_by_risk":
-        return _check("broker_ready_ticket", "Broker-ready 工单", "warn", "最近候选单被风控阻止，不能进入人工录入。", evidence)
-    return _check("broker_ready_ticket", "Broker-ready 工单", "pass", "最新候选单已包含经纪商人工录入所需字段。", evidence)
+        return _check("broker_ready_ticket", "经纪商就绪工单", "warn", "最近候选单被风控阻止，不能进入人工录入。", evidence)
+    return _check("broker_ready_ticket", "经纪商就绪工单", "pass", "最新候选单已包含经纪商人工录入所需字段。", evidence)
 
 
 def _check_freshness(ticket: dict | None, loop_snapshot: dict | None, *, max_refresh_interval_seconds: int) -> dict:

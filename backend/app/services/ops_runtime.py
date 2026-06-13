@@ -16,6 +16,7 @@ from backend.app.services.ops_health import (
     create_runtime_backup,
     prune_runtime_backups,
 )
+from backend.app.services.runtime_status import atomic_write_runtime_snapshot
 
 
 def _utc_now() -> datetime:
@@ -54,6 +55,7 @@ class AutoOpsMaintenanceRuntime:
         self._max_history_rows = DEFAULT_MAX_HISTORY_ROWS
         self._history_path = self._root / "runtime" / "ops_health_history.jsonl"
         self._backup_dir = self._root / "runtime" / "backups"
+        self._status_path = self._root / "runtime" / "ops_maintenance_status.json"
         self._started_at: datetime | None = None
         self._last_run_started_at: datetime | None = None
         self._last_run_completed_at: datetime | None = None
@@ -62,6 +64,7 @@ class AutoOpsMaintenanceRuntime:
         self._backup_count = 0
         self._error_count = 0
         self._last_error: str | None = None
+        self._last_persist_error: str | None = None
         self._last_result_summary: dict | None = None
 
     def start(
@@ -75,6 +78,7 @@ class AutoOpsMaintenanceRuntime:
         max_history_rows: int = DEFAULT_MAX_HISTORY_ROWS,
         history_path: str | Path | None = None,
         backup_dir: str | Path | None = None,
+        status_path: str | Path | None = None,
     ) -> dict:
         if self._task and not self._task.done():
             return self.snapshot()
@@ -86,11 +90,13 @@ class AutoOpsMaintenanceRuntime:
         self._max_history_rows = max(1, int(max_history_rows))
         self._history_path = Path(history_path) if history_path else self._root / "runtime" / "ops_health_history.jsonl"
         self._backup_dir = Path(backup_dir) if backup_dir else self._root / "runtime" / "backups"
+        self._status_path = Path(status_path) if status_path else self._root / "runtime" / "ops_maintenance_status.json"
         self._enabled = True
         self._status = "starting"
         self._started_at = _utc_now()
         self._stop_event = asyncio.Event()
         self._task = asyncio.create_task(self._run())
+        self._persist_snapshot()
         return self.snapshot()
 
     async def stop(self) -> dict:
@@ -105,15 +111,18 @@ class AutoOpsMaintenanceRuntime:
         except asyncio.TimeoutError:
             self._task.cancel()
             self._status = "stopped"
+        self._persist_snapshot()
         return self.snapshot()
 
     async def _run(self) -> None:
         if not self._stop_event:
             self._status = "stopped"
+            self._persist_snapshot()
             return
         while not self._stop_event.is_set():
             self._status = "running_maintenance"
             self._last_run_started_at = _utc_now()
+            self._persist_snapshot()
             try:
                 result = await asyncio.to_thread(self.run_cycle_once)
                 self._last_run_completed_at = _utc_now()
@@ -129,12 +138,14 @@ class AutoOpsMaintenanceRuntime:
                 self._last_error = str(exc)
                 self._status = "maintenance_error_sleeping"
             self._next_run_at = _utc_now() + timedelta(seconds=self._interval_seconds)
+            self._persist_snapshot()
             try:
                 await asyncio.wait_for(self._stop_event.wait(), timeout=self._interval_seconds)
             except asyncio.TimeoutError:
                 continue
         self._status = "stopped"
         self._next_run_at = None
+        self._persist_snapshot()
 
     def run_cycle_once(self) -> dict:
         loop_snapshot = self._loop_snapshot_provider() if self._loop_snapshot_provider else None
@@ -208,7 +219,7 @@ class AutoOpsMaintenanceRuntime:
             "history_row_count": history.get("row_count"),
         }
 
-    def snapshot(self) -> dict:
+    def _build_snapshot(self) -> dict:
         task_running = bool(self._task and not self._task.done())
         return {
             "enabled": self._enabled,
@@ -231,8 +242,21 @@ class AutoOpsMaintenanceRuntime:
             "backup_count": self._backup_count,
             "error_count": self._error_count,
             "last_error": self._last_error,
+            "last_persist_error": self._last_persist_error,
+            "last_persist_error_zh": "无" if not self._last_persist_error else "运行心跳写入失败。",
             "last_result_summary": self._last_result_summary,
+            "status_path": str(self._status_path),
         }
+
+    def _persist_snapshot(self) -> None:
+        try:
+            self._last_persist_error = None
+            atomic_write_runtime_snapshot(self._status_path, self._build_snapshot(), snapshot_kind="ops_maintenance")
+        except Exception as exc:
+            self._last_persist_error = f"{exc.__class__.__name__}: {exc}"
+
+    def snapshot(self) -> dict:
+        return self._build_snapshot()
 
 
 AUTO_OPS_MAINTENANCE = AutoOpsMaintenanceRuntime()
