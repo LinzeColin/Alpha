@@ -250,6 +250,11 @@ Moomoo SDK HOME guard -> direct `import moomoo` can write SDK logs under `~/.com
 Moomoo read-only quote runtime verification -> foreground FastAPI app returned `/broker/moomoo/status` status=ready_read_only/status_zh=只读探测就绪 and `/broker/moomoo/quote-snapshot` status=ready/status_zh=已获取 with 3 rows for US.SPY, US.QQQ, and US.TLT; live_order_submission_enabled=false
 Moomoo quote snapshot tests -> target tests passed; snapshot route/dashboard state enforce trade_context_enabled=false and live_order_submission_enabled=false
 Long-run soak readiness safety scan -> no new real broker place_order/unlock_trade path; live-order submission remains disabled
+Current target regression -> `.venv/bin/python -m pytest tests/test_moomoo_broker_probe.py tests/test_dashboard_state.py tests/test_ops_health.py tests/test_soak_readiness.py -q` -> 22 passed
+Current full regression -> `.venv/bin/python -m pytest tests -q` -> 61 passed
+Current diff hygiene -> `git diff --check` -> passed
+Current runtime readiness -> `/readiness/paper-trading` returned overall_status_zh=就绪 pass/warn/fail=10/0/0; `/readiness/soak` and `scripts/check_alpha_soak.sh --json` returned overall_status_zh=可观察运行 pass/warn/fail=7/1/0
+Current dashboard marker verification -> `/dashboard` contains 智能体运行状态, 模拟交易状态（模拟交易执行层）, Moomoo 行情, SDK 可导入, 只读行情快照, 长运行预检, 目标周期, and 预检项
 ```
 
 ## Unresolved Risks
