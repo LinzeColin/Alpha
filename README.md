@@ -62,6 +62,8 @@ configs/paper_broker.yaml
 
 默认 `provider: local_sandbox`，即本地沙盒模拟交易。外部 paper API provider 目前只有 fail-closed 适配入口；如误配为 `alpaca_paper`、`ibkr_paper`、`moomoo_paper` 或 `external_paper_api`，系统会显示未就绪原因并拒绝纸面下单，不会回退成真实资金下单。
 
+`alpaca_paper` 已具备受控适配器实现，但默认关闭。启用前必须确认 `base_url` 仍为 `https://paper-api.alpaca.markets`，设置 `ALPACA_PAPER_KEY_ID` 与 `ALPACA_PAPER_SECRET_KEY`，并显式把 `allow_external_paper_api` 和 `order_submission_enabled` 改为 `true`。当前只允许 `market/day` 纸面订单，不支持 live endpoint。
+
 `.app` 格式入口已安装到：
 
 ```text
@@ -115,7 +117,7 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - 外部 API 不得触发真实资金下单。
 - Alpha 可以生成供用户审核的经纪商就绪订单工单，但不得自主提交真实资金订单。
 - 当前模拟交易执行层使用 `LocalSandboxPaperBrokerAdapter`；它返回类经纪商模拟回执，但不需要凭据，也不允许真实下单。
-- 纸面交易经纪商适配通过 `configs/paper_broker.yaml` 选择；默认本地沙盒可成交，外部 paper API 适配器未配置完成时 fail-closed，并在控制台显示“外部纸面 API”“未就绪原因”和“下一步”。
+- 纸面交易经纪商适配通过 `configs/paper_broker.yaml` 选择；默认本地沙盒可成交，Alpaca paper adapter 必须通过 paper host allowlist、paper 环境变量凭据和显式启用开关才会提交纸面订单；其他外部 provider 未配置完成时 fail-closed，并在控制台显示“外部纸面 API”“未就绪原因”和“下一步”。
 - 富途牛牛开放网关集成当前只做只读连接探测：检测当前 Python 环境是否可导入 `moomoo`/`futu` 接口包，并检测本机开放网关端口；不会解锁交易、不会读取或提交交易凭据、不会调用真实下单接口。
 - 审批队列默认使用 SQLite 持久化，支持在网页/API 中标记“已人工复核”“已拒绝”“工单已导出”；这些动作只更新本地审计状态，不会调用真实 broker 下单接口。
 - 已人工复核且仍在有效期内的工单可导出为机器 JSON 包或中文 CSV 人工录入表；过期工单不能复核或导出。

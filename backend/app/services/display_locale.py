@@ -13,6 +13,7 @@ STATUS_TEXT_ZH = {
     "queued": "已入队",
     "duplicate": "重复候选单",
     "skipped": "已跳过",
+    "submitted": "已提交",
     "written": "已写入",
     "empty": "暂无记录",
     "filled": "模拟成交",
@@ -122,11 +123,13 @@ AGENT_ID_TEXT_ZH = {
 ADAPTER_ID_TEXT_ZH = {
     "local_sandbox_paper_broker": "本地沙盒模拟经纪商适配器",
     "external_paper_api_unavailable": "外部纸面交易 API 未就绪适配器",
+    "alpaca_paper_broker": "Alpaca 纸面交易 API 适配器",
 }
 
 BROKER_NAME_TEXT_ZH = {
     "Alpha Local Sandbox": "Alpha 本地沙盒",
     "External Paper API": "外部纸面交易 API",
+    "Alpaca Paper": "Alpaca 纸面交易",
 }
 
 ACCOUNT_REF_TEXT_ZH = {
@@ -149,6 +152,11 @@ REASON_TEXT_ZH = {
     "external paper broker adapter not configured": "外部纸面交易 API 适配器尚未配置完成",
     "external paper broker adapter disabled by safety config": "安全配置未允许外部纸面交易 API 适配器",
     "external paper broker paper order submission unavailable": "外部纸面交易 API 当前不可提交纸面订单",
+    "external paper broker credentials missing": "外部纸面交易 API 凭据缺失",
+    "external paper broker base url not allowed": "外部纸面交易 API 地址不在纸面交易允许列表内",
+    "alpaca paper order submitted": "Alpaca 纸面订单已提交",
+    "alpaca paper order rejected": "Alpaca 纸面订单被拒绝",
+    "alpaca paper api request failed": "Alpaca 纸面交易 API 请求失败",
     "audit sink unavailable": "审计写入不可用",
     "broker health check failed": "经纪商健康检查失败",
     "policy checks passed": "策略检查通过",

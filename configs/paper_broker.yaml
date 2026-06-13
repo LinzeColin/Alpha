@@ -5,7 +5,11 @@ paper_broker:
     live_order_submission_enabled: false
     require_paper_mode: true
   external_paper_api:
-    provider: none
+    provider: alpaca
+    base_url: "https://paper-api.alpaca.markets"
     order_submission_enabled: false
     credential_source: env_only
+    key_id_env: "ALPACA_PAPER_KEY_ID"
+    secret_key_env: "ALPACA_PAPER_SECRET_KEY"
+    timeout_seconds: 10
     notes_zh: "外部经纪商 paper API 适配器尚未启用；默认使用本地沙盒模拟交易。"

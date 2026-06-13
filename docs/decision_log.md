@@ -48,6 +48,12 @@
 - 原因：外部经纪商 paper API 是后续成熟 paper trading 的必要入口，但不能因为误配或半成品代码绕过真实下单边界。
 - 影响：`build_paper_broker_adapter()` 支持默认本地沙盒和外部 paper API fail-closed 壳；控制台显示纸面交易提供方、适配器就绪、允许纸面下单、外部纸面 API、未就绪原因和下一步。
 
+## 2026-06-13：Alpaca Paper 适配器只允许 paper host
+
+- 决策：`alpaca_paper` 只允许 `https://paper-api.alpaca.markets`，凭据只从 `ALPACA_PAPER_KEY_ID` 与 `ALPACA_PAPER_SECRET_KEY` 读取，默认配置仍关闭。
+- 原因：Alpaca 官方 paper 文档说明 paper 账户使用不同 key 和 paper base URL；订单 API 与 live 规格一致，因此必须靠 host allowlist 和显式配置阻断 live endpoint。
+- 影响：`AlpacaPaperBrokerAdapter` 支持 mock 验证的 `POST /v2/orders` paper 下单回执；未配置凭据、base URL 非 paper host、未显式启用时均 fail-closed，不会暴露 secret。
+
 ## 2026-06-13：审批队列可交互但不执行真实下单
 
 - 决策：控制台可以把工单标记为已人工复核、已拒绝或工单已导出，但这些动作只更新本地状态。

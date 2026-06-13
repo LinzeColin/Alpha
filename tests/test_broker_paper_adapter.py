@@ -85,6 +85,125 @@ def test_external_paper_api_adapter_fails_closed_when_disabled():
     assert broker.trade_log == []
 
 
+def test_alpaca_paper_adapter_requires_env_credentials(monkeypatch):
+    monkeypatch.delenv("ALPACA_PAPER_KEY_ID", raising=False)
+    monkeypatch.delenv("ALPACA_PAPER_SECRET_KEY", raising=False)
+    adapter = build_paper_broker_adapter(
+        PaperBroker(),
+        config={
+            "paper_broker": {
+                "provider": "alpaca_paper",
+                "allow_external_paper_api": True,
+                "external_paper_api": {
+                    "order_submission_enabled": True,
+                    "base_url": "https://paper-api.alpaca.markets",
+                },
+            }
+        },
+    )
+    order = PaperOrder(idempotency_key="run:key", symbol="TLT", side="buy", quantity=1, price=91.95)
+
+    status = adapter.status()
+    receipt = adapter.submit_order(order, source_ticket={"ticket_id": "ticket_1"})
+
+    assert status["adapter_id"] == "alpaca_paper_broker"
+    assert status["provider"] == "alpaca_paper"
+    assert status["base_url"] == "https://paper-api.alpaca.markets"
+    assert status["credentials_present"] is False
+    assert status["paper_order_submission_enabled"] is False
+    assert status["live_order_submission_enabled"] is False
+    assert status["reason_zh"] == "外部纸面交易 API 凭据缺失"
+    assert receipt["status"] == "skipped"
+    assert receipt["reason_zh"] == "外部纸面交易 API 凭据缺失"
+
+
+def test_alpaca_paper_adapter_rejects_non_paper_base_url(monkeypatch):
+    monkeypatch.setenv("ALPACA_PAPER_KEY_ID", "paper-key")
+    monkeypatch.setenv("ALPACA_PAPER_SECRET_KEY", "paper-secret")
+    adapter = build_paper_broker_adapter(
+        PaperBroker(),
+        config={
+            "paper_broker": {
+                "provider": "alpaca_paper",
+                "allow_external_paper_api": True,
+                "external_paper_api": {
+                    "order_submission_enabled": True,
+                    "base_url": "https://api.alpaca.markets",
+                },
+            }
+        },
+    )
+
+    status = adapter.status()
+
+    assert status["adapter_id"] == "alpaca_paper_broker"
+    assert status["paper_base_url_allowed"] is False
+    assert status["paper_order_submission_enabled"] is False
+    assert status["live_order_submission_enabled"] is False
+    assert status["reason_zh"] == "外部纸面交易 API 地址不在纸面交易允许列表内"
+
+
+def test_alpaca_paper_adapter_submits_mocked_paper_order(monkeypatch):
+    monkeypatch.setenv("ALPACA_PAPER_KEY_ID", "paper-key")
+    monkeypatch.setenv("ALPACA_PAPER_SECRET_KEY", "paper-secret")
+    calls = []
+
+    adapter = build_paper_broker_adapter(
+        PaperBroker(),
+        config={
+            "paper_broker": {
+                "provider": "alpaca_paper",
+                "allow_external_paper_api": True,
+                "external_paper_api": {
+                    "order_submission_enabled": True,
+                    "base_url": "https://paper-api.alpaca.markets",
+                },
+            }
+        },
+    )
+    adapter.http_post_json = lambda url, payload, headers, timeout: calls.append(
+        {"url": url, "payload": payload, "headers": headers, "timeout": timeout}
+    ) or {
+        "id": "alpaca-paper-order-1",
+        "client_order_id": "run:key",
+        "symbol": "TLT",
+        "qty": "1",
+        "side": "buy",
+        "type": "market",
+        "time_in_force": "day",
+        "status": "accepted",
+        "submitted_at": "2026-06-13T07:00:00Z",
+        "filled_qty": "0",
+        "filled_avg_price": None,
+    }
+    order = PaperOrder(idempotency_key="run:key", symbol="TLT", side="buy", quantity=1, price=91.95)
+
+    status = adapter.status()
+    receipt = adapter.submit_order(order, source_ticket={"ticket_id": "ticket_1", "broker_payload": {"order_type": "market", "time_in_force": "day"}})
+
+    assert status["adapter_readiness"] == "ready"
+    assert status["credentials_present"] is True
+    assert status["paper_order_submission_enabled"] is True
+    assert status["live_order_submission_enabled"] is False
+    assert calls[0]["url"] == "https://paper-api.alpaca.markets/v2/orders"
+    assert calls[0]["payload"] == {
+        "symbol": "TLT",
+        "qty": "1",
+        "side": "buy",
+        "type": "market",
+        "time_in_force": "day",
+        "client_order_id": "run:key",
+    }
+    assert calls[0]["headers"]["APCA-API-KEY-ID"] == "paper-key"
+    assert calls[0]["headers"]["APCA-API-SECRET-KEY"] == "paper-secret"
+    assert receipt["status"] == "submitted"
+    assert receipt["broker_order_id"] == "alpaca-paper-order-1"
+    assert receipt["provider_order_status_zh"] == "已接受"
+    assert receipt["live_order_submission_enabled"] is False
+    assert "paper-secret" not in str(receipt)
+    assert receipt["paper_result"]["provider_response"]["id"] == "alpaca-paper-order-1"
+
+
 def test_unknown_paper_broker_provider_fails_closed():
     adapter = build_paper_broker_adapter(
         PaperBroker(),

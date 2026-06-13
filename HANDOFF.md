@@ -21,7 +21,8 @@
 - 行情状态提供 `provider_zh`、`source_kind_zh`、`data_quality_zh`、`real_market_data_zh`、`refresh_error_zh` 等中文展示字段；控制台刷新失败优先显示中文错误兜底。
 - 经纪商工单 JSON 仍保留机器字段；默认 HTML 视图和 CSV 下载面向人工操作改为中文。
 - 富途牛牛开放网关仍只允许只读探测和只读行情快照；不得创建交易上下文、不得解锁交易、不得调用真实下单。
-- 新增 `configs/paper_broker.yaml` 和 `build_paper_broker_adapter()`；默认 `local_sandbox` 继续本地模拟成交，外部 `alpaca_paper`、`ibkr_paper`、`moomoo_paper`、`external_paper_api` 目前只返回中文未就绪状态并 fail-closed，不会提交纸面或真实资金订单。
+- 新增 `configs/paper_broker.yaml` 和 `build_paper_broker_adapter()`；默认 `local_sandbox` 继续本地模拟成交；`alpaca_paper` 已实现 paper host allowlist、环境变量凭据门槛和 mock 下单回执但默认关闭；`ibkr_paper`、`moomoo_paper`、`external_paper_api` 目前只返回中文未就绪状态并 fail-closed。
+- Alpaca paper 适配依据见 `docs/paper_broker_provider_notes.md`；当前未完成真实 Alpaca paper account E2E 和 account/position 同步。
 - 控制台“模拟交易执行层”已显示纸面交易提供方、适配器就绪、允许纸面下单、外部纸面 API、未就绪原因和下一步。
 - `scripts/start_alpha_dashboard.sh` 和 `scripts/stop_alpha_dashboard.sh` 修复了变量紧贴中文标点时的 zsh 解析问题。
 - 自动模拟交易循环和自动维护循环会分别写入 `runtime/agent_loop_status.json` 与 `runtime/ops_maintenance_status.json`；`/readiness/paper-trading` 和 `/readiness/soak` 可以读取新鲜心跳并校验进程仍存活，避免把已退出的 App 误判为就绪。
@@ -75,6 +76,7 @@
 - `AGENTS.md`
 - `README.md`
 - `docs/decision_log.md`
+- `docs/paper_broker_provider_notes.md`
 - `docs/requirements_alignment.md`
 - `HANDOFF.md`
 
@@ -87,15 +89,18 @@
 # 20 passed
 
 .venv/bin/python -m pytest tests/test_broker_paper_adapter.py tests/test_paper_trading_loop.py tests/test_dashboard_http_smoke.py tests/test_dashboard_state.py -q
-# 22 passed
+# 25 passed
+
+.venv/bin/python -m pytest tests/test_broker_paper_adapter.py -q
+# 7 passed
 
 .venv/bin/python -m pytest tests -q
-# 81 passed
+# 84 passed
 
 .venv/bin/python scripts/verify_chinese_display.py
 # status_zh=通过, error_count=0, checked_state_key_count=17, checked_static_text_count=21
 
-python /Users/linzezhang/.codex/skills/webapp-testing/scripts/with_server.py --server ".venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8131" --port 8131 --timeout 60 -- .venv/bin/python scripts/verify_dashboard_http_smoke.py --base-url http://127.0.0.1:8131 --timeout 15 --exercise-actions
+python /Users/linzezhang/.codex/skills/webapp-testing/scripts/with_server.py --server ".venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8133" --port 8133 --timeout 60 -- .venv/bin/python scripts/verify_dashboard_http_smoke.py --base-url http://127.0.0.1:8133 --timeout 15 --exercise-actions
 # status_zh=通过, error_count=0, checked_dashboard_text_count=11, checked_state_field_count=11, checked_layout_contract_count=10, exercised_action_count=2
 
 python /Users/linzezhang/.codex/skills/webapp-testing/scripts/with_server.py --server ".venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8132" --port 8132 --timeout 60 -- .venv/bin/python scripts/verify_dashboard_chrome_visual.py --base-url http://127.0.0.1:8132 --output-dir outputs/visual_acceptance --timeout 15 --virtual-time-budget-ms 4000
@@ -106,9 +111,12 @@ git diff --check
 
 rg -n "place_order|unlock_trade|submit_real|Open.*TradeContext|live_order_submission_enabled\s*[:=]\s*true|trade_context_enabled\s*[:=]\s*true|live_trading.enabled|live_trading:\s*\{\s*enabled:\s*true" backend configs tests AGENTS.md README.md docs scripts
 # 当前代码、配置、README 和主文档没有真实下单启用路径；命中项是禁用断言、false 字段、项目规则，以及历史 seed/task pack 文档中的非执行示例。
+
+rg -n "place_order|unlock_trade|submit_real|Open.*TradeContext|live_order_submission_enabled\s*[:=]\s*true|trade_context_enabled\s*[:=]\s*true|live_trading.enabled|live_trading:\s*\{\s*enabled:\s*true|api\.alpaca\.markets/v2/orders|https://api\.alpaca\.markets" backend configs tests AGENTS.md README.md docs scripts
+# Alpaca live host 只出现在测试中用于验证会被拒绝；实际适配器只允许 https://paper-api.alpaca.markets。
 ```
 
-安全扫描结果：没有发现当前可执行真实下单启用路径；命中项包含禁用说明、测试断言、`live_order_submission_enabled=false` 字段，以及历史 seed/task pack 文档中的非执行示例。
+安全扫描结果：没有发现当前可执行真实下单启用路径；命中项包含禁用说明、测试断言、`live_order_submission_enabled=false` 字段、历史 seed/task pack 文档中的非执行示例，以及用于拒绝 live Alpaca host 的测试样例。
 
 短周期运行验证：`ALPHA_MARKET_DATA_PROVIDER=moomoo_opend` 下启动 `AutoPaperAgentRuntime` 与 `AutoOpsMaintenanceRuntime` 各完成 1 轮；`runtime/soak_readiness_history.jsonl` 写入 1 条采样，`consecutive_no_fail_count=1`、`latest_fail_count=0`、`completion_status_zh=观察运行中`、`live_order_submission_enabled=false`。该验证只使用本机富途牛牛开放网关只读行情/本地模拟交易，不创建交易上下文、不解锁交易、不提交真实订单。
 
@@ -117,7 +125,7 @@ rg -n "place_order|unlock_trade|submit_real|Open.*TradeContext|live_order_submis
 ## 未解决风险
 
 - 30 天长运行尚未完成，只能声明具备开始预检/观察运行条件。
-- 外部经纪商真实 paper API 下单实现尚未接入；当前已具备 provider 配置入口和 fail-closed 壳，默认仍是真实本机只读行情加本地沙盒模拟成交。
+- Alpaca paper adapter 已有 mock 下单测试，但尚未在用户真实 Alpaca paper account 上做 E2E，也尚未同步外部 account/position；默认仍是真实本机只读行情加本地沙盒模拟成交。
 - GitHub `main` 可能与远端历史不一致，当前应优先推送备份分支，禁止强推。
 - 30 天长运行仍需要真实时间跨度的历史采样；当前心跳只证明 App/循环在当前进程下新鲜运行。
 

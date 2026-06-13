@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import json
+import os
+import urllib.error
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
-from typing import Protocol
+from typing import Callable, Protocol
 
 import yaml
 
@@ -19,6 +24,11 @@ from backend.app.services.display_locale import (
     zh_time_in_force,
 )
 from backend.app.services.paper_broker import PaperBroker, PaperOrder
+
+
+ALPACA_PAPER_BASE_URL = "https://paper-api.alpaca.markets"
+ALPACA_PAPER_KEY_ID_ENV = "ALPACA_PAPER_KEY_ID"
+ALPACA_PAPER_SECRET_KEY_ENV = "ALPACA_PAPER_SECRET_KEY"
 
 
 def _utc_now_iso() -> str:
@@ -113,7 +123,20 @@ def build_paper_broker_adapter(
     provider = str(section.get("provider", "local_sandbox"))
     if provider == "local_sandbox":
         return LocalSandboxPaperBrokerAdapter(paper_broker)
-    if provider in {"external_paper_api", "alpaca_paper", "ibkr_paper", "moomoo_paper"}:
+    if provider == "alpaca_paper":
+        if not section.get("allow_external_paper_api", False):
+            return UnavailableExternalPaperBrokerAdapter(
+                requested_provider=provider,
+                reason="external paper broker adapter disabled by safety config",
+            )
+        external = section.get("external_paper_api") or {}
+        if not isinstance(external, dict) or not external.get("order_submission_enabled", False):
+            return UnavailableExternalPaperBrokerAdapter(
+                requested_provider=provider,
+                reason="external paper broker paper order submission unavailable",
+            )
+        return AlpacaPaperBrokerAdapter.from_config(external)
+    if provider in {"external_paper_api", "ibkr_paper", "moomoo_paper"}:
         return UnavailableExternalPaperBrokerAdapter(
             requested_provider=provider,
             reason=_external_provider_block_reason(section),
@@ -373,6 +396,181 @@ class UnavailableExternalPaperBrokerAdapter:
         }
 
 
+@dataclass
+class AlpacaPaperBrokerAdapter:
+    base_url: str = ALPACA_PAPER_BASE_URL
+    key_id_env: str = ALPACA_PAPER_KEY_ID_ENV
+    secret_key_env: str = ALPACA_PAPER_SECRET_KEY_ENV
+    timeout_seconds: float = 10.0
+    http_post_json: Callable[[str, dict, dict, float], dict] | None = None
+    adapter_id: str = "alpaca_paper_broker"
+    broker_name: str = "Alpaca Paper"
+
+    @classmethod
+    def from_config(cls, config: dict) -> "AlpacaPaperBrokerAdapter":
+        return cls(
+            base_url=str(config.get("base_url", ALPACA_PAPER_BASE_URL)).rstrip("/"),
+            key_id_env=str(config.get("key_id_env", ALPACA_PAPER_KEY_ID_ENV)),
+            secret_key_env=str(config.get("secret_key_env", ALPACA_PAPER_SECRET_KEY_ENV)),
+            timeout_seconds=float(config.get("timeout_seconds", 10.0)),
+        )
+
+    def status(self) -> dict:
+        readiness, reason = self._readiness()
+        credentials_present = self._credentials_present()
+        return {
+            "provider": "alpaca_paper",
+            "provider_zh": _paper_provider_zh("alpaca_paper"),
+            "adapter_id": self.adapter_id,
+            "adapter_id_zh": zh_adapter_id(self.adapter_id),
+            "adapter_readiness": readiness,
+            "adapter_readiness_zh": zh_status(readiness),
+            "broker_name": self.broker_name,
+            "broker_name_zh": zh_broker_name(self.broker_name),
+            "mode": "paper",
+            "mode_zh": zh_status("paper"),
+            "account_ref": "alpaca_paper_account_env",
+            "account_ref_zh": "Alpaca 纸面账户",
+            "connected": readiness == "ready",
+            "connected_zh": "是" if readiness == "ready" else "否",
+            "credential_required": True,
+            "credential_required_zh": "是",
+            "credentials_present": credentials_present,
+            "credentials_present_zh": "是" if credentials_present else "否",
+            "credential_source": "environment_variables",
+            "credential_source_zh": "环境变量",
+            "base_url": self.base_url,
+            "paper_base_url_allowed": _is_allowed_alpaca_paper_base_url(self.base_url),
+            "paper_base_url_allowed_zh": "是" if _is_allowed_alpaca_paper_base_url(self.base_url) else "否",
+            "paper_order_submission_enabled": readiness == "ready",
+            "paper_order_submission_enabled_zh": "是" if readiness == "ready" else "否",
+            "external_paper_api_enabled": readiness == "ready",
+            "external_paper_api_enabled_zh": "是" if readiness == "ready" else "否",
+            "live_order_submission_enabled": False,
+            "live_order_submission_enabled_zh": "否",
+            "supports_market_orders": readiness == "ready",
+            "supports_market_orders_zh": "是" if readiness == "ready" else "否",
+            "supports_real_broker_place_order": False,
+            "supports_real_broker_place_order_zh": "否",
+            "reason": reason,
+            "reason_zh": zh_reason(reason),
+            "next_step_zh": "仅在确认 Alpaca paper key、paper base URL 和回归测试通过后启用；不得使用 live endpoint 或 live key。",
+            "execution_model": {"execution_model_id": "alpaca_paper_api_v1", "execution_model_zh": "Alpaca Paper API 模拟撮合"},
+            "execution_model_zh": "Alpaca Paper API 模拟撮合",
+            "slippage_bps": 0.0,
+            "commission_per_order": 0.0,
+            "total_commission": 0.0,
+            "paper_trade_count": 0,
+            "latest_trade": None,
+        }
+
+    def submit_order(self, order: PaperOrder, *, source_ticket: dict | None = None) -> dict:
+        readiness, reason = self._readiness()
+        if readiness != "ready":
+            return self.skipped_receipt(order, reason=reason, source_ticket=source_ticket)
+
+        try:
+            payload = _alpaca_order_payload(order, source_ticket=source_ticket)
+        except RuntimeError as exc:
+            return {
+                **self._receipt_base(order, source_ticket=source_ticket),
+                "status": "skipped",
+                "status_zh": zh_status("skipped"),
+                "reason": "alpaca paper order rejected",
+                "reason_zh": f"{zh_reason('alpaca paper order rejected')}：{exc}",
+                "paper_result": {"status": "skipped", "reason": "alpaca paper order rejected", "reason_zh": zh_reason("alpaca paper order rejected")},
+            }
+        headers = {
+            "APCA-API-KEY-ID": os.environ.get(self.key_id_env, ""),
+            "APCA-API-SECRET-KEY": os.environ.get(self.secret_key_env, ""),
+            "Content-Type": "application/json",
+        }
+        try:
+            response = (self.http_post_json or _post_json)(f"{self.base_url}/v2/orders", payload, headers, self.timeout_seconds)
+        except RuntimeError as exc:
+            return {
+                **self._receipt_base(order, source_ticket=source_ticket),
+                "status": "skipped",
+                "status_zh": zh_status("skipped"),
+                "reason": "alpaca paper api request failed",
+                "reason_zh": f"{zh_reason('alpaca paper api request failed')}：{exc}",
+                "paper_result": {"status": "skipped", "reason": "alpaca paper api request failed", "reason_zh": zh_reason("alpaca paper api request failed")},
+            }
+
+        provider_status = str(response.get("status") or "submitted")
+        return {
+            **self._receipt_base(order, source_ticket=source_ticket),
+            "status": "submitted",
+            "status_zh": zh_status("submitted"),
+            "reason": "alpaca paper order submitted",
+            "reason_zh": zh_reason("alpaca paper order submitted"),
+            "broker_order_id": response.get("id"),
+            "provider_order_status": provider_status,
+            "provider_order_status_zh": _alpaca_order_status_zh(provider_status),
+            "submitted_at": response.get("submitted_at") or _utc_now_iso(),
+            "filled_quantity": _float_or_zero(response.get("filled_qty")),
+            "average_fill_price": _float_or_none(response.get("filled_avg_price")),
+            "paper_result": {
+                "status": "submitted",
+                "status_zh": zh_status("submitted"),
+                "reason": "alpaca paper order submitted",
+                "reason_zh": zh_reason("alpaca paper order submitted"),
+                "provider_order_status": provider_status,
+                "provider_order_status_zh": _alpaca_order_status_zh(provider_status),
+                "provider_response": _sanitize_alpaca_order_response(response),
+            },
+        }
+
+    def skipped_receipt(self, order: PaperOrder, *, reason: str, source_ticket: dict | None = None) -> dict:
+        return {
+            **self._receipt_base(order, source_ticket=source_ticket),
+            "status": "skipped",
+            "status_zh": zh_status("skipped"),
+            "reason": reason,
+            "reason_zh": zh_reason(reason),
+            "paper_result": {"status": "skipped", "reason": reason, "reason_zh": zh_reason(reason)},
+        }
+
+    def _receipt_base(self, order: PaperOrder, *, source_ticket: dict | None) -> dict:
+        status = self.status()
+        return {
+            **status,
+            "broker_order_id": None,
+            "client_order_id": order.idempotency_key,
+            "ticket_id": source_ticket.get("ticket_id") if source_ticket else None,
+            "symbol": order.symbol,
+            "side": order.side,
+            "side_zh": zh_side(order.side),
+            "quantity": order.quantity,
+            "order_type": _ticket_payload(source_ticket).get("order_type", "market"),
+            "order_type_zh": zh_order_type(_ticket_payload(source_ticket).get("order_type", "market")),
+            "time_in_force": _ticket_payload(source_ticket).get("time_in_force", "day"),
+            "time_in_force_zh": zh_time_in_force(_ticket_payload(source_ticket).get("time_in_force", "day")),
+            "submitted_at": _utc_now_iso(),
+            "filled_quantity": 0.0,
+            "average_fill_price": None,
+            "reference_price": order.price,
+            "estimated_notional": round(order.quantity * order.price, 2),
+            "gross_fill_notional": None,
+            "commission": 0.0,
+            "slippage_bps": 0.0,
+            "slippage_per_share": None,
+            "execution_model_id": "alpaca_paper_api_v1",
+            "execution_model_zh": "Alpaca Paper API 模拟撮合",
+            "execution_cost_zh": "外部纸面交易 API 回执；本地不估算滑点和佣金。",
+        }
+
+    def _credentials_present(self) -> bool:
+        return bool(os.environ.get(self.key_id_env) and os.environ.get(self.secret_key_env))
+
+    def _readiness(self) -> tuple[str, str]:
+        if not _is_allowed_alpaca_paper_base_url(self.base_url):
+            return "not_configured", "external paper broker base url not allowed"
+        if not self._credentials_present():
+            return "not_configured", "external paper broker credentials missing"
+        return "ready", "alpaca paper order submitted"
+
+
 def _external_provider_block_reason(section: dict) -> str:
     if not section.get("allow_external_paper_api", False):
         return "external paper broker adapter disabled by safety config"
@@ -410,3 +608,123 @@ def _execution_cost_zh(execution: dict, *, filled: bool) -> str:
         f"滑点 {execution['slippage_bps']:.2f} 基点，"
         f"佣金 {execution['commission']:.2f} {execution['currency']}。"
     )
+
+
+def _is_allowed_alpaca_paper_base_url(base_url: str) -> bool:
+    parsed = urllib.parse.urlparse(base_url)
+    return parsed.scheme == "https" and parsed.netloc == "paper-api.alpaca.markets" and parsed.path in {"", "/"}
+
+
+def _alpaca_order_payload(order: PaperOrder, *, source_ticket: dict | None) -> dict:
+    payload = _ticket_payload(source_ticket)
+    order_type = str(payload.get("order_type", "market"))
+    time_in_force = str(payload.get("time_in_force", "day"))
+    if order_type != "market" or time_in_force != "day":
+        raise RuntimeError("Alpaca paper adapter currently allows market/day orders only")
+    return {
+        "symbol": order.symbol,
+        "qty": _format_quantity(order.quantity),
+        "side": order.side,
+        "type": "market",
+        "time_in_force": "day",
+        "client_order_id": order.idempotency_key,
+    }
+
+
+def _format_quantity(quantity: float) -> str:
+    if float(quantity).is_integer():
+        return str(int(quantity))
+    return f"{float(quantity):.8f}".rstrip("0").rstrip(".")
+
+
+def _post_json(url: str, payload: dict, headers: dict, timeout_seconds: float) -> dict:
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            text = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"HTTP {exc.code}: {_redact_alpaca_error(body)}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(str(exc.reason)) from exc
+    value = json.loads(text)
+    if not isinstance(value, dict):
+        raise RuntimeError("Alpaca paper API response is not an object")
+    return value
+
+
+def _sanitize_alpaca_order_response(response: dict) -> dict:
+    allowed_keys = {
+        "id",
+        "client_order_id",
+        "created_at",
+        "updated_at",
+        "submitted_at",
+        "filled_at",
+        "expired_at",
+        "canceled_at",
+        "failed_at",
+        "replaced_at",
+        "asset_id",
+        "symbol",
+        "asset_class",
+        "qty",
+        "filled_qty",
+        "type",
+        "side",
+        "time_in_force",
+        "limit_price",
+        "stop_price",
+        "filled_avg_price",
+        "status",
+        "extended_hours",
+    }
+    return {key: value for key, value in response.items() if key in allowed_keys}
+
+
+def _redact_alpaca_error(text: str) -> str:
+    redacted = text
+    for value in (os.environ.get(ALPACA_PAPER_KEY_ID_ENV), os.environ.get(ALPACA_PAPER_SECRET_KEY_ENV)):
+        if value:
+            redacted = redacted.replace(value, "[redacted]")
+    return redacted
+
+
+def _float_or_none(value: object) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _float_or_zero(value: object) -> float:
+    parsed = _float_or_none(value)
+    return parsed if parsed is not None else 0.0
+
+
+def _alpaca_order_status_zh(status: str) -> str:
+    return {
+        "new": "新订单",
+        "accepted": "已接受",
+        "pending_new": "等待创建",
+        "partially_filled": "部分成交",
+        "filled": "已成交",
+        "done_for_day": "当日完成",
+        "canceled": "已取消",
+        "expired": "已过期",
+        "replaced": "已替换",
+        "pending_cancel": "等待取消",
+        "pending_replace": "等待替换",
+        "accepted_for_bidding": "已接受竞价",
+        "stopped": "已停止",
+        "rejected": "已拒绝",
+        "suspended": "已暂停",
+        "calculated": "已计算",
+    }.get(status, "未知订单状态")
