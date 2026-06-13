@@ -2,7 +2,7 @@
 
 | 需求 | 状态 | 当前实现 |
 |---|---:|---|
-| Agent 全自动模拟交易 | 已实现增强 MVP | FastAPI 应用托管的 `AutoPaperAgentRuntime` 会在控制台启动后立即运行，然后每 300 秒刷新一次；每次周期写入模拟组合绩效历史，并把模拟佣金/滑点计入权益；`PaperTradingLoop.run_forever()` 仍可用于命令行。 |
+| Agent 全自动模拟交易 | 已实现增强 MVP | FastAPI 应用托管的 `AutoPaperAgentRuntime` 会在控制台启动后立即运行，然后每 300 秒刷新一次；每次周期写入模拟组合绩效历史，并把模拟佣金/滑点计入权益；当现金不足以覆盖下一笔买入且仍有持仓时，自动生成减仓卖单回收现金，避免长运行退化成连续被拒绝买单；`PaperTradingLoop.run_forever()` 仍可用于命令行。 |
 | 经纪商模拟执行适配器 | 已实现增强 MVP | `PaperTradingLoop` 通过 `configs/paper_broker.yaml` 和 `build_paper_broker_adapter()` 选择纸面交易适配器；默认 `LocalSandboxPaperBrokerAdapter` 执行本地沙盒模拟订单，并返回类经纪商模拟回执；`alpaca_paper` 已实现 paper endpoint allowlist、环境变量凭据门槛、账户/持仓/最近订单只读同步、mock 下单测试和中文状态，但默认关闭，尚未完成用户真实 Alpaca paper account E2E；其他外部 provider 保持 fail-closed。 |
 | Agent 自动生成真实交易候选订单 | 已实现增强 MVP | 从可交易策略锦标赛候选中生成 `OrderIntent`；候选单只进入人工复核队列，不自动提交真实资金订单。 |
 | Agent 自动完成风险检查 | 已实现增强 MVP | 入队前执行 `pre_trade_risk_check()`，并强制检查名义金额限制。 |

@@ -143,6 +143,7 @@ class PaperTradingLoop:
     def _generate_order_intent(self, run_id: str, *, tournament: dict, price_path: str | Path | None = None) -> OrderIntent:
         df = load_price_fixture(price_path or self.price_path)
         latest_prices = df.sort_values("date").groupby("symbol").tail(1).copy()
+        latest_price_map = {str(row["symbol"]): float(row["close"]) for _, row in latest_prices.iterrows()}
         max_notional = float(self.policy.data.get("risk_limits", {}).get("max_order_value_aud", 0))
         candidates = latest_prices[latest_prices["close"] <= max_notional].sort_values("close", ascending=False)
         tradable_symbols = set(candidates["symbol"].tolist())
@@ -153,12 +154,31 @@ class PaperTradingLoop:
         else:
             latest = (candidates if not candidates.empty else latest_prices.sort_values("close")).iloc[0]
             winner = {"strategy_id": f"fixture_momentum_{latest['symbol']}", "symbol": str(latest["symbol"])}
+        side = "buy"
+        quantity = 1.0
+        estimated_price = float(latest["close"])
+        strategy_id = str(winner.get("strategy_id", "fixture_momentum_v0"))
+        buy_cash_required = _estimated_buy_cash_required(
+            estimated_price,
+            quantity=quantity,
+            adapter_status=self.paper_broker_adapter.status(),
+        )
+        if self.paper_broker.cash < buy_cash_required:
+            rebalance_order = _select_rebalance_sell_order(
+                latest_price_map=latest_price_map,
+                positions=self.paper_broker.positions,
+                max_notional=max_notional,
+            )
+            if rebalance_order:
+                side = "sell"
+                symbol, estimated_price, quantity = rebalance_order
+                strategy_id = _strategy_id_for_symbol(tournament, symbol) or f"cash_rebalance_{symbol}"
         return OrderIntent.create(
-            strategy_id=str(winner.get("strategy_id", "fixture_momentum_v0")),
-            symbol=str(latest["symbol"]),
-            side="buy",
-            quantity=1,
-            estimated_price=float(latest["close"]),
+            strategy_id=strategy_id,
+            symbol=str(symbol or latest["symbol"]),
+            side=side,
+            quantity=quantity,
+            estimated_price=estimated_price,
             source_run_id=run_id,
             ttl_seconds=self.refresh_interval_seconds,
         )
@@ -290,6 +310,47 @@ def _select_tradable_winner(tournament: dict, tradable_symbols: set[str]) -> dic
         if candidate.get("symbol") in tradable_symbols:
             return candidate
     return tournament.get("winner") or {}
+
+
+def _estimated_buy_cash_required(price: float, *, quantity: float, adapter_status: dict) -> float:
+    slippage_bps = float(adapter_status.get("slippage_bps", 0.0) or 0.0)
+    commission = float(adapter_status.get("commission_per_order", 0.0) or 0.0)
+    simulated_price = float(price) * (1.0 + (slippage_bps / 10_000.0))
+    return (simulated_price * float(quantity)) + commission
+
+
+def _select_rebalance_sell_order(
+    *,
+    latest_price_map: dict[str, float],
+    positions: dict[str, float],
+    max_notional: float,
+) -> tuple[str, float, float] | None:
+    candidates: list[tuple[str, float, float, float]] = []
+    for symbol, raw_quantity in positions.items():
+        available_quantity = float(raw_quantity)
+        estimated_price = float(latest_price_map.get(symbol, 0.0) or 0.0)
+        if available_quantity <= 0 or estimated_price <= 0:
+            continue
+        max_quantity_by_policy = max_notional / estimated_price if max_notional > 0 else available_quantity
+        order_quantity = min(available_quantity, 1.0, max_quantity_by_policy)
+        if order_quantity <= 0:
+            continue
+        market_value = available_quantity * estimated_price
+        candidates.append((str(symbol), estimated_price, round(order_quantity, 6), market_value))
+    if not candidates:
+        return None
+    symbol, estimated_price, order_quantity, _ = sorted(candidates, key=lambda row: row[3], reverse=True)[0]
+    return symbol, estimated_price, order_quantity
+
+
+def _strategy_id_for_symbol(tournament: dict, symbol: str) -> str | None:
+    for candidate in tournament.get("candidates", []):
+        if candidate.get("symbol") == symbol:
+            return str(candidate.get("strategy_id"))
+    winner = tournament.get("winner") or {}
+    if winner.get("symbol") == symbol:
+        return str(winner.get("strategy_id"))
+    return None
 
 
 if __name__ == "__main__":

@@ -292,6 +292,8 @@ def zh_strategy_id(value: object) -> str:
         return f"动量策略 {parts[1]} {parts[2][:-1]}日"
     if raw.startswith("fixture_momentum_"):
         return f"样例动量策略 {raw.removeprefix('fixture_momentum_')}"
+    if raw.startswith("cash_rebalance_"):
+        return f"现金回收减仓 {raw.removeprefix('cash_rebalance_')}"
     return raw
 
 

@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from backend.app.services.approval_queue import ApprovalQueue
+from backend.app.services.paper_broker import PaperBroker
 from backend.app.services.paper_trading_loop import DEFAULT_REFRESH_INTERVAL_SECONDS, PaperTradingLoop
 from backend.app.services.policy import GovernorPolicy
 
@@ -113,3 +114,33 @@ def test_paper_loop_persists_portfolio_across_loop_instances(tmp_path):
     assert first["paper_portfolio"]["trade_count"] == 1
     assert second["paper_portfolio"]["trade_count"] == 2
     assert second["paper_portfolio"]["total_equity"] > 0
+
+
+def test_paper_loop_sells_existing_position_when_buy_cash_is_insufficient(tmp_path):
+    policy = GovernorPolicy.load(Path("configs/trading_governor_policy.yaml"))
+    broker = PaperBroker(cash=1.0, positions={"TLT": 2.0})
+    queue = ApprovalQueue(tmp_path / "queue.json")
+    state_path = tmp_path / "portfolio.json"
+    loop = PaperTradingLoop(
+        policy=policy,
+        price_path=Path("data/sample_prices.csv"),
+        approval_queue=queue,
+        paper_broker=broker,
+        paper_state_path=state_path,
+    )
+
+    result = loop.run_once()
+
+    assert result["intent"]["side"] == "sell"
+    assert result["intent"]["side_zh"] == "卖出"
+    assert result["intent"]["symbol"] == "TLT"
+    assert result["intent"]["estimated_notional_aud"] <= policy.data["risk_limits"]["max_order_value_aud"]
+    assert result["risk_check"]["allowed"] is True
+    assert result["approval_queue"]["ticket"]["broker_payload"]["side_zh"] == "卖出"
+    assert result["paper_order"]["status"] == "filled"
+    assert result["broker_paper_order"]["status"] == "filled"
+    assert result["broker_paper_order"]["side_zh"] == "卖出"
+    assert result["paper_portfolio"]["cash"] > 1.0
+    assert result["paper_portfolio"]["positions"][0]["symbol"] == "TLT"
+    assert result["paper_portfolio"]["positions"][0]["quantity"] == 1.0
+    assert state_path.exists()

@@ -171,6 +171,7 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - `PaperTradingLoop` 每次自动模拟交易周期会把组合权益快照追加写入 `runtime/paper_performance_history.jsonl`。
 - `GET /paper/performance/history` 汇总记录次数、最新总权益、累计收益率、最新权益变化、权益高水位、最大回撤、当前回撤、累计佣金和执行模型。
 - 控制台的“模拟绩效”面板显示权益历史、收益率、回撤、最新策略、标的、方向、佣金、执行模型和交易次数，默认使用中文展示字段。
+- 当模拟组合现金不足以覆盖下一笔买入的预计成交价、滑点和佣金，且组合仍有可卖持仓时，`PaperTradingLoop` 会自动生成 1 单位或符合风控上限的减仓卖出候选单，用于回收现金并保持模拟交易循环可持续运行。
 
 ## 模拟执行成本
 

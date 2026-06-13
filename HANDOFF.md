@@ -26,6 +26,7 @@
 - Alpaca paper 适配依据见 `docs/paper_broker_provider_notes.md`；当前已实现默认关闭的账户/持仓/最近订单只读同步和纸面订单 mock 下单路径，尚未完成用户真实 Alpaca paper account E2E。
 - Moomoo paper 下单未实现；官方 paper 示例仍需要创建交易上下文并调用 `place_order(..., trd_env=TrdEnv.SIMULATE)`，与当前安全扫描门槛冲突，必须另开受控适配 run 后再做。
 - 控制台“模拟交易执行层”已显示纸面交易提供方、适配器就绪、允许纸面下单、外部纸面 API、未就绪原因和下一步。
+- `PaperTradingLoop` 已具备现金/持仓约束感知：正常优先生成买入候选；若现金不足以覆盖预计买入成交价、滑点和佣金，但组合仍有可卖持仓，则自动生成减仓卖出候选并继续通过风控、审批队列、broker-ready ticket 和本地模拟成交。
 - `scripts/start_alpha_dashboard.sh` 和 `scripts/stop_alpha_dashboard.sh` 修复了变量紧贴中文标点时的 zsh 解析问题。
 - 自动模拟交易循环和自动维护循环会分别写入 `runtime/agent_loop_status.json` 与 `runtime/ops_maintenance_status.json`；`/readiness/paper-trading` 和 `/readiness/soak` 可以读取新鲜心跳并校验进程仍存活，避免把已退出的 App 误判为就绪。
 - 自动维护循环每轮追加 `runtime/soak_readiness_history.jsonl`；`/readiness/soak/history` 和控制台“长运行预检”显示历史采样数、连续无失败采样数、连续完全通过采样数、最近失败时间和最近采样表。
@@ -88,26 +89,29 @@
 已通过：
 
 ```bash
-.venv/bin/python -m pytest tests/test_dashboard_chrome_visual.py tests/test_dashboard_http_smoke.py tests/test_dashboard_state.py tests/test_broker_ticket_export.py -q
-# 20 passed
+.venv/bin/python -m pytest tests/test_dashboard_chrome_visual.py tests/test_dashboard_http_smoke.py tests/test_dashboard_state.py -q
+# 18 passed
 
 .venv/bin/python -m pytest tests/test_broker_paper_adapter.py tests/test_paper_trading_loop.py tests/test_dashboard_http_smoke.py tests/test_dashboard_state.py -q
-# 25 passed
+# 30 passed
 
 .venv/bin/python -m pytest tests/test_broker_paper_adapter.py -q
-# 8 passed
+# 11 passed
 
 .venv/bin/python -m pytest tests -q
-# 84 passed
+# 90 passed
 
 .venv/bin/python scripts/verify_chinese_display.py
-# status_zh=通过, error_count=0, checked_state_key_count=17, checked_static_text_count=21
+# status_zh=通过, error_count=0, checked_state_key_count=21, checked_static_text_count=26
 
-python /Users/linzezhang/.codex/skills/webapp-testing/scripts/with_server.py --server ".venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8133" --port 8133 --timeout 60 -- .venv/bin/python scripts/verify_dashboard_http_smoke.py --base-url http://127.0.0.1:8133 --timeout 15 --exercise-actions
-# status_zh=通过, error_count=0, checked_dashboard_text_count=11, checked_state_field_count=11, checked_layout_contract_count=10, exercised_action_count=2
+python /Users/linzezhang/.codex/skills/webapp-testing/scripts/with_server.py --server ".venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8140" --port 8140 --timeout 60 -- .venv/bin/python scripts/verify_dashboard_http_smoke.py --base-url http://127.0.0.1:8140 --timeout 15 --exercise-actions
+# status_zh=通过, error_count=0, checked_dashboard_text_count=13, checked_state_field_count=15, checked_layout_contract_count=10, exercised_action_count=2
 
 python /Users/linzezhang/.codex/skills/webapp-testing/scripts/with_server.py --server ".venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8132" --port 8132 --timeout 60 -- .venv/bin/python scripts/verify_dashboard_chrome_visual.py --base-url http://127.0.0.1:8132 --output-dir outputs/visual_acceptance --timeout 15 --virtual-time-budget-ms 4000
 # status_zh=通过, error_count=0, checked_viewport_count=2, desktop=1440x1000, mobile=390x844, visible_text_character_count=9762；macOS Chrome headless 已产出截图/DOM 后不自动退出，脚本已主动回收并记录 chrome_timeout_recovered=true
+
+python /Users/linzezhang/.codex/skills/webapp-testing/scripts/with_server.py --server ".venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8142" --port 8142 --timeout 60 -- .venv/bin/python scripts/verify_dashboard_chrome_visual.py --base-url http://127.0.0.1:8142 --output-dir /private/tmp/alpha_visual_check_20260613b --timeout 30 --virtual-time-budget-ms 4000
+# 临时复跑：desktop 视口通过并生成截图/DOM，mobile 截图在本机 Chrome headless/GPU 进程超时；未覆盖已提交的 outputs/visual_acceptance/dashboard_chrome_visual_report.json 通过证据。
 
 git diff --check
 # passed
@@ -128,6 +132,8 @@ MOOMOO_API_HOME=runtime/moomoo_api_home .venv/bin/python -c "import json; from b
 安全扫描结果：没有发现当前可执行真实下单启用路径；命中项包含禁用说明、测试断言、`live_order_submission_enabled=false` 字段、历史 seed/task pack 文档中的非执行示例，以及用于拒绝 live Alpaca host 的测试样例。
 
 短周期运行验证：`ALPHA_MARKET_DATA_PROVIDER=moomoo_opend` 下启动 `AutoPaperAgentRuntime` 与 `AutoOpsMaintenanceRuntime` 各完成 1 轮；`runtime/soak_readiness_history.jsonl` 写入 1 条采样，`consecutive_no_fail_count=1`、`latest_fail_count=0`、`completion_status_zh=观察运行中`、`live_order_submission_enabled=false`。该验证只使用本机富途牛牛开放网关只读行情/本地模拟交易，不创建交易上下文、不解锁交易、不提交真实订单。
+
+现金回收验证：当前运行态组合曾出现 `cash=7.94`、`TLT=111` 的现金不足状态；新逻辑运行一次后生成 `TLT / 卖出 / 数量 1.0` 候选，风控通过、审批队列入队、模拟成交完成，现金回升到 `92.67`，`live_order_submission_enabled=false`。
 
 运行态检查：普通沙箱内绑定 `127.0.0.1` 会触发权限限制；提权后本地 uvicorn HTTP smoke 已验证 `/dashboard`、`/health` 和 `/dashboard/state` 的中文文案、关键中文字段、10 条响应式布局契约和真实下单禁用边界，并安全调用 `/paper/run-once` 与 `/ops/backup`。本机 Chrome headless 已完成截图级视觉验收；由于 DOM HTML 和截图包含本机绝对路径，默认不提交 `.html/.png`，只提交 `outputs/visual_acceptance/dashboard_chrome_visual_report.json`。
 

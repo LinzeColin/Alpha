@@ -14,6 +14,7 @@ import zlib
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
+from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -162,8 +163,14 @@ def capture_viewport(
         ]
         dom_result = _run_chrome(dom_cmd, timeout=timeout, stdout_ready_text="</html>")
         dom_timeout_recovered = bool(dom_result["timed_out"] and dom_result["stdout"])
+        dom_fallback_used = False
         if dom_result["returncode"] != 0 and not dom_timeout_recovered:
-            raise RuntimeError(_chrome_error(dom_result))
+            dom_result = {
+                **dom_result,
+                "stdout": _fetch_dashboard_html(url, timeout=timeout),
+            }
+            dom_fallback_used = True
+            errors.append("Chrome DOM 导出失败，已使用 HTTP HTML 兜底；本次未完成渲染后可见文本验收。")
 
     dom_path.write_text(str(dom_result["stdout"]), encoding="utf-8")
     if not screenshot_path.exists():
@@ -188,12 +195,13 @@ def capture_viewport(
     for text in BANNED_DASHBOARD_TEXT:
         if text in dom_text:
             errors.append(f"DOM 仍包含旧英文文案：{text}")
-    for text in REQUIRED_VISIBLE_RENDERED_TEXT:
-        if text not in visible_text:
-            errors.append(f"渲染后可见文本缺少中文文案：{text}")
-    for text in BANNED_VISIBLE_TEXT:
-        if text in visible_text:
-            errors.append(f"渲染后可见文本仍包含英文界面文案：{text}")
+    if not dom_fallback_used:
+        for text in REQUIRED_VISIBLE_RENDERED_TEXT:
+            if text not in visible_text:
+                errors.append(f"渲染后可见文本缺少中文文案：{text}")
+        for text in BANNED_VISIBLE_TEXT:
+            if text in visible_text:
+                errors.append(f"渲染后可见文本仍包含英文界面文案：{text}")
     for label, css in REQUIRED_LAYOUT_CONTRACTS:
         if css not in dom_text:
             errors.append(f"DOM 缺少布局规则：{label}")
@@ -208,6 +216,7 @@ def capture_viewport(
         "chrome_timeout_recovered": screenshot_timeout_recovered or dom_timeout_recovered,
         "screenshot_timeout_recovered": screenshot_timeout_recovered,
         "dom_timeout_recovered": dom_timeout_recovered,
+        "dom_fallback_used": dom_fallback_used,
         "visible_text_character_count": len(visible_text),
         "error_count": len(errors),
         "errors": errors,
@@ -311,6 +320,11 @@ def _resolve_chrome_path(path: str) -> str:
     if found:
         return found
     raise RuntimeError(f"未找到 Chrome 可执行文件：{path}")
+
+
+def _fetch_dashboard_html(url: str, *, timeout: float) -> str:
+    with urlopen(url, timeout=timeout) as response:
+        return response.read().decode("utf-8", errors="replace")
 
 
 def _run_chrome(
