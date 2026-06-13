@@ -1,0 +1,57 @@
+{
+  "base_url": "http://127.0.0.1:8130",
+  "checked_viewport_count": 2,
+  "chrome_path": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "error_count": 0,
+  "errors": [],
+  "output_dir": "outputs/visual_acceptance",
+  "status": "pass",
+  "status_zh": "通过",
+  "viewport_count": 2,
+  "viewports": [
+    {
+      "chrome_timeout_recovered": true,
+      "dom_path": "outputs/visual_acceptance/dashboard_desktop.html",
+      "dom_timeout_recovered": true,
+      "error_count": 0,
+      "errors": [],
+      "height": 1000,
+      "image": {
+        "bit_depth": 8,
+        "channels": 3,
+        "color_type": 2,
+        "file_size_bytes": 199214,
+        "height": 1000,
+        "unique_sample_count": 216,
+        "width": 1440
+      },
+      "screenshot_path": "outputs/visual_acceptance/dashboard_desktop.png",
+      "screenshot_timeout_recovered": true,
+      "viewport": "desktop",
+      "visible_text_character_count": 9698,
+      "width": 1440
+    },
+    {
+      "chrome_timeout_recovered": true,
+      "dom_path": "outputs/visual_acceptance/dashboard_mobile.html",
+      "dom_timeout_recovered": true,
+      "error_count": 0,
+      "errors": [],
+      "height": 844,
+      "image": {
+        "bit_depth": 8,
+        "channels": 3,
+        "color_type": 2,
+        "file_size_bytes": 71489,
+        "height": 844,
+        "unique_sample_count": 375,
+        "width": 390
+      },
+      "screenshot_path": "outputs/visual_acceptance/dashboard_mobile.png",
+      "screenshot_timeout_recovered": true,
+      "viewport": "mobile",
+      "visible_text_character_count": 9691,
+      "width": 390
+    }
+  ]
+}

@@ -14,6 +14,8 @@ build/
 runtime/
 work/
 outputs/tmp/
+outputs/visual_acceptance/*.html
+outputs/visual_acceptance/*.png
 
 # Never commit broker credentials, account exports, or live runtime state.
 *secret*

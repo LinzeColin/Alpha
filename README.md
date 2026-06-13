@@ -35,6 +35,7 @@ python -m backend.app.services.paper_readiness
 python -m backend.app.services.soak_readiness
 python scripts/verify_chinese_display.py
 python scripts/verify_dashboard_http_smoke.py --base-url http://127.0.0.1:8000 --exercise-actions
+python scripts/verify_dashboard_chrome_visual.py --base-url http://127.0.0.1:8000
 ```
 
 控制台启动后，FastAPI 应用生命周期会启动自动模拟交易智能体运行时：立即运行一次模拟交易周期，然后每 300 秒刷新一次。
@@ -126,6 +127,7 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - `python -m backend.app.services.paper_readiness` 输出中文交付就绪摘要；加 `--json` 可查看完整机器证据。
 - `python -m backend.app.services.soak_readiness` 输出中文长运行预检摘要；该报告证明是否可以开始本地 soak，不等于已经完成 30 天验证。
 - `python scripts/verify_dashboard_http_smoke.py --base-url http://127.0.0.1:8000 --exercise-actions` 会通过 HTTP 检查 `/health`、`/dashboard`、`/dashboard/state` 的中文文案、关键中文字段、响应式布局契约和真实下单禁用边界，并安全调用模拟交易周期与运行备份端点。
+- `python scripts/verify_dashboard_chrome_visual.py --base-url http://127.0.0.1:8000` 会调用本机 Chrome headless 截取桌面和移动视口，检查截图尺寸、像素多样性、渲染后可见中文文案、旧英文界面文案禁用项和响应式布局契约；截图与 DOM HTML 只作为本地临时证据，提交到 GitHub 的默认证据是 `outputs/visual_acceptance/dashboard_chrome_visual_report.json`。
 - 控制台启动后会自动启动运行维护：默认每 300 秒采样一次健康状态，默认每天自动备份一次，并保留最近 30 份备份。
 - 健康检查和备份只覆盖模拟交易与工单状态，不会提交真实资金订单。
 
@@ -144,6 +146,7 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - FastAPI 元信息、所有者摘要、审批队列时效性、存储状态、人工操作、HTTP 错误说明和富途牛牛下一步提示均提供中文展示字段。
 - API 字段名、内部枚举、工单号、文件路径和股票代码保持机器可读格式，供测试、MCP、后续券商适配器和自动化流程稳定使用；面向所有者的界面必须优先展示中文字段。
 - 新增界面或命令输出时必须补充中文展示映射；如确需展示 raw enum，必须同时给出中文标签或中文解释。
+- 中文显示回归门槛包括无浏览器审计、HTTP smoke 和 Chrome 截图级可见文本验收；旧英文按钮、表头、空状态和状态词不得重新出现在所有者可见页面中。
 
 ## 策略迭代历史
 

@@ -16,6 +16,8 @@
 - 模拟经纪商状态/回执、策略锦标赛候选、审批队列时效、风险原因和页面时间显示已补中文展示兜底，前端未知枚举不直接露出英文状态值。
 - 新增 `scripts/verify_chinese_display.py`，作为无额外浏览器依赖的中文显示审计门槛。
 - 新增 `scripts/verify_dashboard_http_smoke.py`，通过本地 HTTP 检查 `/health`、`/dashboard` 和 `/dashboard/state` 的中文文案、关键中文字段、响应式布局契约和真实下单禁用边界。
+- 新增 `scripts/verify_dashboard_chrome_visual.py`，通过本机 Chrome headless 检查桌面/移动截图、渲染后可见中文文案、旧英文 UI 禁用项、像素多样性和响应式布局契约；JSON 报告可提交，截图/HTML 因包含本机路径只保留本地。
+- `.gitignore` 精确忽略视觉验收 `.html/.png`，避免把本机绝对路径和运行态截图推送到 GitHub；`outputs/visual_acceptance/dashboard_chrome_visual_report.json` 保留为提交证据。
 - 行情状态提供 `provider_zh`、`source_kind_zh`、`data_quality_zh`、`real_market_data_zh`、`refresh_error_zh` 等中文展示字段；控制台刷新失败优先显示中文错误兜底。
 - 经纪商工单 JSON 仍保留机器字段；默认 HTML 视图和 CSV 下载面向人工操作改为中文。
 - 富途牛牛开放网关仍只允许只读探测和只读行情快照；不得创建交易上下文、不得解锁交易、不得调用真实下单。
@@ -51,7 +53,10 @@
 - `scripts/stop_alpha_dashboard.sh`
 - `scripts/verify_chinese_display.py`
 - `scripts/verify_dashboard_http_smoke.py`
+- `scripts/verify_dashboard_chrome_visual.py`
+- `outputs/visual_acceptance/dashboard_chrome_visual_report.json`
 - `tests/test_dashboard_state.py`
+- `tests/test_dashboard_chrome_visual.py`
 - `tests/test_broker_ticket_export.py`
 - `tests/test_moomoo_broker_probe.py`
 - `tests/test_market_data_gateway.py`
@@ -73,27 +78,33 @@
 已通过：
 
 ```bash
-.venv/bin/python -m pytest tests/test_soak_history.py tests/test_ops_runtime.py tests/test_dashboard_state.py tests/test_soak_readiness.py -q
-# 17 passed
+.venv/bin/python -m pytest tests/test_dashboard_chrome_visual.py tests/test_dashboard_http_smoke.py tests/test_dashboard_state.py tests/test_broker_ticket_export.py -q
+# 20 passed
 
 .venv/bin/python -m pytest tests -q
-# 77 passed
+# 79 passed
 
 .venv/bin/python scripts/verify_chinese_display.py
 # status_zh=通过, error_count=0
 
-python /Users/linzezhang/.codex/skills/webapp-testing/scripts/with_server.py --server ".venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8127" --port 8127 --timeout 60 -- .venv/bin/python scripts/verify_dashboard_http_smoke.py --base-url http://127.0.0.1:8127 --exercise-actions
+python /Users/linzezhang/.codex/skills/webapp-testing/scripts/with_server.py --server ".venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8128" --port 8128 --timeout 60 -- .venv/bin/python scripts/verify_dashboard_http_smoke.py --base-url http://127.0.0.1:8128 --timeout 15 --exercise-actions
 # status_zh=通过, error_count=0, checked_layout_contract_count=10, exercised_action_count=2
+
+python /Users/linzezhang/.codex/skills/webapp-testing/scripts/with_server.py --server ".venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8130" --port 8130 --timeout 60 -- .venv/bin/python scripts/verify_dashboard_chrome_visual.py --base-url http://127.0.0.1:8130 --output-dir outputs/visual_acceptance --timeout 15 --virtual-time-budget-ms 4000
+# status_zh=通过, error_count=0, checked_viewport_count=2, desktop=1440x1000, mobile=390x844, visible_text_character_count约9690；macOS Chrome headless 已产出截图/DOM 后不自动退出，脚本已主动回收并记录 chrome_timeout_recovered=true
 
 git diff --check
 # passed
+
+rg -n "place_order|unlock_trade|submit_real|Open.*TradeContext|live_order_submission_enabled\s*[:=]\s*true|trade_context_enabled\s*[:=]\s*true|live_trading.enabled|live_trading:\s*\{\s*enabled:\s*true" backend configs tests AGENTS.md README.md docs scripts
+# 当前代码、配置、README 和主文档没有真实下单启用路径；命中项是禁用断言、false 字段、项目规则，以及历史 seed/task pack 文档中的非执行示例。
 ```
 
-安全扫描结果：没有发现真实下单启用路径；命中项只包含禁用说明、测试断言和 `live_order_submission_enabled=false` 相关字段。
+安全扫描结果：没有发现当前可执行真实下单启用路径；命中项包含禁用说明、测试断言、`live_order_submission_enabled=false` 字段，以及历史 seed/task pack 文档中的非执行示例。
 
 短周期运行验证：`ALPHA_MARKET_DATA_PROVIDER=moomoo_opend` 下启动 `AutoPaperAgentRuntime` 与 `AutoOpsMaintenanceRuntime` 各完成 1 轮；`runtime/soak_readiness_history.jsonl` 写入 1 条采样，`consecutive_no_fail_count=1`、`latest_fail_count=0`、`completion_status_zh=观察运行中`、`live_order_submission_enabled=false`。该验证只使用本机富途牛牛开放网关只读行情/本地模拟交易，不创建交易上下文、不解锁交易、不提交真实订单。
 
-运行态检查：普通沙箱内绑定 `127.0.0.1` 会触发权限限制；提权后本地 uvicorn HTTP smoke 已验证 `/dashboard`、`/health` 和 `/dashboard/state` 的中文文案、关键中文字段、10 条响应式布局契约和真实下单禁用边界，并安全调用 `/paper/run-once` 与 `/ops/backup`。当前环境未安装 Playwright/Chromium，因此尚未完成截图级视觉验收；后续若需要最终视觉证据，建议安装浏览器测试依赖或用 Browser/Chrome 工具打开 `http://127.0.0.1:8000/dashboard` 再截屏。
+运行态检查：普通沙箱内绑定 `127.0.0.1` 会触发权限限制；提权后本地 uvicorn HTTP smoke 已验证 `/dashboard`、`/health` 和 `/dashboard/state` 的中文文案、关键中文字段、10 条响应式布局契约和真实下单禁用边界，并安全调用 `/paper/run-once` 与 `/ops/backup`。本机 Chrome headless 已完成截图级视觉验收；由于 DOM HTML 和截图包含本机绝对路径，默认不提交 `.html/.png`，只提交 `outputs/visual_acceptance/dashboard_chrome_visual_report.json`。
 
 ## 未解决风险
 
@@ -105,5 +116,5 @@ git diff --check
 ## 下一步
 
 1. 提交并推送长运行采样历史改动到 GitHub 备份分支，建议 `codex/alpha-soak-history-20260613`，不要强推 `main`。
-2. 继续补 dashboard 稳定性：增加 Browser/Chrome 或 Playwright 视觉验收脚本，检查长运行预检、长运行历史、审批队列和中文状态在真实页面中不重叠、不露 raw enum。
-3. 继续补外部 broker paper API 适配调研和接口壳，但仍不得接入真实下单。
+2. 继续补外部 broker paper API 适配调研和接口壳，但仍不得接入真实下单。
+3. 继续积累真实 30 天长运行采样；每个异常必须进入运行健康/备份/恢复证据链。
