@@ -247,23 +247,27 @@ def dashboard() -> str:
       const rows = (tournament.candidates || []).slice(0, 8).map(row => `
         <tr>
           <td>${row.strategy_id}</td><td>${row.symbol}</td><td>${row.lookback_days}</td>
-          <td>${Number(row.total_return * 100).toFixed(2)}%</td><td>${Number(row.max_drawdown * 100).toFixed(2)}%</td>
-          <td>${Number(row.score).toFixed(4)}</td><td>${row.decision}</td>
+          <td>${Number(row.total_return * 100).toFixed(2)}%</td><td>${Number(row.oos_return * 100).toFixed(2)}%</td>
+          <td>${Number(row.hit_rate * 100).toFixed(2)}%</td><td>${row.validation_windows}</td>
+          <td>${Number(row.max_drawdown * 100).toFixed(2)}%</td><td>${Number(row.score).toFixed(4)}</td><td>${row.decision}</td>
         </tr>`).join('');
       document.getElementById('tournament').innerHTML = `
         <div class="status">Winner: ${(tournament.winner && tournament.winner.strategy_id) || 'None'}</div>
-        <table><thead><tr><th>Strategy</th><th>Symbol</th><th>Lookback</th><th>Return</th><th>Drawdown</th><th>Score</th><th>Decision</th></tr></thead><tbody>${rows}</tbody></table>
+        <table><thead><tr><th>Strategy</th><th>Symbol</th><th>Lookback</th><th>Return</th><th>OOS Return</th><th>Hit Rate</th><th>Windows</th><th>Drawdown</th><th>Score</th><th>Decision</th></tr></thead><tbody>${rows}</tbody></table>
       `;
     }
     function renderQueue(queue) {
-      const rows = (queue.tickets || []).map(ticket => `
-        <tr>
-          <td>${ticket.ticket_id}</td><td>${ticket.actionability || ticket.status}</td><td>${ticket.broker_payload.symbol}</td>
-          <td>${ticket.broker_payload.side}</td><td>${ticket.broker_payload.quantity}</td>
-          <td>${ticket.broker_payload.estimated_price}</td><td>${ticket.risk_check.status}</td>
+      const rows = (queue.tickets || []).map(ticket => {
+        const payload = ticket.broker_payload || {};
+        const risk = ticket.risk_check || {};
+        return `<tr>
+          <td>${ticket.ticket_id}</td><td>${ticket.actionability || ticket.status}</td><td>${payload.symbol || ''}</td>
+          <td>${payload.side || ''}</td><td>${payload.quantity || ''}</td>
+          <td>${payload.estimated_price || ''}</td><td>${risk.status || 'unknown'}</td>
           <td>${(ticket.freshness && ticket.freshness.status) || 'unknown'}</td>
           <td>${(ticket.freshness && ticket.freshness.seconds_until_expiry) ?? 'n/a'}</td>
-        </tr>`).join('');
+        </tr>`;
+      }).join('');
       document.getElementById('queue').innerHTML = `<table><thead><tr><th>Ticket</th><th>Actionability</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Price</th><th>Risk</th><th>Freshness</th><th>Seconds Left</th></tr></thead><tbody>${rows || '<tr><td colspan="9" class="muted">No pending tickets</td></tr>'}</tbody></table>`;
     }
     async function loadState() {
