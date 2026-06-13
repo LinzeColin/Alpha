@@ -21,15 +21,15 @@
         "bit_depth": 8,
         "channels": 3,
         "color_type": 2,
-        "file_size_bytes": 202554,
+        "file_size_bytes": 201123,
         "height": 1000,
-        "unique_sample_count": 220,
+        "unique_sample_count": 227,
         "width": 1440
       },
       "screenshot_path": "outputs/visual_acceptance/dashboard_desktop.png",
       "screenshot_timeout_recovered": true,
       "viewport": "desktop",
-      "visible_text_character_count": 9924,
+      "visible_text_character_count": 9960,
       "width": 1440
     },
     {
@@ -44,15 +44,15 @@
         "bit_depth": 8,
         "channels": 3,
         "color_type": 2,
-        "file_size_bytes": 71307,
+        "file_size_bytes": 71219,
         "height": 844,
-        "unique_sample_count": 359,
+        "unique_sample_count": 354,
         "width": 390
       },
       "screenshot_path": "outputs/visual_acceptance/dashboard_mobile.png",
       "screenshot_timeout_recovered": true,
       "viewport": "mobile",
-      "visible_text_character_count": 9924,
+      "visible_text_character_count": 9962,
       "width": 390
     }
   ]
