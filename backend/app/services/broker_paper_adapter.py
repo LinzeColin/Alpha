@@ -192,6 +192,6 @@ def _execution_cost_zh(execution: dict, *, filled: bool) -> str:
         return "未成交，未产生模拟成交成本。"
     return (
         f"{execution['execution_model_zh']}："
-        f"滑点 {execution['slippage_bps']:.2f} bps，"
+        f"滑点 {execution['slippage_bps']:.2f} 基点，"
         f"佣金 {execution['commission']:.2f} {execution['currency']}。"
     )

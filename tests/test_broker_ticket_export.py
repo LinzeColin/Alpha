@@ -1,6 +1,10 @@
 from datetime import datetime, timedelta, timezone
 
-from backend.app.services.broker_ticket_export import build_broker_ready_order_export, format_broker_ready_order_csv
+from backend.app.services.broker_ticket_export import (
+    build_broker_ready_order_export,
+    format_broker_ready_order_csv,
+    format_broker_ready_order_html_zh,
+)
 
 
 def _reviewed_ticket(expires_delta_seconds: int = 300) -> dict:
@@ -62,3 +66,20 @@ def test_broker_ready_order_csv_contains_single_manual_order_row():
     assert "ticket_id,symbol,side,quantity,order_type,time_in_force" in csv_text
     assert "ticket_export,TLT,buy,1.0,market,day,91.95,91.95" in csv_text
     assert "manual_owner_broker_confirmation_only" in csv_text
+
+
+def test_broker_ready_order_html_view_is_chinese_readable():
+    package = build_broker_ready_order_export(_reviewed_ticket())
+    html = format_broker_ready_order_html_zh(package)
+
+    assert '<html lang="zh-CN">' in html
+    assert "Alpha 经纪商就绪工单" in html
+    assert "允许人工录入" in html
+    assert "买入" in html
+    assert "市价单" in html
+    assert "当日有效" in html
+    assert "下单前风控检查通过" in html
+    assert "仅供所有者在经纪商系统中人工确认录入" in html
+    assert "不会通过 Alpha 自动提交真实资金订单" in html
+    assert "manual_owner_broker_confirmation_only" not in html
+    assert "<th>side</th>" not in html

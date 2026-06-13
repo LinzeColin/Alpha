@@ -37,7 +37,9 @@ def test_local_sandbox_paper_adapter_returns_broker_like_receipt():
     assert receipt["commission"] == 1.0
     assert receipt["slippage_bps"] == 5.0
     assert receipt["execution_model_zh"] == "固定佣金与滑点模型"
+    assert "滑点 5.00 基点" in receipt["execution_cost_zh"]
     assert "佣金 1.00 AUD" in receipt["execution_cost_zh"]
+    assert "bps" not in receipt["execution_cost_zh"]
     assert receipt["paper_result"]["status"] == "filled"
     assert round(broker.cash, 2) == 9907.0
     assert broker.trade_log[0]["commission"] == 1.0

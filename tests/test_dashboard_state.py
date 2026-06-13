@@ -135,6 +135,7 @@ def test_approval_queue_review_actions_are_exposed_to_dashboard_state(tmp_path, 
 
     reviewed = routes.approval_queue_owner_review(ticket_id, {"actor_id": "owner_dashboard"})
     broker_ticket = routes.approval_queue_broker_ticket(ticket_id)
+    broker_ticket_view = routes.approval_queue_broker_ticket_view(ticket_id).body.decode("utf-8")
     broker_ticket_csv = routes.approval_queue_broker_ticket_csv(ticket_id).body.decode("utf-8")
     exported = routes.approval_queue_mark_exported(ticket_id, {"actor_id": "owner_dashboard"})
     state = routes.dashboard_state()
@@ -144,6 +145,11 @@ def test_approval_queue_review_actions_are_exposed_to_dashboard_state(tmp_path, 
     assert broker_ticket["manual_entry_allowed_zh"] == "是"
     assert broker_ticket["live_order_submission_enabled"] is False
     assert broker_ticket["broker_payload_zh"]["side_zh"] == "买入"
+    assert "Alpha 经纪商就绪工单" in broker_ticket_view
+    assert "允许人工录入" in broker_ticket_view
+    assert "仅供所有者在经纪商系统中人工确认录入" in broker_ticket_view
+    assert "不会通过 Alpha 自动提交真实资金订单" in broker_ticket_view
+    assert "manual_owner_broker_confirmation_only" not in broker_ticket_view
     assert "ticket_id,symbol,side,quantity" in broker_ticket_csv
     assert exported["new_status"] == "broker_ticket_exported"
     assert state["approval_queue"]["summary"]["fresh_pending_count"] == 0
@@ -171,6 +177,7 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "单笔佣金" in html
     assert "累计佣金" in html
     assert "最近成交成本" in html
+    assert "/broker-ticket/view" in html
     assert "策略锦标赛" in html
     assert "策略迭代历史" in html
     assert "策略稳定度" in html
@@ -222,6 +229,7 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "Approval Queue" not in html
     assert "No pending tickets" not in html
     assert "<th>Adapter</th>" not in html
+    assert " bps" not in html
 
 
 def test_python_display_locale_covers_runtime_statuses_and_live_reasons():
@@ -256,7 +264,8 @@ def test_paper_cycle_summary_is_chinese_for_human_cli(tmp_path, monkeypatch):
     assert "风控：已通过风控，待人工确认（下单前风控检查通过）" in summary
     assert "执行层：本地沙盒模拟经纪商适配器" in summary
     assert "模型 固定佣金与滑点模型" in summary
-    assert "滑点 5.00 bps" in summary
+    assert "滑点 5.00 基点" in summary
+    assert " bps" not in summary
     assert "单笔佣金 1.00" in summary
     assert "安全边界：本周期只执行模拟交易并生成待人工确认工单，不会提交真实资金订单。" in summary
     assert "pending_owner_approval" not in summary

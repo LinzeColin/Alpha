@@ -8,7 +8,11 @@ from backend.app.services.agent_runtime import AUTO_PAPER_AGENT
 from backend.app.services.backtest import run_buy_and_hold_fixture
 from backend.app.services.broker_paper_adapter import LocalSandboxPaperBrokerAdapter
 from backend.app.services.approval_queue import ApprovalQueue
-from backend.app.services.broker_ticket_export import build_broker_ready_order_export, format_broker_ready_order_csv
+from backend.app.services.broker_ticket_export import (
+    build_broker_ready_order_export,
+    format_broker_ready_order_csv,
+    format_broker_ready_order_html_zh,
+)
 from backend.app.services.policy import GovernorPolicy
 from backend.app.services.live_broker import FailClosedLiveBroker, LiveOrderIntent
 from backend.app.services.market_data_gateway import MarketDataGateway, MarketDataSnapshot
@@ -148,6 +152,15 @@ def approval_queue_broker_ticket(ticket_id: str) -> dict:
     if not ticket:
         raise HTTPException(status_code=404, detail="ticket_not_found")
     return build_broker_ready_order_export(ticket)
+
+
+@router.get("/orders/approval-queue/{ticket_id}/broker-ticket/view", response_class=HTMLResponse)
+def approval_queue_broker_ticket_view(ticket_id: str) -> HTMLResponse:
+    ticket = ApprovalQueue(QUEUE_PATH).get_ticket(ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail="ticket_not_found")
+    export_package = build_broker_ready_order_export(ticket)
+    return HTMLResponse(format_broker_ready_order_html_zh(export_package))
 
 
 @router.get("/orders/approval-queue/{ticket_id}/broker-ticket.csv", response_class=PlainTextResponse)
@@ -695,8 +708,8 @@ def dashboard() -> str:
     }
     function renderBroker(broker) {
       const latest = broker.latest_trade || {};
-      const latestLine = latest.symbol ? `${latest.symbol} / ${displaySide(latest.side)} / ${displayValue(latest.quantity)} @ ${displayValue(latest.price)}` : '暂无';
-      const latestCostLine = latest.symbol ? `佣金 ${Number(latest.commission || 0).toFixed(2)} / 滑点 ${Number(latest.slippage_bps || 0).toFixed(2)} bps` : '暂无';
+      const latestLine = latest.symbol ? `${latest.symbol} / ${displaySide(latest.side)} / 数量 ${displayValue(latest.quantity)} / 成交价 ${displayValue(latest.price)}` : '暂无';
+      const latestCostLine = latest.symbol ? `佣金 ${Number(latest.commission || 0).toFixed(2)} / 滑点 ${Number(latest.slippage_bps || 0).toFixed(2)} 基点` : '暂无';
       document.getElementById('broker').innerHTML = `
         <table>
           <tbody>
@@ -708,7 +721,7 @@ def dashboard() -> str:
             <tr><th>需要凭据</th><td>${displayBool(broker.credential_required)}</td></tr>
             <tr><th>允许真实下单</th><td>${displayBool(broker.live_order_submission_enabled)}</td></tr>
             <tr><th>执行模型</th><td>${broker.execution_model_zh || '未知执行模型'}</td></tr>
-            <tr><th>模拟滑点</th><td>${Number(broker.slippage_bps || 0).toFixed(2)} bps</td></tr>
+            <tr><th>模拟滑点</th><td>${Number(broker.slippage_bps || 0).toFixed(2)} 基点</td></tr>
             <tr><th>单笔佣金</th><td>${Number(broker.commission_per_order || 0).toFixed(2)}</td></tr>
             <tr><th>累计佣金</th><td>${Number(broker.total_commission || 0).toFixed(2)}</td></tr>
             <tr><th>交易次数</th><td>${broker.paper_trade_count || 0}</td></tr>
@@ -842,7 +855,7 @@ def dashboard() -> str:
       await loadState();
     }
     function openBrokerTicket(ticketId) {
-      window.open(`/orders/approval-queue/${encodeURIComponent(ticketId)}/broker-ticket`, '_blank', 'noopener');
+      window.open(`/orders/approval-queue/${encodeURIComponent(ticketId)}/broker-ticket/view`, '_blank', 'noopener');
     }
     function downloadBrokerTicketCsv(ticketId) {
       window.open(`/orders/approval-queue/${encodeURIComponent(ticketId)}/broker-ticket.csv`, '_blank', 'noopener');

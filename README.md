@@ -72,6 +72,7 @@ POST /ops/backup
 GET  /ops/maintenance/status
 GET  /orders/approval-queue
 GET  /orders/approval-queue/{ticket_id}/broker-ticket
+GET  /orders/approval-queue/{ticket_id}/broker-ticket/view
 GET  /orders/approval-queue/{ticket_id}/broker-ticket.csv
 POST /orders/approval-queue/{ticket_id}/owner-review
 POST /orders/approval-queue/{ticket_id}/reject
@@ -127,7 +128,7 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 
 ## 模拟执行成本
 
-- `LocalSandboxPaperBrokerAdapter` 默认使用“固定佣金与滑点模型”：买入按参考价上浮 5.00 bps 成交，并计入每笔 1.00 AUD 模拟佣金。
+- `LocalSandboxPaperBrokerAdapter` 默认使用“固定佣金与滑点模型”：买入按参考价上浮 5.00 基点成交，并计入每笔 1.00 AUD 模拟佣金。
 - Paper broker 会把模拟成交价、参考价、佣金、滑点和累计佣金写入组合状态与绩效历史。
 - Dashboard 的“模拟交易执行层”和“模拟绩效”会显示执行模型、模拟滑点、单笔佣金、累计佣金和最近成交成本。
 - 该模型只影响本地 paper trading 绩效，不调用真实经纪商下单接口。

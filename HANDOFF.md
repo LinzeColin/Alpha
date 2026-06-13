@@ -23,7 +23,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - Strategy history records and summaries now provide owner-facing Chinese fields such as `winner_strategy_id_zh`, `winner_decision_zh`, and `market_data_quality_zh`.
 - Every paper cycle now appends paper portfolio performance evidence to `runtime/paper_performance_history.jsonl`.
 - `/paper/performance/history` and dashboard "模拟绩效" expose run count, latest equity, cumulative return, latest equity change, high watermark, max drawdown, current drawdown, and recent equity rows.
-- Paper execution now includes a fixed-cost/slippage model: buy fills use 5.00 bps simulated slippage and 1.00 AUD paper commission, with reference price, fill price, commission, execution model, and cumulative commission visible in API/dashboard/CLI.
+- Paper execution now includes a fixed-cost/slippage model: 买入成交使用 5.00 个基点的模拟滑点和 1.00 AUD 模拟佣金，并在 API/dashboard/CLI 中显示参考价、成交价、佣金、执行模型和累计佣金；面向用户的文本统一显示为“基点”。
 - Dashboard state includes `paper_portfolio` and `strategy_tournament`.
 - Local launcher scripts exist at `scripts/start_alpha_dashboard.sh` and `scripts/stop_alpha_dashboard.sh`.
 - Dashboard startup now starts the app-managed `AutoPaperAgentRuntime`: one immediate paper cycle, then 300-second refreshes.
@@ -38,8 +38,8 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - `/paper/broker/status` and the dashboard "模拟交易执行层" section expose paper adapter status, mode, connection, credential requirement, live-order disabled state, trade count, and latest simulated fill.
 - Approval queue now has owner-facing review transitions: `owner_reviewed`, `owner_rejected`, and `broker_ticket_exported`, exposed through API routes and Chinese dashboard buttons.
 - Approval queue export is non-executing: export requires prior owner review and records `live_order_submission_enabled: false`; risk-blocked tickets cannot be reviewed/exported.
-- Broker-ready order tickets now have manual-only JSON/CSV export packages at `/orders/approval-queue/{ticket_id}/broker-ticket` and `/broker-ticket.csv`.
-- Dashboard owner actions now include "查看工单" and "下载工单表格" for reviewed/exported tickets.
+- Broker-ready order tickets now have manual-only JSON/CSV export packages at `/orders/approval-queue/{ticket_id}/broker-ticket` and `/broker-ticket.csv`, plus a Chinese owner-facing HTML view at `/broker-ticket/view`.
+- Dashboard owner actions now include "查看工单" and "下载工单表格" for reviewed/exported tickets; "查看工单" opens the Chinese HTML view rather than raw JSON.
 - The backend now rejects owner review or broker-ticket export for expired tickets, preserving the 300-second freshness gate beyond the UI layer.
 - Approval queue now uses SQLite by default at `runtime/approval_queue.sqlite3`; `.json` paths remain supported for compatibility and one-time sibling migration.
 - `/orders/approval-queue`, `/owner/summary`, `/agent/status`, and dashboard state expose approval queue storage status.
@@ -68,6 +68,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - Paper execution adapters may be broker-like, but committed defaults must stay local sandbox or broker paper/read-only only.
 - Dashboard approval actions update local ticket state only; they do not call any real broker order endpoint.
 - Default durable runtime state is local-first: SQLite approval queue plus JSON paper portfolio.
+- Raw JSON/CSV broker-ticket outputs remain available for automation and manual broker import, but the default dashboard owner view must be Chinese HTML.
 
 ## Files To Read First
 
@@ -106,6 +107,7 @@ curl http://127.0.0.1:8000/strategy/tournament/history
 curl http://127.0.0.1:8000/ops/health
 curl http://127.0.0.1:8000/ops/maintenance/status
 curl http://127.0.0.1:8000/orders/approval-queue/{ticket_id}/broker-ticket
+curl http://127.0.0.1:8000/orders/approval-queue/{ticket_id}/broker-ticket/view
 curl http://127.0.0.1:8000/orders/approval-queue/{ticket_id}/broker-ticket.csv
 scripts/check_alpha_ops.sh --backup
 ```
@@ -192,6 +194,13 @@ Execution cost safety scan -> no new real broker place_order path; live-order su
 Runtime execution cost verification -> POST /paper/run-once returned execution_model_zh=固定佣金与滑点模型, average_fill_price=91.996, reference_price=91.95, commission=1.0, slippage_bps=5.0, live_order_submission_enabled=false
 Runtime dashboard state cost verification -> /dashboard/state exposed paper_broker_status.execution_model_zh=固定佣金与滑点模型, commission_per_order=1.0, slippage_bps=5.0, paper_performance.latest_total_commission=3.0
 Browser execution cost verification -> /dashboard lang=zh-CN, 固定佣金与滑点模型/模拟滑点/单笔佣金/累计佣金/最近成交成本 visible, forbidden English/raw enum phrases=[], browser console errors=0
+Chinese broker-ticket view target tests -> .venv/bin/python -m pytest tests/test_broker_ticket_export.py tests/test_dashboard_state.py tests/test_broker_paper_adapter.py tests/test_paper_trading_loop.py tests/test_agent_runtime.py -q -> 18 passed
+Chinese broker-ticket view full regression -> .venv/bin/python -m pytest tests -q -> 47 passed
+Chinese broker-ticket view diff hygiene -> git diff --check -> passed
+Chinese broker-ticket view safety scan -> no new real broker place_order path; live-order submission remains disabled
+Chinese unit display scan -> owner-facing `bps` text removed from dashboard/CLI/cost receipt; raw `slippage_bps` machine fields remain for API stability
+Runtime broker-ticket view verification -> generated ticket_fcd7cb8153f4, owner_reviewed, `/broker-ticket/view` returned Alpha 经纪商就绪工单, 仅供所有者在经纪商系统中人工确认录入, no raw manual_owner_broker_confirmation_only
+Dashboard runtime view-path verification -> `/dashboard` lang zh-CN, contains `/broker-ticket/view`, 未出现英文滑点单位；Browser DOM check also confirmed the ticket button onclick target before Browser connection interrupted
 ```
 
 ## Unresolved Risks

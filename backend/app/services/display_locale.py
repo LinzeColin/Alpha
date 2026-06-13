@@ -268,7 +268,7 @@ def format_paper_cycle_summary_zh(result: dict) -> str:
         (
             "候选订单："
             f"{intent.get('symbol', '无')} / {zh_side(intent.get('side'))} / "
-            f"{intent.get('quantity', 0)} @ {intent.get('estimated_price', 0)} / "
+            f"数量 {intent.get('quantity', 0)} / 参考价格 {intent.get('estimated_price', 0)} / "
             f"{zh_order_type(intent.get('order_type'))} / {zh_time_in_force(intent.get('time_in_force'))}"
         ),
         f"策略：{zh_strategy_id(intent.get('strategy_id'))}",
@@ -315,7 +315,7 @@ def format_paper_cycle_summary_zh(result: dict) -> str:
             f"{zh_adapter_id(adapter.get('adapter_id'))} / "
             f"模式 {zh_status(adapter.get('mode'))} / "
             f"模型 {adapter.get('execution_model_zh', '未知执行模型')} / "
-            f"滑点 {float(adapter.get('slippage_bps') or 0):.2f} bps / "
+            f"滑点 {float(adapter.get('slippage_bps') or 0):.2f} 基点 / "
             f"单笔佣金 {float(adapter.get('commission_per_order') or 0):.2f} / "
             f"允许真实下单 {'是' if adapter.get('live_order_submission_enabled') else '否'}"
         ),

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 from datetime import datetime, timezone
+from html import escape
 from io import StringIO
 
 from backend.app.services.approval_queue import annotate_ticket_freshness
@@ -97,6 +98,90 @@ def format_broker_ready_order_csv(export_package: dict) -> str:
     return buffer.getvalue()
 
 
+def format_broker_ready_order_html_zh(export_package: dict) -> str:
+    manual_fields = export_package.get("manual_entry_fields") or []
+    field_rows = "\n".join(
+        "<tr>"
+        f"<th>{_html(field.get('label_zh'))}</th>"
+        f"<td>{_html(field.get('display_zh'))}</td>"
+        "</tr>"
+        for field in manual_fields
+    )
+    risk_check = export_package.get("risk_check_zh") or {}
+    status_kind = "ok" if export_package.get("manual_entry_allowed") else "warn"
+    blocked_reason = export_package.get("blocked_reason_zh") or "无"
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Alpha 工单详情</title>
+  <style>
+    :root {{ color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
+    body {{ margin: 0; background: #f5f6f3; color: #1d1f21; }}
+    main {{ max-width: 960px; margin: 0 auto; padding: 24px; display: grid; gap: 16px; }}
+    header, section {{ background: #ffffff; border: 1px solid #d8ddd2; border-radius: 8px; padding: 16px; }}
+    h1 {{ margin: 0 0 8px; font-size: 22px; }}
+    h2 {{ margin: 0 0 12px; font-size: 15px; }}
+    table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
+    th, td {{ padding: 9px 8px; border-bottom: 1px solid #eceee8; text-align: left; vertical-align: top; }}
+    th {{ width: 180px; color: #5c6258; font-size: 12px; letter-spacing: 0; }}
+    .pill {{ display: inline-flex; border-radius: 999px; padding: 3px 8px; font-size: 12px; font-weight: 700; }}
+    .ok {{ background: #e6f5ec; color: #176c3a; }}
+    .warn {{ background: #fff3d6; color: #8a5b00; }}
+    .muted {{ color: #6a7166; }}
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Alpha 经纪商就绪工单</h1>
+      <div class="muted">该页面只用于人工复核与手动录入，不会通过 Alpha 自动提交真实资金订单。</div>
+    </header>
+    <section>
+      <h2>工单状态</h2>
+      <table>
+        <tbody>
+          <tr><th>工单号</th><td>{_html(export_package.get("ticket_id"))}</td></tr>
+          <tr><th>状态</th><td>{_html(export_package.get("status_zh"))}</td></tr>
+          <tr><th>可操作性</th><td>{_html(export_package.get("actionability_zh"))}</td></tr>
+          <tr><th>时效性</th><td>{_html(export_package.get("freshness_zh"))}</td></tr>
+          <tr><th>允许人工录入</th><td><span class="pill {status_kind}">{_html(export_package.get("manual_entry_allowed_zh"))}</span></td></tr>
+          <tr><th>阻止原因</th><td>{_html(blocked_reason)}</td></tr>
+          <tr><th>真实下单</th><td>否</td></tr>
+          <tr><th>生成时间</th><td>{_html(export_package.get("generated_at"))}</td></tr>
+          <tr><th>过期时间</th><td>{_html(export_package.get("expires_at"))}</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section>
+      <h2>人工录入字段</h2>
+      <table><tbody>{field_rows or '<tr><td class="muted">暂无字段</td></tr>'}</tbody></table>
+    </section>
+    <section>
+      <h2>风控结果</h2>
+      <table>
+        <tbody>
+          <tr><th>状态</th><td>{_html(risk_check.get("status_zh"))}</td></tr>
+          <tr><th>原因</th><td>{_html(risk_check.get("reason_zh"))}</td></tr>
+          <tr><th>允许进入人工复核</th><td>{_html(risk_check.get("allowed_zh"))}</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section>
+      <h2>安全说明</h2>
+      <table>
+        <tbody>
+          <tr><th>提交方式</th><td>{_html(export_package.get("submission_mode_zh"))}</td></tr>
+          <tr><th>说明</th><td>{_html(export_package.get("safety_message_zh"))}</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>"""
+
+
 def _manual_entry_gate(*, status: str, freshness: dict, risk_check: dict) -> tuple[bool, str | None]:
     if status == "blocked_by_risk" or not risk_check.get("allowed", False):
         return False, "risk_blocked_ticket_cannot_be_owner_reviewed_or_exported"
@@ -105,6 +190,12 @@ def _manual_entry_gate(*, status: str, freshness: dict, risk_check: dict) -> tup
     if status not in {"owner_reviewed", "broker_ticket_exported"}:
         return False, "ticket_must_be_owner_reviewed_before_export"
     return True, None
+
+
+def _html(value: object) -> str:
+    if value is None or value == "":
+        return "无"
+    return escape(str(value), quote=True)
 
 
 def _broker_payload_zh(payload: dict) -> dict:
