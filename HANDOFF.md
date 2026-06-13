@@ -138,7 +138,7 @@ MOOMOO_API_HOME=runtime/moomoo_api_home .venv/bin/python -c "import json; from b
 
 目标敞口再平衡验证：在运行态 `TLT` 严重超配时，`python -m backend.app.services.paper_trading_loop --once` 生成 `TLT / 卖出 / 数量 1.165909`，策略显示“目标仓位再平衡 TLT”，风控通过、审批队列入队、模拟成交完成，现金回升到 `104.81`，`live_order_submission_enabled=false`。
 
-模拟交易成熟度验收：`python scripts/verify_paper_trading_maturity.py --cycles 3` 通过，报告覆盖连续正常周期、目标仓位再平衡卖单、现金回收减仓、风控、审批队列、经纪商就绪工单、5分钟 TTL 和真实下单禁用边界；安全边界文案明确“不触发真实下单、不提交真实资金订单”。
+模拟交易成熟度验收：`python scripts/verify_paper_trading_maturity.py --cycles 3` 通过，报告覆盖连续正常周期、目标仓位再平衡卖单、现金回收减仓、风控、审批队列、经纪商就绪工单、5分钟 TTL 和真实下单禁用边界；现金回收分支使用临时策略覆写隔离验证，不修改默认提交配置；安全边界文案明确“不触发真实下单、不提交真实资金订单”。
 
 运行态检查：普通沙箱内绑定 `127.0.0.1` 会触发权限限制；提权后本地 uvicorn HTTP smoke 已验证 `/dashboard`、`/health` 和 `/dashboard/state` 的中文文案、关键中文字段、10 条响应式布局契约和真实下单禁用边界，并安全调用 `/paper/run-once` 与 `/ops/backup`。本机 Chrome headless 已完成截图级视觉验收；由于 DOM HTML 和截图包含本机绝对路径，默认不提交 `.html/.png`，只提交 `outputs/visual_acceptance/dashboard_chrome_visual_report.json`。
 

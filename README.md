@@ -140,7 +140,7 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - `scripts/check_alpha_soak.sh` 输出中文长运行预检摘要；加 `--json` 可输出机器 JSON。
 - `python -m backend.app.services.paper_readiness` 输出中文交付就绪摘要；加 `--json` 可查看完整机器证据。
 - `python -m backend.app.services.soak_readiness` 输出中文长运行预检摘要；该报告证明是否可以开始本地 soak，不等于已经完成 30 天验证。
-- `python scripts/verify_paper_trading_maturity.py --cycles 3` 使用临时运行态连续跑多轮模拟交易，并额外验证目标仓位再平衡卖单、现金回收减仓、风控、审批队列、经纪商就绪工单、5 分钟 TTL 和真实下单禁用边界；默认输出证据到 `outputs/paper_maturity/paper_trading_maturity_latest.json`。
+- `python scripts/verify_paper_trading_maturity.py --cycles 3` 使用临时运行态连续跑多轮模拟交易，并额外验证目标仓位再平衡卖单、现金回收减仓、风控、审批队列、经纪商就绪工单、5 分钟 TTL 和真实下单禁用边界；现金回收分支使用临时策略覆写隔离验证，不修改默认提交配置；默认输出证据到 `outputs/paper_maturity/paper_trading_maturity_latest.json`。
 - `python scripts/verify_dashboard_http_smoke.py --base-url http://127.0.0.1:8000 --exercise-actions` 会通过 HTTP 检查 `/health`、`/dashboard`、`/dashboard/state` 的中文文案、关键中文字段、响应式布局契约和真实下单禁用边界，并安全调用模拟交易周期与运行备份端点。
 - `python scripts/verify_dashboard_chrome_visual.py --base-url http://127.0.0.1:8000` 会调用本机 Chrome headless 截取桌面和移动视口，检查截图尺寸、像素多样性、渲染后可见中文文案、旧英文界面文案禁用项和响应式布局契约；截图与 DOM HTML 只作为本地临时证据，提交到 GitHub 的默认证据是 `outputs/visual_acceptance/dashboard_chrome_visual_report.json`。
 - 控制台启动后会自动启动运行维护：默认每 300 秒采样一次健康状态，默认每天自动备份一次，并保留最近 30 份备份。

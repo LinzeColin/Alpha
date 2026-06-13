@@ -56,7 +56,7 @@
 
 ## 2026-06-13：模拟交易成熟度验收使用临时运行态
 
-- 决策：新增 `scripts/verify_paper_trading_maturity.py`，用临时 SQLite 队列、临时组合状态和临时历史文件连续跑模拟交易周期，并额外验证现金不足减仓。
+- 决策：新增 `scripts/verify_paper_trading_maturity.py`，用临时 SQLite 队列、临时组合状态和临时历史文件连续跑模拟交易周期，并额外验证目标仓位再平衡与现金不足减仓；现金回收分支使用临时策略覆写隔离验证，不修改默认提交配置。
 - 原因：6月15日交付需要证明模拟交易链路能连续运行，而不是只通过单一 API smoke；临时运行态可以避免污染真实 runtime。
 - 影响：成熟度验收报告覆盖连续周期、风控、审批队列、经纪商就绪工单、5分钟 TTL、模拟成交和真实下单禁用边界；默认输出到 `outputs/paper_maturity/paper_trading_maturity_latest.json`。
 
