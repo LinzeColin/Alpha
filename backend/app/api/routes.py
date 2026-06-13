@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
 from backend.app.schemas.strategy_dsl import validate_strategy
 from backend.app.services.agent_runtime import AUTO_PAPER_AGENT
@@ -75,6 +75,47 @@ def approval_queue() -> dict:
         "count": summary["fresh_pending_count"],
         "summary": summary,
     }
+
+
+@router.post("/orders/approval-queue/{ticket_id}/owner-review")
+def approval_queue_owner_review(ticket_id: str, payload: dict | None = None) -> dict:
+    payload = payload or {}
+    result = ApprovalQueue(QUEUE_PATH).mark_owner_reviewed(
+        ticket_id,
+        actor_id=str(payload.get("actor_id", "owner_dashboard")),
+        note=payload.get("note"),
+    )
+    return _queue_transition_response(result)
+
+
+@router.post("/orders/approval-queue/{ticket_id}/reject")
+def approval_queue_reject(ticket_id: str, payload: dict | None = None) -> dict:
+    payload = payload or {}
+    result = ApprovalQueue(QUEUE_PATH).reject(
+        ticket_id,
+        actor_id=str(payload.get("actor_id", "owner_dashboard")),
+        note=payload.get("note"),
+    )
+    return _queue_transition_response(result)
+
+
+@router.post("/orders/approval-queue/{ticket_id}/mark-exported")
+def approval_queue_mark_exported(ticket_id: str, payload: dict | None = None) -> dict:
+    payload = payload or {}
+    result = ApprovalQueue(QUEUE_PATH).mark_exported(
+        ticket_id,
+        actor_id=str(payload.get("actor_id", "owner_dashboard")),
+        note=payload.get("note"),
+    )
+    return _queue_transition_response(result)
+
+
+def _queue_transition_response(result: dict) -> dict:
+    if result.get("status") == "not_found":
+        raise HTTPException(status_code=404, detail="ticket_not_found")
+    if result.get("status") == "blocked":
+        raise HTTPException(status_code=409, detail=result.get("reason", "ticket_transition_blocked"))
+    return result
 
 
 @router.get("/agent/status")
@@ -214,6 +255,9 @@ def dashboard() -> str:
       hold_research: '继续研究观察',
       reject: '拒绝',
       rejected: '已拒绝',
+      owner_reviewed: '已人工复核',
+      owner_rejected: '已拒绝',
+      broker_ticket_exported: '工单已导出',
       paper: '模拟交易',
       fresh: '有效',
       expired: '已过期',
@@ -264,6 +308,8 @@ def dashboard() -> str:
         metric('模拟交易数', portfolio.trade_count || 0),
         metric('有效候选单', queueSummary.fresh_pending_count || queue.count || 0),
         metric('过期候选单', queueSummary.expired_pending_count || 0),
+        metric('已复核', queueSummary.owner_reviewed_count || 0),
+        metric('已导出工单', queueSummary.broker_ticket_exported_count || 0),
         metric('刷新间隔', `${health.refresh_interval_seconds || 300} 秒`)
       ].join('');
     }
@@ -345,9 +391,24 @@ def dashboard() -> str:
           <td>${payload.estimated_price || ''}</td><td>${displayStatus(risk.status, '未知')}</td>
           <td>${displayStatus(ticket.freshness && ticket.freshness.status, '未知')}</td>
           <td>${(ticket.freshness && ticket.freshness.seconds_until_expiry) ?? '不适用'}</td>
+          <td>${renderTicketActions(ticket)}</td>
         </tr>`;
       }).join('');
-      document.getElementById('queue').innerHTML = `<table><thead><tr><th>候选单</th><th>可操作性</th><th>标的</th><th>方向</th><th>数量</th><th>价格</th><th>风控</th><th>时效性</th><th>剩余秒数</th></tr></thead><tbody>${rows || '<tr><td colspan="9" class="muted">暂无待审批候选单</td></tr>'}</tbody></table>`;
+      document.getElementById('queue').innerHTML = `<table><thead><tr><th>候选单</th><th>可操作性</th><th>标的</th><th>方向</th><th>数量</th><th>价格</th><th>风控</th><th>时效性</th><th>剩余秒数</th><th>操作</th></tr></thead><tbody>${rows || '<tr><td colspan="10" class="muted">暂无待审批候选单</td></tr>'}</tbody></table>`;
+    }
+    function renderTicketActions(ticket) {
+      const ticketId = ticket.ticket_id || '';
+      if (!ticketId) return '';
+      if (ticket.status === 'pending_owner_approval' && ticket.actionability === 'fresh_pending_owner_approval') {
+        return `<button class="secondary" onclick="ticketAction('${ticketId}', 'owner-review')">标记已复核</button> <button class="secondary" onclick="ticketAction('${ticketId}', 'reject')">拒绝</button>`;
+      }
+      if (ticket.status === 'owner_reviewed') {
+        return `<button class="secondary" onclick="ticketAction('${ticketId}', 'mark-exported')">标记已导出</button> <button class="secondary" onclick="ticketAction('${ticketId}', 'reject')">拒绝</button>`;
+      }
+      if (ticket.status === 'pending_owner_approval') {
+        return `<button class="secondary" onclick="ticketAction('${ticketId}', 'reject')">拒绝</button>`;
+      }
+      return '';
     }
     async function loadState() {
       try {
@@ -366,6 +427,19 @@ def dashboard() -> str:
     }
     async function runCycle() {
       await fetch('/paper/run-once', { method: 'POST' });
+      await loadState();
+    }
+    async function ticketAction(ticketId, action) {
+      const response = await fetch(`/orders/approval-queue/${encodeURIComponent(ticketId)}/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor_id: 'owner_dashboard' })
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        document.getElementById('lastUpdated').textContent = '审批操作失败：' + text;
+        return;
+      }
       await loadState();
     }
     loadState();

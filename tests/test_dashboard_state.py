@@ -72,6 +72,26 @@ def test_owner_summary_counts_only_fresh_pending_tickets(tmp_path, monkeypatch):
     assert api_queue["summary"]["expired_pending_count"] == 1
 
 
+def test_approval_queue_review_actions_are_exposed_to_dashboard_state(tmp_path, monkeypatch):
+    monkeypatch.setattr(routes, "QUEUE_PATH", tmp_path / "approval_queue.json")
+    monkeypatch.setattr(routes, "PAPER_STATE_PATH", tmp_path / "paper_portfolio.json")
+    monkeypatch.setattr(routes, "DATA_PATH", Path("data/sample_prices.csv"))
+
+    run_result = routes.paper_run_once()
+    ticket_id = run_result["approval_queue"]["ticket"]["ticket_id"]
+
+    reviewed = routes.approval_queue_owner_review(ticket_id, {"actor_id": "owner_dashboard"})
+    exported = routes.approval_queue_mark_exported(ticket_id, {"actor_id": "owner_dashboard"})
+    state = routes.dashboard_state()
+
+    assert reviewed["new_status"] == "owner_reviewed"
+    assert exported["new_status"] == "broker_ticket_exported"
+    assert state["approval_queue"]["summary"]["fresh_pending_count"] == 0
+    assert state["approval_queue"]["summary"]["broker_ticket_exported_count"] == 1
+    assert state["approval_queue"]["tickets"][0]["status"] == "broker_ticket_exported"
+    assert state["approval_queue"]["tickets"][0]["broker_ticket_export"]["live_order_submission_enabled"] is False
+
+
 def test_dashboard_html_uses_chinese_user_visible_text():
     html = routes.dashboard()
 
@@ -86,6 +106,10 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "允许真实下单" in html
     assert "有效候选单" in html
     assert "过期候选单" in html
+    assert "已复核" in html
+    assert "已导出工单" in html
+    assert "标记已复核" in html
+    assert "标记已导出" in html
     assert "待人工确认" in html
     assert "最近更新：" in html
 

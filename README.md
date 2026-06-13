@@ -45,6 +45,9 @@ GET  /paper/broker/status
 POST /strategy/tournament/run
 GET  /agent/loop/status
 GET  /orders/approval-queue
+POST /orders/approval-queue/{ticket_id}/owner-review
+POST /orders/approval-queue/{ticket_id}/reject
+POST /orders/approval-queue/{ticket_id}/mark-exported
 ```
 
 ## 安全边界
@@ -55,3 +58,4 @@ GET  /orders/approval-queue
 - 外部 API 不得触发真实资金下单。
 - Alpha 可以生成供用户审核的经纪商就绪订单工单，但不得自主提交真实资金订单。
 - 当前模拟交易执行层使用 `LocalSandboxPaperBrokerAdapter`；它返回 broker-like paper receipt，但不需要凭据，也不允许真实下单。
+- 审批队列支持在网页/API 中标记“已人工复核”“已拒绝”“工单已导出”；这些动作只更新本地审计状态，不会调用真实 broker 下单接口。

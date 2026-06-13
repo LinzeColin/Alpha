@@ -40,3 +40,56 @@ def test_approval_queue_summarizes_fresh_and_expired_pending_tickets(tmp_path):
     assert latest[0]["freshness"]["seconds_until_expiry"] == 300
     assert latest[1]["actionability"] == "expired_owner_approval"
     assert latest[1]["freshness"]["status"] == "expired"
+
+
+def test_approval_queue_tracks_owner_review_and_export_transitions(tmp_path):
+    queue = ApprovalQueue(tmp_path / "approval_queue.json")
+    ticket = {
+        "ticket_id": "ticket_review",
+        "status": "pending_owner_approval",
+        "broker_payload": {"symbol": "QQQ"},
+        "risk_check": {"allowed": True},
+    }
+    queue.enqueue(ticket)
+
+    reviewed = queue.mark_owner_reviewed("ticket_review", actor_id="owner_dashboard", note="looks actionable")
+    exported = queue.mark_exported("ticket_review", actor_id="owner_dashboard")
+    reloaded = ApprovalQueue(tmp_path / "approval_queue.json")
+    stored = reloaded.get_ticket("ticket_review")
+    summary = reloaded.summary()
+
+    assert reviewed["status"] == "updated"
+    assert reviewed["new_status"] == "owner_reviewed"
+    assert exported["status"] == "updated"
+    assert exported["new_status"] == "broker_ticket_exported"
+    assert stored["status"] == "broker_ticket_exported"
+    assert stored["owner_review"]["status"] == "owner_reviewed"
+    assert stored["broker_ticket_export"]["live_order_submission_enabled"] is False
+    assert [event["to_status"] for event in stored["status_history"]] == ["owner_reviewed", "broker_ticket_exported"]
+    assert summary["fresh_pending_count"] == 0
+    assert summary["owner_reviewed_count"] == 0
+    assert summary["broker_ticket_exported_count"] == 1
+
+
+def test_approval_queue_blocks_export_before_owner_review(tmp_path):
+    queue = ApprovalQueue(tmp_path / "approval_queue.json")
+    queue.enqueue({"ticket_id": "ticket_pending", "status": "pending_owner_approval"})
+
+    result = queue.mark_exported("ticket_pending")
+
+    assert result["status"] == "blocked"
+    assert result["reason"] == "ticket_must_be_owner_reviewed_before_export"
+    assert queue.get_ticket("ticket_pending")["status"] == "pending_owner_approval"
+
+
+def test_approval_queue_blocks_owner_review_for_risk_blocked_ticket(tmp_path):
+    queue = ApprovalQueue(tmp_path / "approval_queue.json")
+    queue.enqueue({"ticket_id": "ticket_blocked", "status": "blocked_by_risk"})
+
+    result = queue.mark_owner_reviewed("ticket_blocked")
+    rejected = queue.reject("ticket_blocked")
+
+    assert result["status"] == "blocked"
+    assert result["reason"] == "risk_blocked_ticket_cannot_be_owner_reviewed_or_exported"
+    assert rejected["status"] == "updated"
+    assert rejected["new_status"] == "owner_rejected"

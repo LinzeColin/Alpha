@@ -63,3 +63,11 @@ Decision: Paper trading execution should flow through a replaceable broker paper
 Reason: The MVP needs a broker-like paper execution receipt and dashboard visibility before connecting any real broker paper API. This keeps the execution surface testable without accepting credentials or enabling real-money order submission.
 
 Consequence: `PaperTradingLoop` now returns `paper_broker_adapter` and `broker_paper_order` receipts. The dashboard exposes a Chinese "模拟交易执行层" section showing adapter, mode, connection, credential requirement, and whether real order submission is enabled.
+
+## 2026-06-13: Approval Queue Is Interactive But Non-Executing
+
+Decision: Owner-facing approval queue actions may update local ticket state to `owner_reviewed`, `owner_rejected`, or `broker_ticket_exported`, but must not submit broker orders.
+
+Reason: The workspace needs a usable dashboard workflow for reviewing timely broker-ready candidates. The real-money boundary still belongs to the owner inside the broker app/API session.
+
+Consequence: `/orders/approval-queue/{ticket_id}/owner-review`, `/reject`, and `/mark-exported` record status history and review/export metadata. Export requires prior owner review, risk-blocked tickets cannot be reviewed/exported, and exported tickets record `live_order_submission_enabled: false`.
