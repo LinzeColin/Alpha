@@ -4,15 +4,15 @@
     "cycle_count": 1,
     "filled_count": 1,
     "latest_portfolio": {
-      "cash": 5098.95,
+      "cash": 91.9,
       "latest_trade": {
         "commission": 1.0,
         "execution_model_id": "fixed_cost_slippage_v1",
-        "gross_notional": 99.95,
-        "idempotency_key": "run_41c530eceacc:target_rebalance_TLT:TLT:sell:1.087548:2026-06-13T08:48:02+00:00",
-        "notional": 98.95,
+        "gross_notional": 91.9,
+        "idempotency_key": "run_88d1fe9008e3:cash_rebalance_TLT:TLT:sell:1.0:2026-06-13T08:54:51+00:00",
+        "notional": 90.9,
         "price": 91.904,
-        "quantity": 1.087548,
+        "quantity": 1.0,
         "reference_price": 91.95,
         "side": "sell",
         "slippage_bps": 5.0,
@@ -21,14 +21,14 @@
       "positions": [
         {
           "mark_price": 91.95,
-          "market_value": 4497.5,
-          "quantity": 48.912452,
+          "market_value": 91.95,
+          "quantity": 1.0,
           "symbol": "TLT"
         }
       ],
-      "positions_value": 4497.5,
+      "positions_value": 91.95,
       "total_commission": 1.0,
-      "total_equity": 9596.45,
+      "total_equity": 183.85,
       "trade_count": 1
     },
     "paths": {
@@ -38,14 +38,15 @@
       "queue_path": "<temporary>/approval_queue.sqlite3",
       "strategy_history_path": "<temporary>/strategy_tournament_history.jsonl"
     },
+    "policy_override_zh": "该场景临时关闭仓位/总敞口上限，仅隔离验证现金不足减仓分支，不修改默认提交配置。",
     "queued_count": 1,
     "readiness_overall_status": "healthy",
     "readiness_overall_status_zh": "就绪",
     "risk_allowed_count": 1,
     "run_ids": [
-      "run_41c530eceacc"
+      "run_88d1fe9008e3"
     ],
-    "scenario_id": "rebalance",
+    "scenario_id": "cash_rebalance",
     "sides": [
       "sell"
     ],
@@ -53,7 +54,7 @@
       "TLT"
     ]
   },
-  "check_count": 7,
+  "check_count": 9,
   "checks": [
     {
       "evidence": {
@@ -66,7 +67,7 @@
             "commission": 1.0,
             "execution_model_id": "fixed_cost_slippage_v1",
             "gross_notional": 92.0,
-            "idempotency_key": "run_577ae0ab85c1:momentum_TLT_20d:TLT:buy:1.0:2026-06-13T08:48:02+00:00",
+            "idempotency_key": "run_e6dc1ea50b52:momentum_TLT_20d:TLT:buy:1.0:2026-06-13T08:54:50+00:00",
             "notional": 93.0,
             "price": 91.996,
             "quantity": 1.0,
@@ -95,14 +96,15 @@
           "queue_path": "<temporary>/approval_queue.sqlite3",
           "strategy_history_path": "<temporary>/strategy_tournament_history.jsonl"
         },
+        "policy_override_zh": null,
         "queued_count": 3,
         "readiness_overall_status": "healthy",
         "readiness_overall_status_zh": "就绪",
         "risk_allowed_count": 3,
         "run_ids": [
-          "run_02aa257c9531",
-          "run_07991958499f",
-          "run_577ae0ab85c1"
+          "run_0905f11a1c01",
+          "run_96e2866790bd",
+          "run_e6dc1ea50b52"
         ],
         "scenario_id": "normal_cycles",
         "sides": [
@@ -125,7 +127,7 @@
     {
       "evidence": {
         "fail_count": 0,
-        "latest_fresh_ticket_id": "ticket_6da968a767be",
+        "latest_fresh_ticket_id": "ticket_96629d0e537c",
         "overall_status": "healthy",
         "pass_count": 10,
         "warn_count": 0
@@ -155,10 +157,36 @@
         "symbol": "TLT"
       },
       "id": "rebalance_sell",
-      "message_zh": "目标仓位或现金约束场景会生成减仓卖单并完成本地模拟成交。",
+      "message_zh": "目标仓位超限场景会生成减仓卖单并完成本地模拟成交。",
       "status": "pass",
       "status_zh": "通过",
       "title_zh": "目标仓位再平衡卖单"
+    },
+    {
+      "evidence": {
+        "cash": 91.9,
+        "paper_order_status": "filled",
+        "policy_override_zh": "该场景临时关闭仓位/总敞口上限，仅隔离验证现金不足减仓分支，不修改默认提交配置。",
+        "positions": [
+          {
+            "mark_price": 91.95,
+            "market_value": 91.95,
+            "quantity": 1.0,
+            "symbol": "TLT"
+          }
+        ],
+        "risk_allowed": true,
+        "side": "sell",
+        "side_zh": "卖出",
+        "strategy_id": "cash_rebalance_TLT",
+        "strategy_id_zh": "现金回收减仓 TLT",
+        "symbol": "TLT"
+      },
+      "id": "cash_rebalance_sell",
+      "message_zh": "低现金隔离场景会生成现金回收减仓卖单并完成本地模拟成交。",
+      "status": "pass",
+      "status_zh": "通过",
+      "title_zh": "现金回收减仓卖单"
     },
     {
       "evidence": {
@@ -167,6 +195,18 @@
         "scenario_id": "normal"
       },
       "id": "normal_ticket_contract",
+      "message_zh": "工单包含人工经纪商录入字段，TTL 与 5 分钟刷新间隔一致。",
+      "status": "pass",
+      "status_zh": "通过",
+      "title_zh": "经纪商就绪工单结构"
+    },
+    {
+      "evidence": {
+        "bad_ticket_count": 0,
+        "bad_tickets": [],
+        "scenario_id": "target_rebalance"
+      },
+      "id": "target_rebalance_ticket_contract",
       "message_zh": "工单包含人工经纪商录入字段，TTL 与 5 分钟刷新间隔一致。",
       "status": "pass",
       "status_zh": "通过",
@@ -213,7 +253,7 @@
   ],
   "cycle_count": 3,
   "fail_count": 0,
-  "generated_at": "2026-06-13T08:48:02+00:00",
+  "generated_at": "2026-06-13T08:54:51+00:00",
   "normal_cycles": {
     "broker_ready_ticket_count": 3,
     "cycle_count": 3,
@@ -224,7 +264,7 @@
         "commission": 1.0,
         "execution_model_id": "fixed_cost_slippage_v1",
         "gross_notional": 92.0,
-        "idempotency_key": "run_577ae0ab85c1:momentum_TLT_20d:TLT:buy:1.0:2026-06-13T08:48:02+00:00",
+        "idempotency_key": "run_e6dc1ea50b52:momentum_TLT_20d:TLT:buy:1.0:2026-06-13T08:54:50+00:00",
         "notional": 93.0,
         "price": 91.996,
         "quantity": 1.0,
@@ -253,14 +293,15 @@
       "queue_path": "<temporary>/approval_queue.sqlite3",
       "strategy_history_path": "<temporary>/strategy_tournament_history.jsonl"
     },
+    "policy_override_zh": null,
     "queued_count": 3,
     "readiness_overall_status": "healthy",
     "readiness_overall_status_zh": "就绪",
     "risk_allowed_count": 3,
     "run_ids": [
-      "run_02aa257c9531",
-      "run_07991958499f",
-      "run_577ae0ab85c1"
+      "run_0905f11a1c01",
+      "run_96e2866790bd",
+      "run_e6dc1ea50b52"
     ],
     "scenario_id": "normal_cycles",
     "sides": [
@@ -276,7 +317,7 @@
   },
   "overall_status": "mature",
   "overall_status_zh": "成熟可用",
-  "pass_count": 7,
+  "pass_count": 9,
   "rebalance": {
     "broker_ready_ticket_count": 1,
     "cycle_count": 1,
@@ -287,7 +328,7 @@
         "commission": 1.0,
         "execution_model_id": "fixed_cost_slippage_v1",
         "gross_notional": 99.95,
-        "idempotency_key": "run_41c530eceacc:target_rebalance_TLT:TLT:sell:1.087548:2026-06-13T08:48:02+00:00",
+        "idempotency_key": "run_5737fa2cc81d:target_rebalance_TLT:TLT:sell:1.087548:2026-06-13T08:54:51+00:00",
         "notional": 98.95,
         "price": 91.904,
         "quantity": 1.087548,
@@ -316,12 +357,13 @@
       "queue_path": "<temporary>/approval_queue.sqlite3",
       "strategy_history_path": "<temporary>/strategy_tournament_history.jsonl"
     },
+    "policy_override_zh": null,
     "queued_count": 1,
     "readiness_overall_status": "healthy",
     "readiness_overall_status_zh": "就绪",
     "risk_allowed_count": 1,
     "run_ids": [
-      "run_41c530eceacc"
+      "run_5737fa2cc81d"
     ],
     "scenario_id": "rebalance",
     "sides": [
@@ -340,9 +382,64 @@
   "status": "pass",
   "status_zh": "通过",
   "summary_zh": "连续模拟交易、目标仓位再平衡、现金回收减仓、风控、审批队列、经纪商就绪工单、5分钟时效和真实下单禁用边界均通过。",
+  "target_rebalance": {
+    "broker_ready_ticket_count": 1,
+    "cycle_count": 1,
+    "filled_count": 1,
+    "latest_portfolio": {
+      "cash": 5098.95,
+      "latest_trade": {
+        "commission": 1.0,
+        "execution_model_id": "fixed_cost_slippage_v1",
+        "gross_notional": 99.95,
+        "idempotency_key": "run_5737fa2cc81d:target_rebalance_TLT:TLT:sell:1.087548:2026-06-13T08:54:51+00:00",
+        "notional": 98.95,
+        "price": 91.904,
+        "quantity": 1.087548,
+        "reference_price": 91.95,
+        "side": "sell",
+        "slippage_bps": 5.0,
+        "symbol": "TLT"
+      },
+      "positions": [
+        {
+          "mark_price": 91.95,
+          "market_value": 4497.5,
+          "quantity": 48.912452,
+          "symbol": "TLT"
+        }
+      ],
+      "positions_value": 4497.5,
+      "total_commission": 1.0,
+      "total_equity": 9596.45,
+      "trade_count": 1
+    },
+    "paths": {
+      "app_path": "<temporary>/Alpha.app",
+      "paper_state_path": "<temporary>/paper_portfolio.json",
+      "performance_history_path": "<temporary>/paper_performance_history.jsonl",
+      "queue_path": "<temporary>/approval_queue.sqlite3",
+      "strategy_history_path": "<temporary>/strategy_tournament_history.jsonl"
+    },
+    "policy_override_zh": null,
+    "queued_count": 1,
+    "readiness_overall_status": "healthy",
+    "readiness_overall_status_zh": "就绪",
+    "risk_allowed_count": 1,
+    "run_ids": [
+      "run_5737fa2cc81d"
+    ],
+    "scenario_id": "rebalance",
+    "sides": [
+      "sell"
+    ],
+    "symbols": [
+      "TLT"
+    ]
+  },
   "warn_count": 0,
   "write_result": {
-    "file_size_bytes": 10187,
+    "file_size_bytes": 13263,
     "path": "/Users/linzezhang/Documents/Codex/2026-06-13/files-mentioned-by-the-user-alpha/outputs/paper_maturity/paper_trading_maturity_latest.json",
     "status": "written",
     "status_zh": "已写入"
