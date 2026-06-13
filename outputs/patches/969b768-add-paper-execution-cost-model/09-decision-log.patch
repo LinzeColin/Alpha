@@ -1,0 +1,16 @@
+diff --git a/docs/decision_log.md b/docs/decision_log.md
+index c11f35d..2a4f5c6 100644
+--- a/docs/decision_log.md
++++ b/docs/decision_log.md
+@@ -143,3 +143,11 @@ Decision: 每次自动模拟交易周期都必须把模拟组合权益快照追
+ Reason: 成熟 paper trading 不能只证明“下过模拟单”；它必须持续显示组合权益、累计收益、最新权益变化、最大回撤和当前回撤，才能支持策略迭代和运行判断。
+ 
+ Consequence: `PaperTradingLoop` 写入 `runtime/paper_performance_history.jsonl`；`GET /paper/performance/history` 和 dashboard “模拟绩效”显示记录次数、最新总权益、累计收益率、最新权益变化、权益高水位、最大回撤、当前回撤和最近权益历史。该功能只记录模拟交易结果，不改变真实资金执行边界。
++
++## 2026-06-13: Paper Execution Cost Model Is Required
++
++Decision: 本地模拟经纪商成交必须默认经过成本模型，记录参考价、模拟成交价、滑点、佣金和累计成本。
++
++Reason: 成熟 paper trading 不能用零成本成交证明策略可行；即使是 MVP，也要把交易摩擦反映到组合权益、绩效历史和 dashboard 中，避免高估策略收益。
++
++Consequence: `LocalSandboxPaperBrokerAdapter` 默认使用“固定佣金与滑点模型”，买入成交价按参考价上浮 5.00 bps，并收取每笔 1.00 AUD 模拟佣金。`PaperBroker` 把成本计入现金；`/paper/performance/history`、`/paper/broker/status`、dashboard 和 CLI 摘要显示中文成本字段。该模型只用于 paper trading，不改变真实下单禁用边界。
