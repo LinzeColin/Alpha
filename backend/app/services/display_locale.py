@@ -127,6 +127,9 @@ REASON_TEXT_ZH = {
     "ticket_transition_blocked": "工单状态流转被阻止",
     "ticket_must_be_owner_reviewed_before_export": "导出前必须先完成所有者复核",
     "risk_blocked_ticket_cannot_be_owner_reviewed_or_exported": "风控阻止的工单不能复核或导出",
+    "expired_ticket_cannot_be_owner_reviewed_or_exported": "工单已过期，不能复核或导出",
+    "rejected_ticket_cannot_be_reopened_or_exported": "已拒绝工单不能重新打开或导出",
+    "exported_ticket_cannot_transition_except_rejection": "已导出工单只能转为拒绝状态",
     "ticket_already_in_requested_state": "工单已处于目标状态",
 }
 

@@ -141,11 +141,19 @@ class ApprovalQueue:
                 "ticket": annotate_ticket_freshness(ticket),
             }
         blocked_reason = _transition_blocker(current_status, new_status)
+        annotated_ticket = annotate_ticket_freshness(ticket)
         if blocked_reason:
             return {
                 "status": "blocked",
                 "reason": blocked_reason,
-                "ticket": annotate_ticket_freshness(ticket),
+                "ticket": annotated_ticket,
+            }
+        freshness_status = (annotated_ticket.get("freshness") or {}).get("status")
+        if new_status in {"owner_reviewed", "broker_ticket_exported"} and freshness_status != "fresh":
+            return {
+                "status": "blocked",
+                "reason": "expired_ticket_cannot_be_owner_reviewed_or_exported",
+                "ticket": annotated_ticket,
             }
         updated = dict(ticket)
         updated["status"] = new_status

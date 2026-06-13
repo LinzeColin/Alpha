@@ -60,9 +60,11 @@ def test_approval_queue_summarizes_fresh_and_expired_pending_tickets(tmp_path):
 
 def test_approval_queue_tracks_owner_review_and_export_transitions(tmp_path):
     queue = ApprovalQueue(tmp_path / "approval_queue.json")
+    expires_at = (datetime.now(timezone.utc).replace(microsecond=0) + timedelta(seconds=300)).isoformat()
     ticket = {
         "ticket_id": "ticket_review",
         "status": "pending_owner_approval",
+        "expires_at": expires_at,
         "broker_payload": {"symbol": "QQQ"},
         "risk_check": {"allowed": True},
     }
@@ -90,9 +92,11 @@ def test_approval_queue_tracks_owner_review_and_export_transitions(tmp_path):
 def test_sqlite_approval_queue_tracks_owner_review_and_export_across_instances(tmp_path):
     path = tmp_path / "approval_queue.sqlite3"
     queue = ApprovalQueue(path)
+    expires_at = (datetime.now(timezone.utc).replace(microsecond=0) + timedelta(seconds=300)).isoformat()
     ticket = {
         "ticket_id": "ticket_sqlite_review",
         "status": "pending_owner_approval",
+        "expires_at": expires_at,
         "broker_payload": {"symbol": "TLT"},
         "risk_check": {"allowed": True},
     }
@@ -126,13 +130,34 @@ def test_sqlite_approval_queue_imports_existing_json_sibling(tmp_path):
 
 def test_approval_queue_blocks_export_before_owner_review(tmp_path):
     queue = ApprovalQueue(tmp_path / "approval_queue.json")
-    queue.enqueue({"ticket_id": "ticket_pending", "status": "pending_owner_approval"})
+    expires_at = (datetime.now(timezone.utc).replace(microsecond=0) + timedelta(seconds=300)).isoformat()
+    queue.enqueue({"ticket_id": "ticket_pending", "status": "pending_owner_approval", "expires_at": expires_at})
 
     result = queue.mark_exported("ticket_pending")
 
     assert result["status"] == "blocked"
     assert result["reason"] == "ticket_must_be_owner_reviewed_before_export"
     assert queue.get_ticket("ticket_pending")["status"] == "pending_owner_approval"
+
+
+def test_approval_queue_blocks_expired_ticket_review_and_export(tmp_path):
+    queue = ApprovalQueue(tmp_path / "approval_queue.json")
+    expires_at = (datetime.now(timezone.utc).replace(microsecond=0) - timedelta(seconds=1)).isoformat()
+    queue.enqueue(
+        {
+            "ticket_id": "ticket_expired",
+            "status": "pending_owner_approval",
+            "expires_at": expires_at,
+            "broker_payload": {"symbol": "SPY"},
+            "risk_check": {"allowed": True},
+        }
+    )
+
+    reviewed = queue.mark_owner_reviewed("ticket_expired")
+
+    assert reviewed["status"] == "blocked"
+    assert reviewed["reason"] == "expired_ticket_cannot_be_owner_reviewed_or_exported"
+    assert queue.get_ticket("ticket_expired")["status"] == "pending_owner_approval"
 
 
 def test_approval_queue_blocks_owner_review_for_risk_blocked_ticket(tmp_path):

@@ -67,6 +67,8 @@ GET  /ops/health
 POST /ops/backup
 GET  /ops/maintenance/status
 GET  /orders/approval-queue
+GET  /orders/approval-queue/{ticket_id}/broker-ticket
+GET  /orders/approval-queue/{ticket_id}/broker-ticket.csv
 POST /orders/approval-queue/{ticket_id}/owner-review
 POST /orders/approval-queue/{ticket_id}/reject
 POST /orders/approval-queue/{ticket_id}/mark-exported
@@ -81,6 +83,7 @@ POST /orders/approval-queue/{ticket_id}/mark-exported
 - Alpha 可以生成供用户审核的经纪商就绪订单工单，但不得自主提交真实资金订单。
 - 当前模拟交易执行层使用 `LocalSandboxPaperBrokerAdapter`；它返回类经纪商模拟回执，但不需要凭据，也不允许真实下单。
 - 审批队列默认使用 SQLite 持久化，支持在网页/API 中标记“已人工复核”“已拒绝”“工单已导出”；这些动作只更新本地审计状态，不会调用真实 broker 下单接口。
+- 已人工复核且仍在有效期内的工单可导出为 JSON 或 CSV 人工录入包；过期工单不能复核或导出。
 
 ## 运行健康与备份
 

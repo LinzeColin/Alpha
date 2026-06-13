@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from backend.app.schemas.strategy_dsl import validate_strategy
 from backend.app.services.agent_runtime import AUTO_PAPER_AGENT
 from backend.app.services.backtest import run_buy_and_hold_fixture
 from backend.app.services.broker_paper_adapter import LocalSandboxPaperBrokerAdapter
 from backend.app.services.approval_queue import ApprovalQueue
+from backend.app.services.broker_ticket_export import build_broker_ready_order_export, format_broker_ready_order_csv
 from backend.app.services.policy import GovernorPolicy
 from backend.app.services.live_broker import FailClosedLiveBroker, LiveOrderIntent
 from backend.app.services.market_data_gateway import MarketDataGateway, MarketDataSnapshot
@@ -130,6 +131,23 @@ def approval_queue_mark_exported(ticket_id: str, payload: dict | None = None) ->
         note=payload.get("note"),
     )
     return _queue_transition_response(result)
+
+
+@router.get("/orders/approval-queue/{ticket_id}/broker-ticket")
+def approval_queue_broker_ticket(ticket_id: str) -> dict:
+    ticket = ApprovalQueue(QUEUE_PATH).get_ticket(ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail="ticket_not_found")
+    return build_broker_ready_order_export(ticket)
+
+
+@router.get("/orders/approval-queue/{ticket_id}/broker-ticket.csv", response_class=PlainTextResponse)
+def approval_queue_broker_ticket_csv(ticket_id: str) -> PlainTextResponse:
+    ticket = ApprovalQueue(QUEUE_PATH).get_ticket(ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail="ticket_not_found")
+    export_package = build_broker_ready_order_export(ticket)
+    return PlainTextResponse(format_broker_ready_order_csv(export_package), media_type="text/csv; charset=utf-8")
 
 
 def _queue_transition_response(result: dict) -> dict:
@@ -411,6 +429,9 @@ def dashboard() -> str:
       ticket_transition_blocked: '工单状态流转被阻止',
       ticket_must_be_owner_reviewed_before_export: '导出前必须先完成所有者复核',
       risk_blocked_ticket_cannot_be_owner_reviewed_or_exported: '风控阻止的工单不能复核或导出',
+      expired_ticket_cannot_be_owner_reviewed_or_exported: '工单已过期，不能复核或导出',
+      rejected_ticket_cannot_be_reopened_or_exported: '已拒绝工单不能重新打开或导出',
+      exported_ticket_cannot_transition_except_rejection: '已导出工单只能转为拒绝状态',
       ticket_already_in_requested_state: '工单已处于目标状态'
     };
     function displayStatus(value, fallback = '无') {
@@ -674,7 +695,10 @@ def dashboard() -> str:
         return `<button class="secondary" onclick="ticketAction('${ticketId}', 'owner-review')">标记已复核</button> <button class="secondary" onclick="ticketAction('${ticketId}', 'reject')">拒绝</button>`;
       }
       if (ticket.status === 'owner_reviewed') {
-        return `<button class="secondary" onclick="ticketAction('${ticketId}', 'mark-exported')">标记已导出</button> <button class="secondary" onclick="ticketAction('${ticketId}', 'reject')">拒绝</button>`;
+        return `<button class="secondary" onclick="ticketAction('${ticketId}', 'mark-exported')">标记已导出</button> <button class="secondary" onclick="openBrokerTicket('${ticketId}')">查看工单</button> <button class="secondary" onclick="downloadBrokerTicketCsv('${ticketId}')">下载工单表格</button> <button class="secondary" onclick="ticketAction('${ticketId}', 'reject')">拒绝</button>`;
+      }
+      if (ticket.status === 'broker_ticket_exported') {
+        return `<button class="secondary" onclick="openBrokerTicket('${ticketId}')">查看工单</button> <button class="secondary" onclick="downloadBrokerTicketCsv('${ticketId}')">下载工单表格</button>`;
       }
       if (ticket.status === 'pending_owner_approval') {
         return `<button class="secondary" onclick="ticketAction('${ticketId}', 'reject')">拒绝</button>`;
@@ -728,6 +752,12 @@ def dashboard() -> str:
         return;
       }
       await loadState();
+    }
+    function openBrokerTicket(ticketId) {
+      window.open(`/orders/approval-queue/${encodeURIComponent(ticketId)}/broker-ticket`, '_blank', 'noopener');
+    }
+    function downloadBrokerTicketCsv(ticketId) {
+      window.open(`/orders/approval-queue/${encodeURIComponent(ticketId)}/broker-ticket.csv`, '_blank', 'noopener');
     }
     loadState();
     setInterval(loadState, 300000);

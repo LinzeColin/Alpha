@@ -114,10 +114,17 @@ def test_approval_queue_review_actions_are_exposed_to_dashboard_state(tmp_path, 
     ticket_id = run_result["approval_queue"]["ticket"]["ticket_id"]
 
     reviewed = routes.approval_queue_owner_review(ticket_id, {"actor_id": "owner_dashboard"})
+    broker_ticket = routes.approval_queue_broker_ticket(ticket_id)
+    broker_ticket_csv = routes.approval_queue_broker_ticket_csv(ticket_id).body.decode("utf-8")
     exported = routes.approval_queue_mark_exported(ticket_id, {"actor_id": "owner_dashboard"})
     state = routes.dashboard_state()
 
     assert reviewed["new_status"] == "owner_reviewed"
+    assert broker_ticket["manual_entry_allowed"] is True
+    assert broker_ticket["manual_entry_allowed_zh"] == "是"
+    assert broker_ticket["live_order_submission_enabled"] is False
+    assert broker_ticket["broker_payload_zh"]["side_zh"] == "买入"
+    assert "ticket_id,symbol,side,quantity" in broker_ticket_csv
     assert exported["new_status"] == "broker_ticket_exported"
     assert state["approval_queue"]["summary"]["fresh_pending_count"] == 0
     assert state["approval_queue"]["summary"]["broker_ticket_exported_count"] == 1
@@ -164,6 +171,8 @@ def test_dashboard_html_uses_chinese_user_visible_text():
     assert "持久化" in html
     assert "标记已复核" in html
     assert "标记已导出" in html
+    assert "查看工单" in html
+    assert "下载工单表格" in html
     assert "待人工确认" in html
     assert "最近更新：" in html
     assert "总体状态" in html

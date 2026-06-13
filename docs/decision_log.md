@@ -119,3 +119,11 @@ Decision: Alpha 的用户可见运行界面、App/脚本输出、控制台状态
 Reason: 用户要求“整个系统彻底的全中文显示”，运行期间不应让 owner 通过 raw enum 才能理解系统状态。
 
 Consequence: API 字段名、内部枚举、工单号、文件路径和股票代码继续保持机器可读格式；Dashboard、CLI 摘要和 owner-facing API 会提供中文映射或 `*_zh` 字段。新增界面或命令输出必须补对应中文展示测试。
+
+## 2026-06-13: Broker-Ready Ticket Export Is Manual-Only
+
+Decision: 已人工复核且仍在有效期内的候选单可以导出为 JSON/CSV 人工录入工单包，但 Alpha 不调用真实经纪商下单接口。
+
+Reason: 用户需要可操作的 broker-ready order ticket；同时真实资金执行边界必须留在 owner 的经纪商确认侧。
+
+Consequence: `/orders/approval-queue/{ticket_id}/broker-ticket` 和 `.csv` 提供标准化工单包，包含中文展示字段、CSV 行、安全提示和 `live_order_submission_enabled: false`。过期工单不能被复核或导出。

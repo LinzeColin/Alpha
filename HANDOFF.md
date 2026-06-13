@@ -32,6 +32,9 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - `/paper/broker/status` and the dashboard "模拟交易执行层" section expose paper adapter status, mode, connection, credential requirement, live-order disabled state, trade count, and latest simulated fill.
 - Approval queue now has owner-facing review transitions: `owner_reviewed`, `owner_rejected`, and `broker_ticket_exported`, exposed through API routes and Chinese dashboard buttons.
 - Approval queue export is non-executing: export requires prior owner review and records `live_order_submission_enabled: false`; risk-blocked tickets cannot be reviewed/exported.
+- Broker-ready order tickets now have manual-only JSON/CSV export packages at `/orders/approval-queue/{ticket_id}/broker-ticket` and `/broker-ticket.csv`.
+- Dashboard owner actions now include "查看工单" and "下载工单表格" for reviewed/exported tickets.
+- The backend now rejects owner review or broker-ticket export for expired tickets, preserving the 300-second freshness gate beyond the UI layer.
 - Approval queue now uses SQLite by default at `runtime/approval_queue.sqlite3`; `.json` paths remain supported for compatibility and one-time sibling migration.
 - `/orders/approval-queue`, `/owner/summary`, `/agent/status`, and dashboard state expose approval queue storage status.
 - Market data now flows through `MarketDataGateway`: cache-first, fixture fallback, optional Stooq public delayed CSV refresh, and visible dashboard/API source quality.
@@ -73,6 +76,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - `backend/app/services/ops_runtime.py`
 - `backend/app/services/display_locale.py`
 - `backend/app/services/live_broker.py`
+- `backend/app/services/broker_ticket_export.py`
 - `backend/app/services/strategy_iteration.py`
 - `backend/app/services/paper_broker.py`
 - `backend/app/services/agent_runtime.py`
@@ -90,6 +94,8 @@ python -m backend.app.services.paper_trading_loop --once --json
 curl http://127.0.0.1:8000/market-data/status
 curl http://127.0.0.1:8000/ops/health
 curl http://127.0.0.1:8000/ops/maintenance/status
+curl http://127.0.0.1:8000/orders/approval-queue/{ticket_id}/broker-ticket
+curl http://127.0.0.1:8000/orders/approval-queue/{ticket_id}/broker-ticket.csv
 scripts/check_alpha_ops.sh --backup
 ```
 
@@ -149,13 +155,17 @@ Runtime Chinese maintenance verification -> /ops/maintenance/status returned sta
 Fail-closed live intent Chinese verification -> POST /live/order-intent returned status_zh=已拒绝, reason_zh=策略已禁用真实资金交易, message_zh=真实资金下单被拒绝
 Dashboard HTML Chinese verification -> /dashboard contains Alpha 控制台, 运行模拟交易周期, 自动维护, 等待下次维护; forbidden English phrases checked in source query were absent
 Diff hygiene after Chinese display changes -> git diff --check -> passed
+Broker ticket export target tests -> .venv/bin/python -m pytest tests/test_broker_ticket_export.py tests/test_approval_queue.py tests/test_dashboard_state.py -q -> 19 passed
+Broker ticket export full regression -> .venv/bin/python -m pytest tests -q -> 42 passed
+Broker ticket export runtime API verification -> generated ticket_a03c19291ad8, owner_reviewed, broker-ticket manual_entry_allowed=true, live_order_submission_enabled=false, CSV header present, marked broker_ticket_exported
+Broker ticket export safety scan -> no new real broker place_order path; new export package records live_order_submission_enabled=false
 ```
 
 ## Unresolved Risks
 
 - Market data gateway exists, but default mode remains cache/fixture fallback; Stooq refresh is public delayed data and not broker-grade real-time market data.
 - This machine's current Python SSL trust chain blocked live Stooq refresh during validation; do not disable SSL verification by default.
-- External broker paper API integration is not connected yet; local sandbox paper adapter abstraction now exists.
+- External broker paper API integration is not connected yet; local sandbox paper adapter abstraction and manual broker-ready JSON/CSV ticket export now exist.
 - Dashboard is local MVP only.
 - Approval queue is SQLite-backed locally and automatic backup/rotation now exists; it still needs a normal macOS `.app` long-run soak and multi-process contention hardening before claiming unattended 30-day robustness.
 - The current execution environment may reclaim `nohup` background servers between tool calls; foreground uvicorn verified the app runtime, and the start script now detects post-health-check instability, but final `.app` long-run verification should be done from the user's normal macOS session.
