@@ -13,12 +13,15 @@ python -m backend.app.services.paper_trading_loop --once
 uvicorn backend.app.main:app --reload
 ```
 
-Start/stop dashboard helper:
+Start/stop the local workspace helper:
 
 ```bash
 scripts/start_alpha_dashboard.sh
 scripts/stop_alpha_dashboard.sh
 ```
+
+When the dashboard starts, the app lifecycle starts the automatic paper agent
+runtime. It runs one paper cycle immediately, then refreshes every 300 seconds.
 
 Open:
 
@@ -34,6 +37,7 @@ Useful API endpoints:
 POST /paper/run-once
 GET  /paper/portfolio
 POST /strategy/tournament/run
+GET  /agent/loop/status
 GET  /orders/approval-queue
 ```
 

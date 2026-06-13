@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 from backend.app.schemas.strategy_dsl import validate_strategy
+from backend.app.services.agent_runtime import AUTO_PAPER_AGENT
 from backend.app.services.backtest import run_buy_and_hold_fixture
 from backend.app.services.approval_queue import ApprovalQueue
 from backend.app.services.policy import GovernorPolicy
@@ -72,6 +73,9 @@ def approval_queue() -> dict:
 @router.get("/agent/status")
 def agent_status() -> dict:
     queue = ApprovalQueue(QUEUE_PATH)
+    tickets = queue.list_tickets()
+    pending = [item for item in tickets if item.get("status") == "pending_owner_approval"]
+    latest_ticket = tickets[-1] if tickets else None
     return {
         "agent_id": "paper_trading_loop",
         "status": "ready",
@@ -82,8 +86,15 @@ def agent_status() -> dict:
             "approval_queue",
             "broker_ready_order_ticket",
         ],
-        "pending_tickets": len(queue.list_tickets()),
+        "pending_tickets": len(pending),
+        "latest_ticket_created_at": latest_ticket.get("created_at") if latest_ticket else None,
+        "loop": AUTO_PAPER_AGENT.snapshot(),
     }
+
+
+@router.get("/agent/loop/status")
+def agent_loop_status() -> dict:
+    return AUTO_PAPER_AGENT.snapshot()
 
 
 @router.get("/paper/portfolio")
@@ -178,8 +189,10 @@ def dashboard() -> str:
       const portfolio = data.paper_portfolio || {};
       const queue = data.approval_queue || {};
       const health = data.health || {};
+      const loop = (data.agent_status && data.agent_status.loop) || {};
       document.getElementById('metrics').innerHTML = [
         metric('Agent', pill(data.agent_status.status, 'ok')),
+        metric('Loop', pill(loop.status || 'unknown', loop.error_count ? 'danger' : 'ok')),
         metric('Paper Equity', Number(portfolio.total_equity || 0).toFixed(2)),
         metric('Paper Trades', portfolio.trade_count || 0),
         metric('Pending Tickets', queue.count || 0),
@@ -199,12 +212,22 @@ def dashboard() -> str:
       `;
     }
     function renderAgent(agent) {
+      const loop = agent.loop || {};
+      const summary = loop.last_result_summary || {};
+      const loopKind = loop.error_count ? 'danger' : (loop.task_running ? 'ok' : 'warn');
       document.getElementById('agent').innerHTML = `
         <table>
           <tbody>
             <tr><th>ID</th><td>${agent.agent_id}</td></tr>
             <tr><th>Status</th><td>${pill(agent.status, 'ok')}</td></tr>
+            <tr><th>Loop</th><td>${pill(loop.status || 'unknown', loopKind)}</td></tr>
+            <tr><th>Run Count</th><td>${loop.run_count || 0}</td></tr>
             <tr><th>Refresh</th><td>${agent.refresh_interval_seconds}s</td></tr>
+            <tr><th>Last Run</th><td>${loop.last_run_completed_at || 'Not yet'}</td></tr>
+            <tr><th>Next Run</th><td>${loop.next_run_at || 'Pending'}</td></tr>
+            <tr><th>Latest Ticket</th><td>${agent.latest_ticket_created_at || 'None'}</td></tr>
+            <tr><th>Last Result</th><td>${summary.intent_symbol || 'None'} / ${summary.ticket_status || 'None'} / ${summary.paper_order_status || 'None'}</td></tr>
+            <tr><th>Errors</th><td>${loop.error_count || 0}${loop.last_error ? ': ' + loop.last_error : ''}</td></tr>
             <tr><th>Capabilities</th><td>${(agent.capabilities || []).join(', ')}</td></tr>
           </tbody>
         </table>

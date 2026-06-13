@@ -17,3 +17,22 @@ def test_dashboard_state_exposes_agent_portfolio_strategy_and_queue(tmp_path, mo
     assert state["paper_portfolio"]["trade_count"] == 1
     assert state["strategy_tournament"]["candidate_count"] > 0
     assert state["approval_queue"]["count"] == 1
+
+
+def test_agent_status_reports_app_runtime_loop_state(tmp_path, monkeypatch):
+    loop_state = {
+        "enabled": True,
+        "status": "sleeping",
+        "task_running": True,
+        "interval_seconds": 300,
+        "run_count": 1,
+        "error_count": 0,
+    }
+    monkeypatch.setattr(routes.AUTO_PAPER_AGENT, "snapshot", lambda: loop_state)
+    monkeypatch.setattr(routes, "QUEUE_PATH", tmp_path / "approval_queue.json")
+
+    status = routes.agent_status()
+
+    assert status["loop"] == loop_state
+    assert status["loop"]["task_running"] is True
+    assert status["pending_tickets"] == 0

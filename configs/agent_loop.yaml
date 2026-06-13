@@ -4,7 +4,11 @@ paper_trading_loop:
   default_strategy_id: "fixture_momentum_v0"
   order_ticket_ttl_seconds: 300
   queue_path: "runtime/approval_queue.json"
+  paper_state_path: "runtime/paper_portfolio.json"
+  managed_by: "fastapi_lifespan_runtime"
 
 dashboard:
   enabled: true
   refresh_interval_seconds: 300
+  pid_path: "runtime/alpha_dashboard.pid"
+  log_path: "runtime/alpha_dashboard.log"

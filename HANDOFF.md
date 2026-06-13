@@ -19,6 +19,9 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - Strategy iteration now runs a fixture momentum tournament and selects the best tradable candidate under risk/notional limits.
 - Dashboard state includes `paper_portfolio` and `strategy_tournament`.
 - Local launcher scripts exist at `scripts/start_alpha_dashboard.sh` and `scripts/stop_alpha_dashboard.sh`.
+- Dashboard startup now starts the app-managed `AutoPaperAgentRuntime`: one immediate paper cycle, then 300-second refreshes.
+- `/agent/loop/status` exposes automatic loop state, run count, last result summary, next run time, and errors.
+- `scripts/start_alpha_dashboard.sh` now performs a startup health check and removes stale pid files on failure.
 - Repo launcher exists at `outputs/applications/Alpha.command`; an older external copy was observed at `/Users/linzezhang/Downloads/applicatioins/Alpha.command`.
 
 ## Key Decisions
@@ -27,6 +30,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - The system will not autonomously submit real-money broker orders.
 - Broker-ready real-money candidates flow through `OrderIntent -> risk check -> approval queue -> BrokerReadyOrderTicket`.
 - Refresh cadence target is 300 seconds by default.
+- Use one app-managed paper loop; do not start a second external agent process beside the dashboard.
 
 ## Files To Read First
 
@@ -38,6 +42,7 @@ Build Alpha as a GitHub-backed personal quant agent workspace with automatic pap
 - `backend/app/services/paper_trading_loop.py`
 - `backend/app/services/strategy_iteration.py`
 - `backend/app/services/paper_broker.py`
+- `backend/app/services/agent_runtime.py`
 - `scripts/start_alpha_dashboard.sh`
 - `scripts/stop_alpha_dashboard.sh`
 
@@ -52,13 +57,18 @@ Latest validation:
 
 ```text
 python -m pip install -e .[dev] -> passed
-python -m pytest tests -q -> 16 passed
+python -m pytest tests -q -> 18 passed
 python -m backend.app.services.paper_trading_loop --once -> generated pending_owner_approval ticket and filled paper order
 two-cycle smoke -> persisted paper portfolio trade_count=2 and cash=9816.10
 curl /health -> ok, refresh_interval_seconds=300
 curl /dashboard/state -> pending ticket, paper_portfolio, and strategy_tournament visible
+curl /agent/loop/status -> app-managed loop visible with run_count=1, status=sleeping, next_run_at=300 seconds later, error_count=0
 curl /dashboard -> contains Paper Portfolio, Strategy Tournament, Run Paper Cycle, and 300000ms refresh
-scripts/start_alpha_dashboard.sh -> starts the local dashboard and writes runtime/alpha_dashboard.pid/log
+scripts/start_alpha_dashboard.sh -> starts the local dashboard, app-managed paper loop, and writes runtime/alpha_dashboard.pid/log
+scripts/stop_alpha_dashboard.sh -> waits for uvicorn shutdown and releases port 8000 cleanly
+uvicorn foreground runtime check -> /agent/loop/status showed enabled=true, task_running=true, interval_seconds=300, run_count=1, next_run_at populated, error_count=0
+Browser dashboard interaction -> visible dashboard showed Loop sleeping, Run Count 1, 300s refresh, paper portfolio, strategy tournament, and approval queue
+Browser Run Paper Cycle click -> Paper Trades changed 8->9 and Pending Tickets changed 7->8
 Dashboard HTML/API fallback -> contains System Snapshot, Paper Portfolio, Strategy Tournament, Approval Queue, Run Paper Cycle, and 300000ms refresh
 Repo launcher -> outputs/applications/Alpha.command exists and is executable
 External legacy launcher observed -> /Users/linzezhang/Downloads/applicatioins/Alpha.command exists and is executable
